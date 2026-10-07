@@ -22,7 +22,8 @@ spezi/
   CLAUDE.md          # data rules, workflow rules
   docs/              # planning briefs, fhir-data-model.md, this plan
   contract/          # versioned machine-readable code table (metrics.json)
-  hapi/              # HAPI 7.6.0 config, TLS, authentication
+  hapi/              # HAPI 7.6.0 config, TLS, token verification, authorization
+  idp/               # Keycloak realm and Docker Compose (created in M2)
   ios/               # Spezi-based capture app (Swift, SwiftUI, Spezi)
   analytics/         # Node/TypeScript aggregation worker + analytic API (Oracle)
   web/               # React/TypeScript clinician app
@@ -30,7 +31,7 @@ spezi/
 
 | Convention | Rule |
 |---|---|
-| Commit prefixes | `docs:`, `contract:`, `hapi:`, `ios:`, `analytics:`, `web:`, `repo:` |
+| Commit prefixes | `docs:`, `contract:`, `hapi:`, `idp:`, `ios:`, `analytics:`, `web:`, `repo:` |
 | Milestone tags | `m00`, `m01`, ... tagged after you approve each milestone |
 | Contract | `contract/metrics.json` is the only machine-readable code table; `ios/`, `analytics/` and `web/` read it or test against it. A mapping change updates it and every consumer in one commit. |
 | Data-leak guard | One pre-commit check at the root (set up in M0) |
@@ -48,7 +49,8 @@ spezi/
 |---|---|---|---|---|
 | 0 | Monorepo foundation: skeleton, `.gitignore`s, root test script, data-leak guard | Repo decision | Must | Custom |
 | 1 | HAPI over TLS at `macpro16.local`, trusted by Mac and iPhone | UX risk 1-2 | Must | HAPI config (custom) |
-| 2 | HAPI authentication + minimal authorization (capture write, clinician read, worker read) | UX risk 1 | Must | HAPI config (custom) |
+| 2 | Keycloak IdP (realm, roles, clients) + HAPI token verification and authorization rules (capture write, clinician read, worker read) | UX risk 1 | Must | Keycloak, HAPI interceptors (custom) |
+| 2b | Sign-in flow in the capture app (authorization code + PKCE, Keychain) | UX capture journey 1 | Must | Custom (OIDC client library TBD) |
 | 3 | Capture app shell, orientation screen, source choice | UX capture journey 1 | Must | Spezi template, SpeziOnboarding (orientation only) |
 | 4 | Shared contract file + metric registry + HealthKit/synthetic -> FHIR mapping | FHIR spec | Must | Custom (Swift), `contract/metrics.json` |
 | 5 | Synthetic source + simulator controls (cadence, jitter, gaps, late, duplicates, artifacts, presets) | UX capture journey 3 | Must | Custom (Swift/SwiftUI) |
@@ -70,7 +72,7 @@ Not used from the Spezi catalog: SpeziAccount / SpeziFirebaseAccount / SpeziFire
 
 ## Milestones
 
-Ordering rationale: server trust first (it gates real data); the synthetic pipeline end-to-end next, so every later piece is testable without real data; analytics and web before HealthKit; HealthKit last because it only swaps in a source behind an interface already proven. Reorder if you'd rather see real data sooner (M15 can move earlier once M1, M2 and M6 are done).
+Ordering rationale: server trust first (it gates real data); the synthetic pipeline end-to-end next, so every later piece is testable without real data; analytics and web before HealthKit; HealthKit last because it only swaps in a source behind an interface already proven. Reorder if you'd rather see real data sooner (M16 can move earlier once M1-M3 and M7 are done).
 
 ### Milestone 0: Monorepo foundation [repo]
 
@@ -98,10 +100,10 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Tasks:**
 1. Capture the current HAPI 7.6.0 setup as reproducible config in the repo (no data in the repo).
-2. Create a local CA and a server certificate for `macpro16.local` (SAN set correctly).
+2. Create a local CA and a server certificate for `macpro16.local` (SAN set correctly). Keep the CA private key outside the repo; M2 reuses the CA for Keycloak.
 3. Configure HAPI/its container or proxy to serve TLS on 8443 at `/fhir`.
 4. Document installing and trusting the CA profile on the iPhone.
-5. Keep the existing `localhost:8092` endpoint for dev until M2 is done.
+5. Keep the existing `localhost:8092` endpoint for dev until M3 is done.
 
 **Platform notes:** iOS App Transport Security requires valid TLS for non-local hosts; the CA must be trusted on the device (Settings -> General -> About -> Certificate Trust Settings).
 
@@ -109,28 +111,50 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 2: HAPI authentication and authorization [hapi/]
+### Milestone 2: Keycloak identity provider [idp/]
 
-**Goal:** Unauthenticated requests are rejected; three principals (capture writer, clinician reader, worker reader) have only the access they need.
+**Goal:** A local Keycloak over TLS issues signed JWTs with role claims for three principals; the discovery document and JWKS are reachable from the Mac and the iPhone with no trust warnings, and tokens can be obtained and inspected with `curl`.
 
-**Depends on:** Milestone 1.
+**Depends on:** Milestone 1 (local CA and TLS approach).
 
 **Tasks:**
-1. Decide the mechanism (Open Question 1).
-2. Implement authentication and enforce on every `/fhir` request.
-3. Implement minimal authorization: capture = create/read `Observation`, `Device`, `Patient`; clinician and worker = read-only.
-4. Seed one synthetic `Patient` via a script (no real identifiers).
-5. Document credential handling; no secrets in the repo.
+1. Create the `idp/` skeleton (README, `CLAUDE.md`, `.gitignore` for generated secrets and data), add a `test-idp` target to the Makefile and the `idp:` prefix to root `CLAUDE.md` (M0 predates this directory).
+2. Confirm with you before pulling the Keycloak image (needs Docker). Pin a version after checking current Keycloak docs: image name, tags and startup flags are unverified.
+3. Docker Compose: Keycloak in dev mode with its embedded database (POC only), TLS from a certificate issued by the M1 CA for `macpro16.local`, on a port chosen with you.
+4. Realm `poc` as code: roles `capture-writer`, `clinician-reader`, `worker-reader`; clients `ios-capture` and `clinician-web` (public, authorization code + PKCE) and `analytics-worker` (confidential, client credentials); mappers for the roles claim and audience; synthetic test users only.
+5. Commit the realm export in templated form with no secrets or passwords; a script generates local secrets and passwords outside the repo.
+6. Document token lifetimes and refresh behavior (including the phone offline case).
 
-**Verify:** unauthenticated `GET` returns 401; each principal succeeds and fails as expected with `curl`. **Real-data gate:** after this milestone, CLAUDE.md allows real data to this endpoint only.
+**Platform notes:** Keycloak issues no FHIR-specific claims; HAPI evaluates the roles and audience in M3. A dev-only test client (direct access grant) lets `curl` obtain user tokens without a browser. It is for testing only and is never used by the apps.
+
+**Verify:** discovery document and JWKS reachable by `curl` (with the CA) and in iPhone Safari; a worker client-credentials token decodes to the expected `iss`, `aud`, `exp` and roles; a test-user token carries the clinician role; a wrong client secret is rejected; `make guard-all` passes with the realm export staged.
 
 ---
 
-### Milestone 3: Capture app scaffold [ios/]
+### Milestone 3: HAPI token verification and authorization [hapi/]
+
+**Goal:** HAPI rejects requests without a valid Keycloak token, and each principal has only the access its roles allow.
+
+**Note:** HAPI does not authenticate. Keycloak (M2) authenticates and issues the JWT; HAPI verifies it, and `AuthorizationInterceptor` evaluates rules built from its claims.
+
+**Depends on:** Milestones 1, 2.
+
+**Tasks:**
+1. Verify bearer JWTs on every `/fhir` request: signature via the realm's JWKS, plus `iss`, `aud` and `exp`; reject otherwise with 401. (Spring Security resource server or a custom interceptor: the approach adds a dependency, so I'll propose it and confirm with you first.)
+2. `AuthorizationInterceptor` rules from roles: `capture-writer` = create/read `Observation`, `Device`, `Patient`; `clinician-reader` and `worker-reader` = read-only.
+3. Evaluate `SearchNarrowingInterceptor` for patient-compartment scoping via a claim (future multi-patient); decide at this milestone.
+4. Seed one synthetic `Patient` via a script using a `capture-writer` token.
+5. Document clock skew, JWKS rotation behavior, and that unverified claims are never trusted.
+
+**Verify:** no token -> 401; expired or wrong-audience token -> 401; clinician token can `GET` but gets 403 on `POST Observation`; capture token can `POST`; worker token can `GET` and gets 403 on `POST`. **Real-data gate:** after this milestone, CLAUDE.md allows real data to `https://macpro16.local:8443/fhir` only.
+
+---
+
+### Milestone 4: Capture app scaffold [ios/]
 
 **Goal:** A Spezi-based iOS app runs on the simulator with an orientation screen, a source choice (synthetic only for now), and the HAPI endpoint and credentials configurable outside the code.
 
-**Depends on:** Milestone 2 (for endpoint and auth config).
+**Depends on:** Milestone 3 (for endpoint and auth config).
 
 **Tasks:**
 1. Run `spezi-platform-selection` for the Apple-native path, but copy the Spezi Template Application into `ios/` without its `.git` and record the upstream commit in `ios/README.md`. Do not let the skill move `docs/` (they stay at the repo root).
@@ -138,7 +162,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 3. Orientation screen: what data, where it goes, synthetic vs real.
 4. Source selection state (synthetic only enabled).
 5. Config for endpoint and credentials; none committed.
-6. Fill in `ios/CLAUDE.md` with stack-specific rules (Swift version, Spezi module versions, test commands).
+6. Sign in with Keycloak (authorization code + PKCE) as the synthetic capture user; store tokens in the Keychain; show signed-in state. The OIDC client library (for example AppAuth) is a package beyond the template, so I'll propose it and confirm with you first.
+7. Fill in `ios/CLAUDE.md` with stack-specific rules (Swift version, Spezi module versions, test commands).
 
 **Platform notes:** `SpeziOnboarding` for the orientation screen. Verify the template's current structure before trimming.
 
@@ -146,11 +171,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 4: Metric registry and FHIR mapping [ios/]
+### Milestone 5: Metric registry and FHIR mapping [ios/]
 
 **Goal:** A pure, well-tested layer maps abstract samples to FHIR Observations exactly per `fhir-data-model.md`.
 
-**Depends on:** Milestone 3.
+**Depends on:** Milestone 4.
 
 **Tasks:**
 1. Create `contract/metrics.json` (metric -> LOINC, UCUM unit, category, `effective[x]` rule, sleep stage mapping) with a version field; this is the single source of truth.
@@ -166,11 +191,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 5: Synthetic source and simulator controls [ios/]
+### Milestone 6: Synthetic source and simulator controls [ios/]
 
 **Goal:** A simulated device emits samples at a configurable cadence, with controls to inject gaps, jitter, late/batched delivery, duplicates and artifacts, via a simulator screen visible only when the source is synthetic.
 
-**Depends on:** Milestone 4.
+**Depends on:** Milestone 5.
 
 **Tasks:**
 1. Ingest source protocol (HealthKit and synthetic will both implement it).
@@ -183,11 +208,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 6: Local queue and upload [ios/]
+### Milestone 7: Local queue and upload [ios/]
 
 **Goal:** Synthetic samples reach HAPI as FHIR Observations over TLS with authentication, surviving offline periods and resends without duplicates.
 
-**Depends on:** Milestones 2, 5.
+**Depends on:** Milestones 3, 6.
 
 **Tasks:**
 1. Persistent local queue.
@@ -202,15 +227,15 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 7: Analytic store and daily rollups [analytics/]
+### Milestone 8: Analytic store and daily rollups [analytics/]
 
 **Goal:** A worker computes daily min/median/max (and counts) per metric from HAPI into Oracle, idempotently.
 
-**Depends on:** Milestones 2, 6. You stand up Oracle 26ai (I won't install anything).
+**Depends on:** Milestones 3, 7. You stand up Oracle 26ai (I won't install anything).
 
 **Tasks:**
 1. Schema for daily rollups (key: patient, metric code, local day, timezone).
-2. Node/TypeScript worker: poll `Observation?_lastUpdated=gt{watermark}`, record touched windows.
+2. Node/TypeScript worker: obtain tokens with the client-credentials grant (refresh before expiry), then poll `Observation?_lastUpdated=gt{watermark}`, record touched windows.
 3. Recompute touched windows with idempotent upsert; persist the watermark.
 4. Day definition per A6 (patient-local day); DST-aware.
 5. Tests with synthetic late, duplicate and out-of-order data.
@@ -220,11 +245,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 8: Sleep night summaries [analytics/]
+### Milestone 9: Sleep night summaries [analytics/]
 
 **Goal:** Per-night sleep summaries (stage durations, awakenings) are computed in Oracle from stage-interval Observations.
 
-**Depends on:** Milestone 7.
+**Depends on:** Milestone 8.
 
 **Tasks:**
 1. Define "night" (session grouping, boundary rules); record as assumption.
@@ -236,15 +261,15 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 9: Analytic API [analytics/]
+### Milestone 10: Analytic API [analytics/]
 
 **Goal:** An authenticated API serves trend bands and sleep summaries for a patient and time range.
 
-**Depends on:** Milestones 7, 8.
+**Depends on:** Milestones 8, 9.
 
 **Tasks:**
 1. Endpoints: daily bands (metric, range), sleep nights (range).
-2. Auth consistent with M2 (clinician principal).
+2. Validate Keycloak JWTs (audience, `clinician-reader` role) the same way HAPI does in M3.
 3. Response includes data-completeness info (gaps, last computed, watermark).
 4. Contract tests and API description.
 
@@ -252,15 +277,15 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 10: Clinician web scaffold and patient banner [web/]
+### Milestone 11: Clinician web scaffold and patient banner [web/]
 
 **Goal:** A React/TypeScript app signs in as the clinician, shows the patient banner with latest values, last-data-received, and a visible stale-data indicator.
 
-**Depends on:** Milestones 2, 6.
+**Depends on:** Milestones 3, 7.
 
 **Tasks:**
 1. Scaffold the repo and typed FHIR client.
-2. Auth wiring.
+2. Sign in with Keycloak (authorization code + PKCE) as the synthetic clinician; token handling and refresh.
 3. Banner: `Observation/$lastn`, staleness, source kinds.
 4. Error and empty states.
 
@@ -268,11 +293,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 11: Flowsheet [web/]
+### Milestone 12: Flowsheet [web/]
 
 **Goal:** A filterable, sortable, paged table of Observations across metrics.
 
-**Depends on:** Milestone 10.
+**Depends on:** Milestone 11.
 
 **Tasks:** filters (metric, range, source, status), sort, paging via HAPI search, units always visible, keyboard-accessible table.
 
@@ -280,11 +305,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 12: Longitudinal trend view [web/]
+### Milestone 13: Longitudinal trend view [web/]
 
 **Goal:** Weeks-to-months daily min/median/max bands per metric, from the analytic API, with gaps clearly shown.
 
-**Depends on:** Milestones 9, 10.
+**Depends on:** Milestones 10, 11.
 
 **Tasks:** contract test (metric list, codes and units match `contract/metrics.json`), choose charting library (Open Question 6), band chart, time-scale controls, gap rendering, text/table equivalent, drill link to intraday.
 
@@ -292,11 +317,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 13: Intraday dense view [web/]
+### Milestone 14: Intraday dense view [web/]
 
 **Goal:** One day's raw samples with zoom/pan and gap markers.
 
-**Depends on:** Milestones 11, 12.
+**Depends on:** Milestones 12, 13.
 
 **Tasks:** paged fetch of a day, client-side downsampling for rendering, zoom/pan, gap markers, flagged-artifact markers.
 
@@ -304,11 +329,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 14: Sleep view [web/]
+### Milestone 15: Sleep view [web/]
 
 **Goal:** A single-night hypnogram plus a multi-week nightly summary.
 
-**Depends on:** Milestones 9, 12.
+**Depends on:** Milestones 10, 13.
 
 **Tasks:** hypnogram from stage intervals, nightly summary from the analytic API, accessible alternatives, timezone/DST labeling.
 
@@ -316,11 +341,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 15: HealthKit source [ios/]
+### Milestone 16: HealthKit source [ios/]
 
 **Goal:** The capture app can read your own HealthKit data for the three metrics and upload it to the authenticated TLS endpoint.
 
-**Depends on:** Milestones 1, 2, 6 (real-data gate satisfied).
+**Depends on:** Milestones 1, 2, 3, 7 (real-data gate satisfied).
 
 **Tasks:**
 1. HealthKit entitlement and authorization for the specific types only.
@@ -335,11 +360,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 16: Background delivery and device mapping [ios/]
+### Milestone 17: Background delivery and device mapping [ios/]
 
 **Goal:** New HealthKit data arrives without opening the app; sources are modeled as `Device`s.
 
-**Depends on:** Milestone 15.
+**Depends on:** Milestone 16.
 
 **Tasks:** background delivery and observer queries, HKDevice -> `Device`, backfill windows, failure handling, battery/impact check.
 
@@ -347,11 +372,11 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 17: Data-quality surfacing and hardening [all]
+### Milestone 18: Data-quality surfacing and hardening [all]
 
 **Goal:** Artifacts and late data are visible to clinicians; accessibility, errors and volume are exercised.
 
-**Depends on:** Milestones 13-16.
+**Depends on:** Milestones 14-17.
 
 **Tasks:** `meta.tag` flags (A8) displayed in views, accessibility audit, error states, volume test with dense data, runbooks per repo.
 
@@ -361,14 +386,14 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 | Entity | FHIR Resource | Milestone | Notes |
 |---|---|---|---|
-| Patient | `Patient` | 2 (seed), 6 | One synthetic patient seeded; app only references it |
-| Heart rate | `Observation` (8867-4) | 4, 6, 15 | Shaped like R4 `heartrate`, no profile claim |
-| Resting heart rate | `Observation` (40443-4) | 4, 6, 15 | |
-| HRV SDNN | `Observation` (112429-6) | 4, 6, 15 | `ms` unit unverified |
-| Sleep stage intervals | `Observation` (93829-0/93830-8/93831-6/93832-4/103210-1) | 4, 6, 15 | `inBed` unmapped |
-| Source device | `Device` | 6, 16 | Synthetic first, HKDevice in M16 |
-| Daily rollups, sleep nights | Not FHIR (Oracle) | 7, 8 | Per decision, not written back |
-| Data-quality flags | `meta.tag` | 17 | A8 |
+| Patient | `Patient` | 3 (seed), 7 | One synthetic patient seeded; app only references it |
+| Heart rate | `Observation` (8867-4) | 5, 7, 16 | Shaped like R4 `heartrate`, no profile claim |
+| Resting heart rate | `Observation` (40443-4) | 5, 7, 16 | |
+| HRV SDNN | `Observation` (112429-6) | 5, 7, 16 | `ms` unit unverified |
+| Sleep stage intervals | `Observation` (93829-0/93830-8/93831-6/93832-4/103210-1) | 5, 7, 16 | `inBed` unmapped |
+| Source device | `Device` | 7, 17 | Synthetic first, HKDevice in M17 |
+| Daily rollups, sleep nights | Not FHIR (Oracle) | 8, 9 | Per decision, not written back |
+| Data-quality flags | `meta.tag` | 18 | A8 |
 
 ## Compliance Integration
 
@@ -376,26 +401,29 @@ No compliance brief was produced. CLAUDE.md's data rules act as the controls:
 
 | Control | Milestone | How |
 |---|---|---|
-| Real data only to own HAPI, only over TLS + auth | 1, 2, 15 | Gate: HealthKit source selectable only when endpoint meets this |
-| No real data in repo, fixtures, logs, screenshots, commits | 0, 15 | Pre-commit data-leak guard from M0 (backstop only); synthetic fixtures only; log review at M15 |
-| Synthetic source behind same ingest interface | 5 | Source protocol shared with HealthKit |
+| Real data only to own HAPI, only over TLS + auth | 1, 2, 3, 16 | Gate: HealthKit source selectable only when endpoint meets this |
+| No real data in repo, fixtures, logs, screenshots, commits | 0, 16 | Pre-commit data-leak guard from M0 (backstop only); synthetic fixtures only; log review at M16 |
+| Synthetic source behind same ingest interface | 6 | Source protocol shared with HealthKit |
 | No third-party or analytics services | All | No SDKs beyond Spezi modules approved per milestone |
+| No secrets in the repo (Keycloak client secrets, test-user passwords, CA keys) | 1, 2, 3 | Realm export templated; generated secrets and CA key live outside the repo; guard blocks key/secret patterns |
 | Ask before installing or connecting external services | All | Oracle, charting library, any new package approved at the milestone |
 
 If this ever leaves local use, run `digital-health-compliance-planning` first.
 
 ## Open Questions
 
-1. **Authentication mechanism for HAPI** (M2): OAuth2/OIDC bearer tokens (needs an identity provider), static API tokens, or mutual TLS? This is an external-service decision I will not make for you.
-2. **Oracle 26ai edition limits** (M7): CPU, memory and storage for dense heart rate over months. Unverified.
-3. **Paid Apple Developer account** (M15): whether HealthKit on a personal device needs one is unverified; it would be an account and a cost.
-4. **SpeziHealthKit and SpeziFHIR behaviors** (M6, M15): the reference file's claims (background delivery, HAPI support, data store upload) need verifying against the modules before relying on them.
+1. **Resolved:** Keycloak is the IdP (decided). Still open for M2: Docker availability and your approval to pull the image, the Keycloak version and port numbers, and whether to run it on the Mac Pro alongside HAPI and Oracle.
+2. **Oracle 26ai edition limits** (M8): CPU, memory and storage for dense heart rate over months. Unverified.
+3. **Paid Apple Developer account** (M16): whether HealthKit on a personal device needs one is unverified; it would be an account and a cost.
+4. **SpeziHealthKit and SpeziFHIR behaviors** (M7, M16): the reference file's claims (background delivery, HAPI support, data store upload) need verifying against the modules before relying on them.
 5. **Resolved:** monorepo layout (see Context). Still open: whether `.agents/`, `.claude/`, `agent/` and `skills-lock.json` are committed (M0).
-6. **Charting library** for the web app (M12): not chosen; will be proposed with trade-offs when we reach it.
-7. **Day and night definitions** (A6, M7-8): need your clinical judgment; I will propose defaults.
-8. **Apple Watch**: not required until you buy it; M15-16 work with iPhone data first.
-9. **HAPI request validation** (A13): enable it in M1/M2 or later?
+6. **Charting library** for the web app (M13): not chosen; will be proposed with trade-offs when we reach it.
+7. **Day and night definitions** (A6, M8-9): need your clinical judgment; I will propose defaults.
+8. **Apple Watch**: not required until you buy it; M16-17 work with iPhone data first.
+9. **HAPI request validation** (A13): enable it in M3 or later?
 10. **Clinician web hosting**: dev server only, or served from the Mac Pro behind TLS?
+11. **OIDC client library for iOS** (M4): AppAuth or a custom `ASWebAuthenticationSession` implementation; adds a package beyond the template, so it needs your approval.
+12. **Token lifetime vs. offline capture** (M2, M7): how long the capture queue can wait before a refresh is required.
 
 ## Next Steps
 

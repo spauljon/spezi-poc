@@ -4,7 +4,7 @@ Status: DRAFT for developer review. Produced with `digital-health-ux-planning`.
 
 ## 1. Purpose and framing
 
-A learning POC that exercises the real shape of a remote-monitoring system: a patient-side **capture app** (Spezi mobile) that sources health metrics from HealthKit or a synthetic device, a **FHIR service** (HAPI FHIR 7.6.0, R4, `http://localhost:8092/fhir`, no authn/authz today) as the system of record, and a **clinician web app** that reviews longitudinal data by querying the service.
+A learning POC that exercises the real shape of a remote-monitoring system: a patient-side **capture app** (Spezi mobile) that sources health metrics from HealthKit or a synthetic device, a **FHIR service** (HAPI FHIR 7.6.0, R4; target endpoint `https://macpro16.local:8443/fhir` with TLS and authentication, built in the implementation plan's M1-M3; today it runs at `http://localhost:8092/fhir` with no authn/authz) as the system of record, and a **clinician web app** that reviews longitudinal data by querying the service.
 
 Two projects:
 1. **Capture app** — Spezi mobile (platform to be chosen at platform selection; HealthKit strongly implies Apple-native).
@@ -72,9 +72,9 @@ Candidates for later: distribution view, daily overlay.
 Capture app, minimum necessary:
 - One orientation screen: what data, where it goes (own FHIR service), synthetic vs real.
 - Source choice. Request HealthKit permissions only when HealthKit is selected, and only for the types in use.
-- No account, no profile, no consent flow in the POC (fixed pairing). Real pairing/consent is documented as an out-of-scope boundary.
+- No account creation, profile or consent flow in the POC (fixed pairing). The app does sign in once with Keycloak as a single synthetic user to obtain a token; that is plumbing for the authorization boundary, not a user-facing account feature. Real pairing/consent is documented as an out-of-scope boundary.
 
-Clinician web app: no onboarding beyond selecting the (single) patient. Auth deferred; see risks.
+Clinician web app: no onboarding beyond signing in with Keycloak as a single synthetic clinician and selecting the (single) patient.
 
 ## 8. Day-to-day workflow
 
@@ -109,7 +109,7 @@ Clinician web app: no onboarding beyond selecting the (single) patient. Auth def
 
 ## 13. Unresolved risks and UX questions
 
-1. HAPI has no authn/authz today, so the real-data gate stays closed until TLS + auth exist. Decision: a separate small project customizes HAPI with TLS and authentication, scheduled as an early milestone before any real-data work.
+1. HAPI has no authn/authz today, and HAPI itself does not authenticate (it evaluates authorization rules only), so the real-data gate stays closed until TLS and authentication exist. Decision: Keycloak is the identity provider (own `idp/` project), HAPI verifies its JWTs and authorizes by role; scheduled as early milestones (M1-M3) before any real-data work.
 2. RESOLVED: a physical iPhone cannot reach `localhost`. The developer will configure local-network DNS for the Mac Pro so the iPhone can reach the FHIR service by hostname. TLS (iOS ATS) is still required, and the certificate must match that hostname and be trusted by the device.
 3. Clinician web app stack is undecided (outside Spezi templates).
 4. Which HealthKit types require Watch hardware/watchOS versions not available to the developer?

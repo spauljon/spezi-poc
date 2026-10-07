@@ -4,15 +4,15 @@ test: test-contract test-hapi test-ios test-analytics test-web
 
 # Placeholders until each project has tests (replaced milestone by milestone).
 test-contract:
-	@echo "contract: no tests yet (added in M4)"
+	@echo "contract: no tests yet (added in M5)"
 test-hapi:
 	@echo "hapi: no tests yet (added in M1)"
 test-ios:
-	@echo "ios: no tests yet (added in M3/M4)"
+	@echo "ios: no tests yet (added in M4/M5)"
 test-analytics:
-	@echo "analytics: no tests yet (added in M7)"
+	@echo "analytics: no tests yet (added in M8)"
 test-web:
-	@echo "web: no tests yet (added in M10)"
+	@echo "web: no tests yet (added in M11)"
 
 guard:          ## scan staged files
 	@./scripts/guard.sh

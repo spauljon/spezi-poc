@@ -4,7 +4,7 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 
 ## Data
 - Real health data is allowed only as the developer's own HealthKit data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
-- Real data may be sent only to the developer's own HAPI FHIR service (R4, `localhost:8092/fhir` in dev), and only once that connection uses TLS and authentication. Until then, the FHIR service receives synthetic data only.
+- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. The plain-HTTP `localhost:8092` dev endpoint receives synthetic data only.
 - Everything else is synthetic or sandbox only: tests, fixtures, docs, and example data. Never real patient identifiers or anyone else's data.
 - Keep a synthetic data source behind the same ingest interface as HealthKit for development, tests, and the simulator.
 
@@ -27,8 +27,8 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 - Platform choices (React Native vs Apple-native), and anything that installs or connects external services (packages beyond the template, accounts, cloud, EHR sandboxes, MCP servers).
 
 ## Repository layout and conventions
-- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `hapi/`, `ios/`, `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
-- Commit prefixes: `docs:`, `contract:`, `hapi:`, `ios:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
+- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `hapi/`, `idp/` (Keycloak, created in M2), `ios/`, `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
+- Commit prefixes: `docs:`, `contract:`, `hapi:`, `idp:`, `ios:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
 - Never hand-copy codes, units or categories into a project: read `contract/metrics.json` or test against it, and change it and all consumers in one commit.
 - Run `make hooks` once per clone to enable the pre-commit data-leak guard. It is a backstop for obvious secret and export patterns, not proof that no real data is present.
 - `make test` runs every project's tests; `make guard-all` scans the whole working tree.
