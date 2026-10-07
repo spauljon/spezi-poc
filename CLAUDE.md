@@ -1,0 +1,34 @@
+# Working Rules
+
+Learning project: spec-first, agent-driven app development with Stanford Spezi (SpeziVibe skills). The developer is an experienced engineer with deep EHR/FHIR background but is new to Spezi and agent workflows. Don't explain healthcare or FHIR basics; do explain Spezi concepts and what each skill is doing.
+
+## Data
+- Real health data is allowed only as the developer's own HealthKit data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
+- Real data may be sent only to the developer's own HAPI FHIR service (R4, `localhost:8092/fhir` in dev), and only once that connection uses TLS and authentication. Until then, the FHIR service receives synthetic data only.
+- Everything else is synthetic or sandbox only: tests, fixtures, docs, and example data. Never real patient identifiers or anyone else's data.
+- Keep a synthetic data source behind the same ingest interface as HealthKit for development, tests, and the simulator.
+
+## Planning before code
+- Planning briefs go in `docs/planning/`; the build plan goes in `docs/implementation-plan.md`.
+- No application code until the implementation plan exists and the developer has reviewed it.
+
+## Milestones
+- Build one milestone at a time, then stop.
+- At each stop, summarize what changed and give the verification steps so the developer can review the diff and run them before continuing. Do not start the next milestone until told.
+
+## FHIR work
+- State resource types, profiles, and code systems explicitly (e.g. `Observation`, profile URL, LOINC code + display) so they can be reviewed.
+- Flag every assumption about terminology (value sets, code system versions, unit handling/UCUM) and cardinality (e.g. `Observation.value[x]` type, `effective[x]` variants, missing/optional elements).
+
+## Skills
+- When running a skill, briefly say what it does and why it's being run at this point in the workflow.
+
+## Ask first
+- Platform choices (React Native vs Apple-native), and anything that installs or connects external services (packages beyond the template, accounts, cloud, EHR sandboxes, MCP servers).
+
+## Repository layout and conventions
+- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `hapi/`, `ios/`, `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
+- Commit prefixes: `docs:`, `contract:`, `hapi:`, `ios:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
+- Never hand-copy codes, units or categories into a project: read `contract/metrics.json` or test against it, and change it and all consumers in one commit.
+- Run `make hooks` once per clone to enable the pre-commit data-leak guard. It is a backstop for obvious secret and export patterns, not proof that no real data is present.
+- `make test` runs every project's tests; `make guard-all` scans the whole working tree.

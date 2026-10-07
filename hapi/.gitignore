@@ -1,0 +1,6 @@
+certs/
+secrets/
+data/
+*.crt
+*.csr
+*.srl

@@ -1,0 +1,28 @@
+# macOS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Secrets and keys (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+
+# Apple Health exports (real data)
+export.xml
+export_cda.xml
+apple_health_export*/
+
+# Local scratch
+*.local
+tmp/
+
+# Redundant copy of installed skills for another agent target
+agent/

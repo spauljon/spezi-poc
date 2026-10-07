@@ -1,0 +1,10 @@
+DerivedData/
+build/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+Pods/
+*.ipa
+*.dSYM.zip
