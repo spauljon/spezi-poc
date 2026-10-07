@@ -3,6 +3,9 @@
 .idea/
 .vscode/
 
+# Personal Claude Code settings (local paths, approved commands)
+.claude/settings.local.json
+
 # Secrets and keys (never commit)
 .env
 .env.*
