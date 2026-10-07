@@ -13,7 +13,7 @@
 | FHIR version | R4 (4.0.1) |
 | Conformance | Base FHIR R4 only. **No `meta.profile` is declared on any resource** in this phase. Raw heart rate is shaped to be compatible with the R4 core profile `http://hl7.org/fhir/StructureDefinition/heartrate` (draft status in R4) **[verified]**, so a claim could be added later. **US Core is not a target**: it is built for EHR-originated, clinician-attested data and constrains Patient and Observation (and, if used, Provenance) in ways a patient-device stream does not fit. See "Decision: not conforming to US Core". |
 | Additional IGs | None |
-| Server | HAPI FHIR 7.6.0, R4. Target endpoint: `https://macpro16.local:8443/fhir` (TLS + authn planned as an early milestone). Current dev endpoint: `http://localhost:8092/fhir`. |
+| Server | HAPI FHIR 7.6.0, R4. Target endpoint: `https://macpro16.local:8443/fhir` (TLS + authn planned as an early milestone). Loopback-only plain-HTTP dev endpoint (M1 only, removed in M2): `http://127.0.0.1:8192/fhir`. |
 | Interoperability | Self-contained POC. If EHR exchange is ever needed, a mapping layer to US Core would be added at the boundary (see decision section). |
 | Data sources | HealthKit (Apple Watch / iPhone) and a synthetic device, behind one ingest interface |
 | Aggregates | NOT stored in FHIR. Computed server-side into a separate analytic store (Oracle). See "Analytic projection". |
@@ -233,7 +233,7 @@ Observation (HR | resting HR | HRV | sleep interval)
 
 ## FHIR REST API Patterns
 
-Base: `GET|POST {base}/...` where base is `http://localhost:8092/fhir` now, and the TLS host later.
+Base: `GET|POST {base}/...` where base is `http://127.0.0.1:8192/fhir` (loopback-only, M1) now, and the TLS host later.
 
 ### Capture app writes: transaction Bundle with conditional create
 
@@ -272,7 +272,7 @@ Trend bands (daily min/median/max) and nightly sleep summaries are **not** FHIR 
 
 ## Analytic projection (non-FHIR)
 
-Stored in Oracle (26ai, your instance; not installed by the agent). Grain and keys, for the build plan to refine:
+Stored in Oracle (26ai, your instance; not installed by the agent) in an `ANALYTICS` PDB separate from HAPI's `FHIR` PDB; the worker reads HAPI only through the FHIR API. Grain and keys, for the build plan to refine:
 
 | Concept | Notes |
 |---|---|

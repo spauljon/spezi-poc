@@ -4,7 +4,7 @@ Status: DRAFT for developer review. Produced with `digital-health-ux-planning`.
 
 ## 1. Purpose and framing
 
-A learning POC that exercises the real shape of a remote-monitoring system: a patient-side **capture app** (Spezi mobile) that sources health metrics from HealthKit or a synthetic device, a **FHIR service** (HAPI FHIR 7.6.0, R4; target endpoint `https://macpro16.local:8443/fhir` with TLS and authentication, built in the implementation plan's M1-M3; today it runs at `http://localhost:8092/fhir` with no authn/authz) as the system of record, and a **clinician web app** that reviews longitudinal data by querying the service.
+A learning POC that exercises the real shape of a remote-monitoring system: a patient-side **capture app** (Spezi mobile) that sources health metrics from HealthKit or a synthetic device, a **FHIR service** (HAPI FHIR 7.6.0, R4; target endpoint `https://macpro16.local:8443/fhir` with TLS and authentication, built in the implementation plan's M2-M4; the POC's own HAPI starts at a loopback-only `http://127.0.0.1:8192/fhir` (plain HTTP, no authn/authz) in M1 and is HTTPS-only from M2) as the system of record, and a **clinician web app** that reviews longitudinal data by querying the service.
 
 Two projects:
 1. **Capture app** — Spezi mobile (platform to be chosen at platform selection; HealthKit strongly implies Apple-native).
@@ -109,7 +109,7 @@ Clinician web app: no onboarding beyond signing in with Keycloak as a single syn
 
 ## 13. Unresolved risks and UX questions
 
-1. HAPI has no authn/authz today, and HAPI itself does not authenticate (it evaluates authorization rules only), so the real-data gate stays closed until TLS and authentication exist. Decision: Keycloak is the identity provider (own `idp/` project), HAPI verifies its JWTs and authorizes by role; scheduled as early milestones (M1-M3) before any real-data work.
+1. HAPI has no authn/authz today, and HAPI itself does not authenticate (it evaluates authorization rules only), so the real-data gate stays closed until TLS and authentication exist. Decision: Keycloak is the identity provider (own `idp/` project), HAPI verifies its JWTs and authorizes by role; scheduled as early milestones (M2-M4) before any real-data work.
 2. RESOLVED: a physical iPhone cannot reach `localhost`. The developer will configure local-network DNS for the Mac Pro so the iPhone can reach the FHIR service by hostname. TLS (iOS ATS) is still required, and the certificate must match that hostname and be trusted by the device.
 3. Clinician web app stack is undecided (outside Spezi templates).
 4. Which HealthKit types require Watch hardware/watchOS versions not available to the developer?
