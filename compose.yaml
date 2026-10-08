@@ -1,0 +1,91 @@
+# POC stack (M1): its own Oracle Free container and its own HAPI container.
+# Independent of the governance project: everything belongs to the compose project (name: below),
+# which labels each container and prefixes the network, volume and built image with "spezi-poc".
+# container_name is set explicitly with the same prefix; container names are unique across the whole
+# Docker host, so keep the "spezi-poc-" prefix to avoid colliding with other stacks.
+# Published ports are bound to loopback only. Never publish a plain-HTTP or unauthenticated
+# service on all interfaces (see root CLAUDE.md, Isolation).
+#
+# oracle-init runs exactly once, during first-time setup (profile "initialize"). scripts/bootstrap.sh
+# activates that profile only while db/.initialized is absent, waits for the init to succeed, removes
+# the exited init container, then writes the marker. Later runs are a plain `up -d` with no init
+# service in sight. Startup order on a first run: oracle (healthy) -> oracle-init (completed
+# successfully) -> hapi; the hapi dependency is optional so it is ignored when the profile is inactive.
+# Deploy through scripts/compose.sh (explicit project), e.g. `make stack-up`.
+name: spezi-poc
+
+services:
+  oracle:
+    container_name: spezi-poc-oracle
+    image: container-registry.oracle.com/database/free:23.26.0.0-arm64
+    platform: linux/arm64
+    ports:
+      - '127.0.0.1:1522:1521'
+    env_file:
+      - ./db/.env.local
+    environment:
+      ORACLE_CHARACTERSET: AL32UTF8
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'echo "select ''CDB_IS_READY'' from dual;" | sqlplus -s -L "sys/$${ORACLE_PWD}@localhost:1521/FREE as sysdba" | grep -q CDB_IS_READY'
+        ]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  oracle-init:
+    container_name: spezi-poc-oracle-init
+    image: container-registry.oracle.com/database/free:23.26.0.0-arm64
+    platform: linux/arm64
+    profiles:
+      - initialize
+    depends_on:
+      oracle:
+        condition: service_healthy
+    env_file:
+      - ./db/.env.local
+    volumes:
+      - ./db:/opt/poc/db:ro
+      - ./hapi/schema:/opt/poc/hapi-schema:ro
+    command: bash /opt/poc/db/init.sh
+    restart: 'no'
+
+  hapi:
+    container_name: spezi-poc-hapi
+    build:
+      context: ./hapi
+      dockerfile: Dockerfile
+    ports:
+      - '127.0.0.1:8192:8080'
+    environment:
+      JAVA_OPTS: -Duser.timezone=UTC
+    env_file:
+      - ./hapi/.env.local
+    configs:
+      - source: hapi_config
+        target: /app/config/application.yaml
+    depends_on:
+      oracle:
+        condition: service_healthy
+      # Only enforced while the initialize profile is active (first run); ignored afterwards.
+      oracle-init:
+        condition: service_completed_successfully
+        required: false
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider -O /dev/null http://localhost:8081/actuator/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+configs:
+  hapi_config:
+    file: ./hapi/application.yaml
+
+volumes:
+  oracle_data:

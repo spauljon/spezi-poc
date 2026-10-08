@@ -1,0 +1,96 @@
+# HAPI FHIR 7.6.0 configuration for the POC (M1).
+# Adapted from the governance project's hapi/application.yaml (see hapi/README.md). Only keys the
+# governance setup actually sets are kept; everything else inherits the image defaults [UNVERIFIED].
+# Dropped on purpose: custom-bean-packages (governance extension), CORS allow-any-origin with
+# credentials, and the "global tester" that points at an external server.
+
+server:
+  port: 8080
+
+management:
+  server:
+    port: 8081
+  endpoints:
+    enabled-by-default: false
+    web:
+      exposure:
+        include: 'health'
+  endpoint:
+    health:
+      enabled: true
+      probes:
+        enabled: true
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    ca.uhn.fhir: ${LOG_LEVEL_FHIR:INFO}
+    ca.uhn.fhir.jpa: ${LOG_LEVEL_JPA:INFO}
+    org.springframework: ${LOG_LEVEL_SPRING:INFO}
+
+spring:
+  main:
+    allow-circular-references: true
+  flyway:
+    enabled: false
+  datasource:
+    # PDB service name, container-network hostname. Credentials come from hapi/.env.local.
+    url: jdbc:oracle:thin:@oracle:1521/FHIRPDB
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driverClassName: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      # Schema is owned and created by db/init.sh. Never let Hibernate create or alter it: the image
+      # default runs a schema "update" at startup, and with an application user whose schema holds
+      # only synonyms it finds no tables and tries to create all of them (ORA-01031/ORA-41900).
+      ddl-auto: none
+    properties:
+      hibernate.hbm2ddl.auto: none
+      hibernate.format_sql: false
+      hibernate.show_sql: false
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirOracleDialect
+      # Schema is created by db/init.sh from hapi/schema/oracle.sql, not by Hibernate.
+      # (hbm2ddl validate would also not work here: JDBC metadata does not list synonyms.)
+      hibernate.search.enabled: false
+      # The HTE_* temporary id tables are pre-created by hapi/schema/oracle-temp-tables.sql, so
+      # Hibernate must not try to create them (the HAPI user has no CREATE TABLE privilege).
+      # Property names are from memory of Hibernate 6 [UNVERIFIED]; a wrong name shows up as
+      # ORA-01031 errors in the HAPI log at startup.
+      hibernate.query.mutation_strategy.global_temporary.create_tables: false
+      hibernate.query.mutation_strategy.global_temporary.drop_tables: false
+
+hapi:
+  fhir:
+    fhir_version: R4
+    cr:
+      enabled: false
+    cdshooks:
+      enabled: false
+    openapi_enabled: true
+    ig_runtime_upload_enabled: false
+    allow_external_references: true
+    advanced_lucene_indexing: false
+    bulk_export_enabled: false
+    bulk_import_enabled: false
+    narrative_enabled: false
+    mdm_enabled: false
+    logical_urls:
+      - http://terminology.hl7.org/*
+      - https://terminology.hl7.org/*
+      - http://snomed.info/*
+      - https://snomed.info/*
+      - http://unitsofmeasure.org/*
+      - https://unitsofmeasure.org/*
+      - http://loinc.org/*
+      - https://loinc.org/*
+    search-coord-core-pool-size: 20
+    search-coord-max-pool-size: 100
+    search-coord-queue-capacity: 200
+    search_prefetch_thresholds: 13,503,2003,-1
+    # Validates incoming resources against base R4 (assumption A13 in fhir-data-model.md).
+    validation:
+      requests_enabled: true
+    inline_resource_storage_below_size: 4000

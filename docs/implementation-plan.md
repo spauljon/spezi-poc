@@ -22,6 +22,7 @@ spezi/
   CLAUDE.md          # data rules, workflow rules
   docs/              # planning briefs, fhir-data-model.md, this plan
   contract/          # versioned machine-readable code table (metrics.json)
+  compose.yaml       # POC stack (project spezi-poc); grows with idp/ in M3
   db/                # Oracle container, bootstrap SQL, FHIR and analytics PDBs (created in M1)
   hapi/              # HAPI 7.6.0 config, Oracle datasource, TLS, token verification, authorization
   idp/               # Keycloak realm and Docker Compose (created in M3)
@@ -100,20 +101,20 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Nothing. The Docker daemon must be running, and you approve any image pull.
 
-**Independence rule:** the stack shares nothing with the governance project (`~/repositories/pghd-governance-mapping-tool-service`): its own compose project name, network, volume (`poc_oracle_data`), containers and ports. That project uses host ports 1521, 3001, 5500, 8091-8093, 8095, 8200, 8500, 8600, 9000, 9090 and 27017. POC ports: Oracle 1522 and the HAPI plain-HTTP dev port 8192 are published **on loopback only** (`127.0.0.1:...`), and the actuator is not published at all (the healthcheck runs inside the container). Network-reachable endpoints are TLS only: Keycloak 8444 from M3, and HAPI 8443 only from M4 (it is loopback-bound in M2 and M3 so an unauthenticated HAPI is never reachable from the network). Files are copied and adapted from the governance project, never referenced or mounted from it.
+**Independence rule:** the stack shares nothing with the governance project (`~/repositories/pghd-governance-mapping-tool-service`): its own compose project name, network, volume (`spezi-poc_oracle_data`), containers and ports. That project uses host ports 1521, 3001, 5500, 8091-8093, 8095, 8200, 8500, 8600, 9000, 9090 and 27017. POC ports: Oracle 1522 and the HAPI plain-HTTP dev port 8192 are published **on loopback only** (`127.0.0.1:...`), and the actuator is not published at all (the healthcheck runs inside the container). Network-reachable endpoints are TLS only: Keycloak 8444 from M3, and HAPI 8443 only from M4 (it is loopback-bound in M2 and M3 so an unauthenticated HAPI is never reachable from the network). Files are copied and adapted from the governance project, never referenced or mounted from it.
 
 **Tasks:**
 1. Create the `db/` skeleton (README, `CLAUDE.md`, `.gitignore`, `.env.example`), a `test-db` Makefile target, and the `db:` prefix in root `CLAUDE.md` (M0 predates this directory).
 2. Oracle container: the Free image used by the governance stack (`container-registry.oracle.com/database/free:23.26.0.0-arm64`; reuse it locally if present, and confirm before any pull since the registry can require a license acceptance or login), host port 1522, named volume, healthcheck.
-3. Bootstrap SQL adapted from the governance `init.sh` and `setup.sql`: create `FHIRPDB` and `ANALYTICSPDB`, a least-privilege user in each, tablespace quotas. Passwords come from a gitignored `.env.local`.
-4. HAPI schema DDL: adapt the stock HAPI 7.6.0 Oracle DDL (`oracle.sql`) from the governance project into `hapi/`, excluding governance-specific objects (`chg-log.sql`, the trigger and flashback grants). Load it into the FHIR PDB user.
+3. Bootstrap SQL adapted from the governance `init.sh` and `setup.sql`: create `FHIRPDB` and `ANALYTICSPDB`; in each, a schema-only **owner** (no login, holds the objects) and a separate **application user** (`CREATE SESSION`, DML grants and synonyms, owns nothing). Passwords come from a gitignored `.env.local`.
+4. HAPI schema DDL: adapt the stock HAPI 7.6.0 Oracle DDL (`oracle.sql`) from the governance project into `hapi/`, excluding governance-specific objects (`chg-log.sql`, the trigger and flashback grants). Load it, plus the pre-created Hibernate `HTE_*` temporary tables (`oracle-temp-tables.sql`), into the FHIR PDB **owner** schema as SYS; HAPI connects as the application user, which never needs `CREATE TABLE`.
 5. HAPI image and config: adapted `Dockerfile` (`hapiproject/hapi:v7.6.0` plus the additive `/app/extra-classes` mount point, empty until M4) and `application.yaml` (Oracle datasource by PDB service name, `HapiFhirOracleDialect`, UTC, Flyway off, credentials from the environment).
-6. Compose wiring for both services: loopback-bound published ports, in-container healthchecks, `depends_on` Oracle healthy.
+6. Root `compose.yaml` (project `spezi-poc`) wiring both services: loopback-bound published ports, in-container healthchecks, a one-time `initialize` profile (Oracle healthy -> `oracle-init` completed -> HAPI) activated only while `db/.initialized` is absent, with the exited init container removed afterward, plus `scripts/compose.sh` (explicit project), `scripts/bootstrap.sh`, `scripts/reset.sh`, `make stack-*` targets, a credential generator (`db/make-env.sh`), `db/verify.sh` and `scripts/isolation.sh` (adapted from the governance project's `bin/` scripts).
 7. Docs: measured instance facts (edition, version, actual CPU, memory and user-data caps), the boundary rule (analytics reads HAPI only through the FHIR API, never the FHIR PDB), a PDB reset procedure, and provenance (the governance repo commit the files were adapted from).
 
 **Platform notes:** HAPI's JPA schema is index-heavy, so measure growth with synthetic data early. Whether the copied DDL exactly matches HAPI 7.6.0 is checked by a one-time `hibernate.hbm2ddl.auto: validate` start (unverified until then).
 
-**Verify:** both PDBs show open in `v$pdbs`; the HAPI container reports `healthy`; HAPI tables exist only in the FHIR PDB user; the schema `validate` start passes; a synthetic `Patient` can be `POST`ed and `GET`ed at `http://127.0.0.1:8192/fhir`; connecting to the Mac's LAN address on ports 8192 and 1522 is refused; the analytics PDB has no HAPI tables; the governance containers, volumes and ports are unchanged (compare `docker ps` and `docker volume ls` before and after); `make guard-all` passes and no passwords are in the repo.
+**Verify:** both PDBs show open in `v$pdbs`; the HAPI container reports `healthy`; HAPI tables exist only in the FHIR PDB's owner schema; the owner cannot log in, and the application user has `CREATE SESSION` only, owns no tables, and has one synonym per table and sequence; the schema `validate` start passes; a synthetic `Patient` can be `POST`ed and `GET`ed at `http://127.0.0.1:8192/fhir`; connecting to the Mac's LAN address on ports 8192 and 1522 is refused; the analytics PDB has no HAPI tables; the governance containers, volumes and ports are unchanged (compare `docker ps` and `docker volume ls` before and after); `make guard-all` passes and no passwords are in the repo.
 
 ---
 
