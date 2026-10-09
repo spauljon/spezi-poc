@@ -4,13 +4,13 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 
 ## Data
 - Real health data is allowed only as the developer's own HealthKit data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
-- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. Until token verification passes (M4) that TLS endpoint is unauthenticated and receives synthetic data only; there is no plain-HTTP FHIR endpoint.
+- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. Token verification passed in M4: every `/fhir` request needs a verified Keycloak bearer token (only `GET /fhir/metadata` is anonymous), so real HealthKit data may go to that endpoint and only that one. There is no plain-HTTP FHIR endpoint.
 - Everything else is synthetic or sandbox only: tests, fixtures, docs, and example data. Never real patient identifiers or anyone else's data.
 - Keep a synthetic data source behind the same ingest interface as HealthKit for development, tests, and the simulator.
 
 ## Isolation
 - This project must never write to, reconfigure, restart, reset, or share volumes or ports with the governance project's stack (`~/repositories/pghd-governance-mapping-tool-service`). Copy and adapt its files; never mount or reference them. Reading them is fine.
-- POC host ports: Oracle 1522 and HAPI 8443 (HTTPS) are published on loopback only (`127.0.0.1`); HAPI 8443 is opened to the network only in M4, after token verification passes. The IdP edge proxy on 8444 (from M3a) is the first network-reachable endpoint; it exposes only the public OIDC paths, and the Keycloak container, its admin console, `/realms/master/` and its management port are never published. All network-reachable endpoints are TLS only. Never publish a plain-HTTP or unauthenticated service on all interfaces.
+- POC host ports: Oracle 1522 is published on loopback only (`127.0.0.1`). The network-reachable endpoints are HAPI 8443 (opened in M4, after token verification passed; serves only `/fhir`, token required except `GET /fhir/metadata`) and the IdP edge proxy on 8444 (from M3a), which exposes only the public OIDC paths, and the Keycloak container, its admin console, `/realms/master/` and its management port are never published. All network-reachable endpoints are TLS only. Never publish a plain-HTTP or unauthenticated service on all interfaces.
 
 ## Planning before code
 - Planning briefs go in `docs/planning/`; the build plan goes in `docs/implementation-plan.md`.

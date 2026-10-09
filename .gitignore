@@ -29,3 +29,6 @@ tmp/
 
 # Redundant copy of installed skills for another agent target
 agent/
+
+# Maven output of the HAPI extension (hapi/ext)
+hapi/ext/target/

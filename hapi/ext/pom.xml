@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.blueysoft.poc</groupId>
+    <artifactId>hapi-ext</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>POC HAPI token verification and authorization</name>
+    <description>
+        Verifies Keycloak access tokens (JWT) on every /fhir request and turns the token's roles into
+        HAPI AuthorizationInterceptor rules. Thin jar dropped into /app/extra-classes (the
+        hapiproject/hapi image puts that directory on the application classpath via -Dloader.path).
+        Pattern adapted from the governance project's hapi/ext (read only; see hapi/README.md).
+    </description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+
+        <!-- Must track the base image tag in ../Dockerfile (hapiproject/hapi:v7.6.0). -->
+        <hapi.version>7.6.0</hapi.version>
+        <!-- Versions the HAPI 7.6.0 war ships (checked by listing WEB-INF/lib of main.war). -->
+        <nimbus.version>9.37.3</nimbus.version>
+        <spring.version>6.1.14</spring.version>
+        <slf4j.version>2.0.13</slf4j.version>
+        <servlet.version>6.0.0</servlet.version>
+        <junit.version>5.10.3</junit.version>
+    </properties>
+
+    <!--
+        Every runtime dependency is 'provided': these classes already ship inside main.war
+        (nimbus-jose-jwt 9.37.3 is in WEB-INF/lib). Thin jar only; never shade, a copy would sit
+        behind the war's classes anyway. JUnit is test scope: build-time only, never shipped.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-server</artifactId>
+            <version>${hapi.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-structures-r4</artifactId>
+            <version>${hapi.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>${nimbus.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>${servlet.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- ../Dockerfile copies target/hapi-ext.jar by name. -->
+        <finalName>hapi-ext</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

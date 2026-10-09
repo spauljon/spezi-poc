@@ -13,7 +13,7 @@ The usual enterprise split: a **schema owner** (`NO AUTHENTICATION`, so it canno
 
 `db/sql/25-grants-and-synonyms.sql` is idempotent and runs on every init. After a HAPI upgrade (or any change to the owner's objects), rerun the init: remove `db/.initialized` and `make stack-up`. Regenerate `hapi/schema/oracle-temp-tables.sql` too, since Hibernate no longer creates the `HTE_*` tables at startup.
 
-Planned in [docs/implementation-plan.md](../docs/implementation-plan.md), Milestone 1. Compose file: [compose.yaml](../compose.yaml) (project `spezi-poc`). Published ports are loopback only: Oracle on `127.0.0.1:1522`.
+Planned in [docs/implementation-plan.md](../docs/implementation-plan.md), Milestone 1. Compose file: [compose.yaml](../compose.yaml) (project `spezi-poc`). Oracle is published on loopback only (`127.0.0.1:1522`); HAPI's 8443 is network-reachable since M4 (TLS, bearer token required).
 
 ## Bring-up order
 

@@ -77,14 +77,35 @@ spring:
       hibernate.query.mutation_strategy.global_temporary.create_tables: false
       hibernate.query.mutation_strategy.global_temporary.drop_tables: false
 
+# Token verification (M4). Read by hapi/ext PocAuthorizationInterceptor. The JWKS is fetched over HTTPS
+# through the IdP proxy under its public name (compose gives the proxy that name as a network alias),
+# trusting only the POC CA, so the issuer URL and the key URL are the same host the tokens name.
+poc:
+  auth:
+    issuer: https://macpro16.local:8444/realms/poc
+    jwks-uri: https://macpro16.local:8444/realms/poc/protocol/openid-connect/certs
+    audience: hapi-fhir
+    ca-file: /app/tls/ca.crt
+
+# springdoc serves /v3/api-docs (a Spring MVC endpoint outside the FHIR servlet). Off: nothing uses it.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 hapi:
   fhir:
     fhir_version: R4
+    # hapi/ext: discovered here, registered below. Every /fhir request needs a verified bearer token.
+    custom-bean-packages: com.blueysoft.poc.hapi
+    custom-interceptor-classes: com.blueysoft.poc.hapi.PocAuthorizationInterceptor
     cr:
       enabled: false
     cdshooks:
       enabled: false
-    openapi_enabled: true
+    # Off: the Swagger UI is served inside /fhir/ WITHOUT a token check (found in M4). Nothing here uses it.
+    openapi_enabled: false
     ig_runtime_upload_enabled: false
     allow_external_references: true
     advanced_lucene_indexing: false

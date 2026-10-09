@@ -62,11 +62,14 @@ services:
       context: ./hapi
       dockerfile: Dockerfile
     ports:
-      # HTTPS only; loopback-bound until token verification passes (M4), then opened to the network.
-      - '127.0.0.1:8443:8443'
+      # HTTPS only. Opened to the network in M4, after token verification passed (every /fhir request needs a
+      # verified bearer token except GET /fhir/metadata; nothing outside /fhir is served).
+      - '8443:8443'
     volumes:
       # Server key + certificate chain. Lives outside the repo; the CA key is never mounted.
       - ${POC_TLS_DIR:-${HOME}/.poc-ca}/hapi/server.p12:/app/tls/server.p12:ro
+      # Public CA certificate only: used to verify the IdP's TLS when fetching its signing keys (M4).
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/ca.crt:/app/tls/ca.crt:ro
     environment:
       JAVA_OPTS: -Duser.timezone=UTC
     env_file:
@@ -142,6 +145,10 @@ services:
       - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/edge.crt:/etc/nginx/tls/edge.crt:ro
       - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/edge.key:/etc/nginx/tls/edge.key:ro
       - ${POC_TLS_DIR:-${HOME}/.poc-ca}/ca.crt:/etc/nginx/tls/ca.crt:ro
+    networks:
+      default:
+        aliases:
+          - macpro16.local   # so HAPI reaches the proxy under the issuer's public name (certificate name matches)
     depends_on:
       keycloak:
         condition: service_started   # the proxy tolerates Keycloak being down (502); /ping works regardless

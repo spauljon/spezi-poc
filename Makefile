@@ -20,7 +20,10 @@ test-idp:
 	@python3 -c "import json; json.load(open('idp/realm/poc-realm.json'))" && echo "idp: realm template is valid JSON"
 	@./idp/test-config.sh
 test-hapi:
-	@echo "hapi: no tests yet (added in M2/M4)"
+	@python3 -c "import ast; ast.parse(open('hapi/auth.py').read())" && echo "hapi: auth.py parses"
+	@out=$$(docker build --progress=plain --no-cache-filter build-ext --target build-ext -t spezi-poc-hapi-ext-test hapi 2>&1) \
+	  || { echo "$$out" | tail -40; echo "hapi: extension build or unit tests FAILED"; exit 1; }; \
+	  echo "hapi: extension unit tests: $$(echo "$$out" | grep 'Tests run:' | tail -1 | sed 's/.*Tests run:/Tests run:/')"
 test-ios:
 	@echo "ios: no tests yet (added in M5/M6)"
 test-analytics:

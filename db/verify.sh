@@ -185,30 +185,35 @@ else
   skip "plain-HTTP port check (the port probe failed its positive control)"
 fi
 
-echo "== FHIR round trip (synthetic Patient, over HTTPS)"
-ident='http://blueysoft.com/fhir/identifier/poc-patient|poc-0001'
-patient='{"resourceType":"Patient","identifier":[{"system":"http://blueysoft.com/fhir/identifier/poc-patient","value":"poc-0001"}],"name":[{"family":"Synthetic","given":["Poc"]}]}'
-code=$(curlt -o /dev/null -w '%{http_code}' -X POST "$base/Patient" -H 'Content-Type: application/fhir+json' \
-         -H "If-None-Exist: identifier=$ident" -d "$patient")
-case "$code" in
-  200|201) ok "conditional create Patient (HTTP $code)" ;;
-  *)       bad "conditional create Patient returned HTTP $code" ;;
-esac
-# '|' must be URL-encoded: a raw '|' in the query is rejected with HTTP 400.
-total=$(curlt -G "$base/Patient" --data-urlencode "identifier=$ident" --data-urlencode "_summary=count" -H 'Accept: application/fhir+json' \
-          | python3 -c "import sys,json; print(json.load(sys.stdin).get('total'))" 2>/dev/null)
-[ "$total" = "1" ] && ok "search finds exactly one synthetic Patient" || bad "search returned total='$total', expected 1"
+echo "== FHIR round trip (synthetic Patient, over HTTPS, capture-writer token)"
+# The seed command creates the Patient with a conditional create and then requires EXACTLY ONE match for the
+# identifier, so duplicates fail it (HTTP 412 on the create). Token is fetched from Keycloak; see hapi/auth.py.
+if seed_out=$(python3 hapi/auth.py seed 2>&1); then ok "conditional create/find synthetic Patient, exactly one match ($seed_out)"
+else bad "seeding the synthetic Patient failed: $seed_out"; fi
+
+echo "== HAPI authentication and authorization (M4)"
+if [ "$(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q keycloak)" 2>/dev/null)" != "healthy" ]; then
+  skip "HAPI auth matrix (Keycloak is not healthy, so no tokens can be issued)"
+else
+  auth_out=$(python3 hapi/auth.py check 2>&1); auth_rc=$?
+  if [ "$auth_rc" = 0 ]; then ok "auth matrix: $(echo "$auth_out" | grep -c '^ok') checks passed (no token, forged tokens, per-role access, non-FHIR paths)"
+  else bad "auth matrix failed:"; echo "$auth_out" | grep '^FAIL' | sed 's/^/        /'; fi
+fi
 
 echo "== network exposure"
-for pair in "oracle 1521" "hapi 8443"; do
-  set -- $pair
-  mapping=$(dc port "$1" "$2" 2>/dev/null)
-  case "$mapping" in
-    127.0.0.1:*) ok "$1:$2 is published on loopback only ($mapping)" ;;
-    "")          bad "$1:$2 is not published" ;;
-    *)           bad "$1:$2 is published beyond loopback ($mapping)" ;;
-  esac
-done
+mapping=$(dc port oracle 1521 2>/dev/null)
+case "$mapping" in
+  127.0.0.1:*) ok "oracle:1521 is published on loopback only ($mapping)" ;;
+  "")          bad "oracle:1521 is not published" ;;
+  *)           bad "oracle:1521 is published beyond loopback ($mapping)" ;;
+esac
+# HAPI is opened to the network at M4, once token verification passes (checked above): TLS only, token required.
+mapping=$(dc port hapi 8443 2>/dev/null)
+case "$mapping" in
+  127.0.0.1:*) bad "hapi:8443 is still loopback-only ($mapping); M4 opens it to the network" ;;
+  "")          bad "hapi:8443 is not published" ;;
+  *)           ok "hapi:8443 is published on the network ($mapping): TLS only, bearer token required" ;;
+esac
 ips=$(host_ips)
 if [ -z "$ips" ]; then
   skip "LAN exposure checks (no non-loopback IPv4 address found); check by hand"
@@ -216,9 +221,21 @@ elif [ "$probe_ok" != true ]; then
   skip "LAN exposure checks (the port probe failed its positive control)"
 else
   for ip in $ips; do
-    for port in 8443 8192 1522; do
+    for port in 8192 1522; do
       [ "$(tcp_state "$ip" "$port")" = "closed" ] && ok "$ip refuses $port" || bad "$ip accepts connections on $port"
     done
+    # 8443 is open since M4. Positive control: metadata is served (so the probe reaches HAPI over this address),
+    # then the real assertion: with no token, data is refused with 401 and nothing outside /fhir is served.
+    mcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "$base/metadata")
+    if [ "$mcode" = "200" ]; then
+      ok "$ip:8443 serves /fhir/metadata over TLS (HTTP $mcode)"
+      pcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "$base/Patient")
+      [ "$pcode" = "401" ] && ok "$ip:8443 refuses /fhir/Patient without a token (HTTP 401)" || bad "$ip:8443 /fhir/Patient without a token returned HTTP $pcode, expected 401"
+      jcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "https://$host:8443/control/jobs?pageStart=0&batchSize=1")
+      [ "$jcode" = "404" ] && ok "$ip:8443 does not serve HAPI's /control/jobs (HTTP 404)" || bad "$ip:8443 /control/jobs returned HTTP $jcode, expected 404"
+    else
+      bad "$ip:8443 did not serve /fhir/metadata (HTTP $mcode); the network probe cannot be trusted"
+    fi
   done
 fi
 
