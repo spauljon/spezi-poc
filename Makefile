@@ -16,6 +16,8 @@ test-db:
 	 else echo "db: compose config skipped (run make stack-env first)"; fi
 test-idp:
 	@bash -n idp/make-env.sh idp/verify-allowlist.sh idp/test-config.sh && echo "idp: shell syntax ok"
+	@python3 -c "import ast; ast.parse(open('idp/oidc.py').read())" && echo "idp: oidc.py parses"
+	@python3 -c "import json; json.load(open('idp/realm/poc-realm.json'))" && echo "idp: realm template is valid JSON"
 	@./idp/test-config.sh
 test-hapi:
 	@echo "hapi: no tests yet (added in M2/M4)"

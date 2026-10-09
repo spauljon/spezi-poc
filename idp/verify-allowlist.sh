@@ -55,7 +55,9 @@ blocked 400 /realms/poc/a%5cb                                  "encoded backslas
 # 3. Allowed: the edge must let these through (no X-Edge-Denied). 502 is expected when Keycloak is not up.
 allowed() { # allowed <path> <why> [curl args]
   local p=$1 w=$2; shift 2; local r st h; r=$(req "$p" "$@"); st=${r%%|*}; h=${r#*|}
-  if [ -z "$h" ] && [ "$st" != "000" ] && [ "$st" != "400" ] && [ "$st" != "421" ]; then ok "$w -> passes the edge (status $st)"
+  # Every denial issued by the edge carries X-Edge-Denied; a 400 WITHOUT it is Keycloak answering (for example
+  # "client not found"), which is exactly a request that passed the edge.
+  if [ -z "$h" ] && [ "$st" != "000" ]; then ok "$w -> passes the edge (status $st)"
   else bad "$w: expected to pass the edge, got status '$st' header '$h'"; fi
 }
 allowed /realms/poc/.well-known/openid-configuration "realm discovery document"

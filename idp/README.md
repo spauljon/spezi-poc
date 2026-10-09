@@ -18,6 +18,8 @@ Keycloak has no built-in way to restrict its admin console, so the proxy is the 
 | `nginx/nginx.conf` | the allowlist proxy |
 | `make-env.sh` | generates the gitignored `.env.local` (bootstrap admin) |
 | `verify-allowlist.sh` | tests the proxy: blocked paths denied by the edge (marked `X-Edge-Denied`), allowed paths pass, encoding tricks blocked; fails if the proxy is not up |
+| `realm/poc-realm.json` | the `poc` realm as code: 3 roles, 4 clients, 3 users; secrets are `${ENV}` placeholders |
+| `oidc.py` | `token worker\|capture\|clinician` prints a decoded token (claims only; `--raw` for the token); `check` runs the realm's security checks |
 | `test-config.sh` | `nginx -t` with the pinned image (never pulls; SKIPs loudly if it cannot run) |
 | `.env.local` | gitignored: bootstrap admin password, `KC_HTTPS_KEY_STORE_PASSWORD` (added by `scripts/make-tls.sh`) |
 
@@ -50,3 +52,33 @@ Two gotchas learned the hard way (2026-10-09):
 - The server cannot see whether the client verified the certificate. To check from the Mac, set the proxy's `error_log` to `info` and look for `tlsv1 alert unknown ca` (alert 48): a rejection means the CA is not trusted. The log also records the User-Agent (Docker Desktop hides client addresses behind `172.18.0.1`), so an iPhone request is recognizable.
 
 A phone may reach the Mac over IPv6 link-local (`fe80::`) and never use IPv4; the published port serves both. The macOS firewall was disabled here, so it was not a factor; if the page does not load at all, check it.
+
+## The `poc` realm
+
+Imported from `realm/poc-realm.json` at the first start with an empty Keycloak volume (`--import-realm`; an existing realm is skipped, so change the file and recreate the volume: `make stack-reset`, or remove only `spezi-poc_keycloak_data`).
+
+| Client | Kind | Used by | Grant |
+|---|---|---|---|
+| `ios-capture` | public, PKCE S256 required | the iOS capture app (M5, M8) | authorization code; `offline_access` allowed. Redirect `com.blueysoft.spezipoc:/oauth2redirect` |
+| `clinician-web` | public, PKCE S256 required | the web app (M12) | authorization code. Redirect `https://macpro16.local:3000/*` (placeholder origin, revisit in M12) |
+| `analytics-worker` | confidential | the aggregation worker (M9) | client credentials only; its service account holds `worker-reader` |
+| `poc-devtest` | public | scripts only (`oidc.py`), **never the apps** | password grant, so a user token can be fetched without a browser |
+
+| User (synthetic) | Realm role |
+|---|---|
+| `capture-user` | `capture-writer` |
+| `clinician-user` | `clinician-reader` |
+| `service-account-analytics-worker` | `worker-reader` |
+
+Every client's access token carries `aud` = `hapi-fhir` and a flat `roles` claim (the user's realm roles). HAPI checks both in M4.
+
+| Setting | Value | Why |
+|---|---|---|
+| Access token lifetime | 10 minutes | HAPI checks `exp` on every call, so a stolen token expires quickly |
+| SSO session idle / max | 14 days / 30 days | the phone can be offline for days and still refresh |
+| Offline sessions | 30 days idle, `offline_access` for `ios-capture` only | the capture queue syncs in the background without the user signing in again |
+| Authorization code | 60 seconds | |
+| Brute force | on: 5 failures, then a wait up to 15 minutes | |
+| `sslRequired` | `all` | no plain-HTTP token endpoint, even locally |
+
+Secrets (`POC_WORKER_CLIENT_SECRET`, the two user passwords) are generated into the gitignored `.env.local` and substituted into the template at import; they appear in no log and no tracked file (checked). `python3 idp/oidc.py check` verifies the properties by behavior: issuer and endpoints use the public URL; the roles, audience and lifetime of each token; a wrong secret, an unknown user, the password grant and client credentials on the public clients are all refused; an authorization request without PKCE, or with `plain`, is refused; a foreign redirect URI is refused; and the master realm and admin console stay closed. The PKCE check was mutation-tested: with the attribute removed from `ios-capture`, exactly the two PKCE checks fail.

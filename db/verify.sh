@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M1-M3a verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
+# M1-M3b verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
 # Run after: make stack-up. Synthetic data only.
 # Addresses services through `docker compose` (project namespace), never by container name.
 # Exits non-zero if any check fails. UNTESTED until you run it.
@@ -287,6 +287,10 @@ else
     done
     [ "$served" -ge 1 ] && ok "8444 is reachable on $served non-loopback address(es)" || bad "8444 is not reachable on any non-loopback address (a phone could not reach it)"
   else skip "IdP LAN checks (the port probe failed its positive control)"; fi
+
+  # --- the poc realm (M3b): tokens, roles, PKCE and refusals, through the same public path a client uses
+  if out=$(python3 idp/oidc.py check 2>&1); then ok "poc realm: $(echo "$out" | grep -c '^ok') checks (tokens, roles, audience, PKCE, refusals)"
+  else bad "poc realm checks failed:"; echo "$out" | grep '^FAIL' | sed 's/^/        /'; fi
 fi
 
 echo

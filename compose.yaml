@@ -102,6 +102,7 @@ services:
       - --https-key-store-file=/opt/keycloak/tls/keycloak.p12
       - --https-key-store-type=PKCS12
       - --health-enabled=true
+      - --import-realm             # imports idp/realm/poc-realm.json at first start; skipped once the realm exists
       # Management port (health) stays inside the container: plain HTTP, container loopback, unpublished.
       # [UNVERIFIED] --http-management-host accepting 127.0.0.1; tested when the image is first run.
       - --http-management-port=9000
@@ -118,6 +119,7 @@ services:
       - "macpro16.local:127.0.0.1"
     volumes:
       - keycloak_data:/opt/keycloak/data
+      - ./idp/realm:/opt/keycloak/data/import:ro   # the realm as code; ${ENV} placeholders come from idp/.env.local
       - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/keycloak.p12:/opt/keycloak/tls/keycloak.p12:ro
     healthcheck:
       # [UNVERIFIED] The image likely has no curl; probe the management port with bash only.

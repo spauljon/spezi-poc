@@ -1,0 +1,153 @@
+{
+  "realm": "poc",
+  "enabled": true,
+  "displayName": "Spezi POC",
+  "sslRequired": "all",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "accessTokenLifespan": 600,
+  "accessCodeLifespan": 60,
+  "ssoSessionIdleTimeout": 1209600,
+  "ssoSessionMaxLifespan": 2592000,
+  "offlineSessionIdleTimeout": 2592000,
+  "roles": {
+    "realm": [
+      { "name": "capture-writer",   "description": "Capture app: create and read Observation, Device, Patient in HAPI" },
+      { "name": "clinician-reader", "description": "Clinician web app: read-only access to HAPI and the analytic API" },
+      { "name": "worker-reader",    "description": "Aggregation worker: read-only access to HAPI" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "ios-capture",
+      "name": "POC iOS capture app",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["com.blueysoft.spezipoc:/oauth2redirect"],
+      "webOrigins": [],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }
+      ]
+    },
+    {
+      "clientId": "clinician-web",
+      "name": "POC clinician web app",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["https://macpro16.local:3000/*"],
+      "webOrigins": ["https://macpro16.local:3000"],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }
+      ]
+    },
+    {
+      "clientId": "analytics-worker",
+      "name": "POC aggregation worker (service account)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${POC_WORKER_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }
+      ]
+    },
+    {
+      "clientId": "poc-devtest",
+      "name": "DEV-ONLY test client: password grant so scripts can get user tokens without a browser. The apps never use it.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-analytics-worker",
+      "enabled": true,
+      "serviceAccountClientId": "analytics-worker",
+      "realmRoles": ["worker-reader"]
+    },
+    {
+      "username": "capture-user",
+      "enabled": true,
+      "email": "capture-user@example.invalid",
+      "emailVerified": true,
+      "firstName": "Capture",
+      "lastName": "Synthetic",
+      "credentials": [{ "type": "password", "value": "${POC_CAPTURE_USER_PASSWORD}", "temporary": false }],
+      "realmRoles": ["capture-writer"]
+    },
+    {
+      "username": "clinician-user",
+      "enabled": true,
+      "email": "clinician-user@example.invalid",
+      "emailVerified": true,
+      "firstName": "Clinician",
+      "lastName": "Synthetic",
+      "credentials": [{ "type": "password", "value": "${POC_CLINICIAN_USER_PASSWORD}", "temporary": false }],
+      "realmRoles": ["clinician-reader"]
+    }
+  ]
+}

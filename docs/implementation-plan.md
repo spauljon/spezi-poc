@@ -168,6 +168,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Goal:** The `poc` realm exists from a committed template and issues signed JWTs with role claims for three principals; the discovery document and JWKS are reachable through the proxy from the Mac and the iPhone, and tokens can be obtained and inspected with a script.
 
+**Status (2026-10-09):** built and verified, **waiting on your review**. The realm imports from code on an empty Keycloak volume; `python3 idp/oidc.py check` runs 36 behavior checks (tokens, roles, audience, lifetime, refusals, PKCE, redirect URI, closed admin side), mutation-tested on the PKCE attribute; no secret appears in any log or tracked file. Defaults chosen, to revisit: iOS redirect `com.blueysoft.spezipoc:/oauth2redirect`, web origin `https://macpro16.local:3000`, 10-minute access tokens, 14-day SSO idle.
+
 **Depends on:** Milestone 3a.
 
 **Tasks:**

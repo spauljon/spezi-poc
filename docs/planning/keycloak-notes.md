@@ -38,9 +38,10 @@ Per the [reverse proxy guide](https://www.keycloak.org/server/reverseproxy): exp
 - **The image has no `curl`, `wget`, `nc` or `python3`**, only `bash`, `grep` and `sed`. A `bash` `/dev/tcp` probe of `/health/ready` works as a healthcheck; run verbatim it exits 0 on the ready path and 1 on a bad one, and its first probe failed while the schema initialized.
 - **On disk the image is 750 MB** (264 MB was the compressed download); the container idles around 635 MiB under a 1.5 GiB cap.
 - **`kcadm.sh` works with certificate verification intact** once the container resolves its own public name to loopback (`extra_hosts`) and trusts the CA through the bundled keystore.
+- **Realm import with `${ENV}` placeholders works** (`--import-realm`, `IGNORE_EXISTING`): client secrets and user passwords are substituted from the container environment and appear in no log. Defining no custom `clientScopes` keeps Keycloak's built-in scopes; the audience and roles mappers therefore live on each client.
+- **The PKCE client attribute is `pkce.code.challenge.method` = `S256`** (confirmed by behavior, with a mutation test: remove it and requests without PKCE or with `plain` are accepted).
 - **The proxy re-encrypts to Keycloak and verifies its certificate against our CA**; an absent realm returns Keycloak's `{"error":"Realm does not exist"}`.
 
 ## Unverified (test or export before relying on it)
 
-- The realm-JSON shape for: a public client with PKCE (I believe `"publicClient": true` and a client attribute `pkce.code.challenge.method` = `S256`), a confidential client-credentials client, realm roles, the roles/audience protocol mappers, and test users. Plan: create once in the console and export, or test the import.
 - Brute-force protection defaults on the `master` realm.
