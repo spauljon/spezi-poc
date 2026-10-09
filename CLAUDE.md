@@ -10,7 +10,7 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 
 ## Isolation
 - This project must never write to, reconfigure, restart, reset, or share volumes or ports with the governance project's stack (`~/repositories/pghd-governance-mapping-tool-service`). Copy and adapt its files; never mount or reference them. Reading them is fine.
-- POC host ports: Oracle 1522 and HAPI 8443 (HTTPS) are published on loopback only (`127.0.0.1`); HAPI 8443 is opened to the network only in M4, after token verification passes. Keycloak 8444 (from M3) is the first network-reachable endpoint. All network-reachable endpoints are TLS only. Never publish a plain-HTTP or unauthenticated service on all interfaces.
+- POC host ports: Oracle 1522 and HAPI 8443 (HTTPS) are published on loopback only (`127.0.0.1`); HAPI 8443 is opened to the network only in M4, after token verification passes. The IdP edge proxy on 8444 (from M3a) is the first network-reachable endpoint; it exposes only the public OIDC paths, and the Keycloak container, its admin console, `/realms/master/` and its management port are never published. All network-reachable endpoints are TLS only. Never publish a plain-HTTP or unauthenticated service on all interfaces.
 
 ## Planning before code
 - Planning briefs go in `docs/planning/`; the build plan goes in `docs/implementation-plan.md`.
@@ -31,7 +31,7 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 - Platform choices (React Native vs Apple-native), and anything that installs or connects external services (packages beyond the template, accounts, cloud, EHR sandboxes, MCP servers).
 
 ## Repository layout and conventions
-- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `compose.yaml` (the POC stack, project `spezi-poc`), `db/` (Oracle bootstrap SQL), `hapi/`, `idp/` (Keycloak, created in M3), `ios/`, `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
+- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `compose.yaml` (the POC stack, project `spezi-poc`), `db/` (Oracle bootstrap SQL), `hapi/`, `idp/` (Keycloak and its proxy, created in M3a), `ios/`, `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
 - Commit prefixes: `docs:`, `contract:`, `db:`, `hapi:`, `idp:`, `ios:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
 - Never hand-copy codes, units or categories into a project: read `contract/metrics.json` or test against it, and change it and all consumers in one commit.
 - Run `make hooks` once per clone to enable the pre-commit data-leak guard. It is a backstop for obvious secret and export patterns, not proof that no real data is present.

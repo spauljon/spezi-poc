@@ -25,7 +25,7 @@ spezi/
   compose.yaml       # POC stack (project spezi-poc); grows with idp/ in M3
   db/                # Oracle container, bootstrap SQL, FHIR and analytics PDBs (created in M1)
   hapi/              # HAPI 7.6.0 config, Oracle datasource, TLS, token verification, authorization
-  idp/               # Keycloak realm and Docker Compose (created in M3)
+  idp/               # Keycloak realm template and the nginx allowlist proxy config (created in M3a)
   ios/               # Spezi-based capture app (Swift, SwiftUI, Spezi)
   analytics/         # Node/TypeScript aggregation worker + analytic API (Oracle)
   web/               # React/TypeScript clinician app
@@ -101,7 +101,7 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Nothing. The Docker daemon must be running, and you approve any image pull.
 
-**Independence rule:** the stack shares nothing with the governance project (`~/repositories/pghd-governance-mapping-tool-service`): its own compose project name, network, volume (`spezi-poc_oracle_data`), containers and ports. That project uses host ports 1521, 3001, 5500, 8091-8093, 8095, 8200, 8500, 8600, 9000, 9090 and 27017. POC ports: Oracle 1522 and the HAPI plain-HTTP dev port 8192 are published **on loopback only** (`127.0.0.1:...`), and the actuator is not published at all (the healthcheck runs inside the container). Network-reachable endpoints are TLS only: Keycloak 8444 from M3, and HAPI 8443 only from M4 (it is loopback-bound in M2 and M3 so an unauthenticated HAPI is never reachable from the network). Files are copied and adapted from the governance project, never referenced or mounted from it.
+**Independence rule:** the stack shares nothing with the governance project (`~/repositories/pghd-governance-mapping-tool-service`): its own compose project name, network, volume (`spezi-poc_oracle_data`), containers and ports. That project uses host ports 1521, 3001, 5500, 8091-8093, 8095, 8200, 8500, 8600, 9000, 9090 and 27017. POC ports: Oracle 1522 and the HAPI plain-HTTP dev port 8192 are published **on loopback only** (`127.0.0.1:...`), and the actuator is not published at all (the healthcheck runs inside the container). Network-reachable endpoints are TLS only: the IdP edge proxy on 8444 from M3a (only the public OIDC paths; Keycloak itself is never published), and HAPI 8443 only from M4 (it is loopback-bound in M2 and M3 so an unauthenticated HAPI is never reachable from the network). Files are copied and adapted from the governance project, never referenced or mounted from it.
 
 **Tasks:**
 1. Create the `db/` skeleton (README, `CLAUDE.md`, `.gitignore`, `.env.example`), a `test-db` Makefile target, and the `db:` prefix in root `CLAUDE.md` (M0 predates this directory).
@@ -137,25 +137,69 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
-### Milestone 3: Keycloak identity provider [idp/]
+### Milestone 3a: Keycloak behind a path-allowlist proxy [idp/]
 
-**Goal:** A local Keycloak over TLS issues signed JWTs with role claims for three principals; the discovery document and JWKS are reachable from the Mac and the iPhone with no trust warnings, and tokens can be obtained and inspected with `curl`.
+**Goal:** Keycloak 26.8.0 runs with nothing published, behind an nginx proxy that terminates TLS for `https://macpro16.local:8444` and exposes only the public OIDC paths. The admin console, the `master` realm, health and metrics are not reachable from the network. The iPhone trusts our CA and loads the proxy's `/ping` with no warning.
 
 **Depends on:** Milestone 2 (local CA and TLS approach).
 
-**Prerequisite already done (2026-10-09):** the POC CA is name-constrained (critical, `macpro16.local` only; retired the unconstrained M2 CA), so the first device trust (the iPhone check below) is against the final CA. Commit: `hapi: constrain the local CA to macpro16.local`.
+**Decisions (2026-10-09):** Keycloak **26.8.0**, pinned by tag and digest (`quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc`; multi-arch, about 264 MB for arm64). Admin exposure **option B**: Keycloak's docs say it has no built-in way to restrict the admin console, so a proxy exposes only `/realms/` (not `/realms/master/`), `/resources/` and `/.well-known/`. Research, sources and what is still unverified: [docs/planning/keycloak-notes.md](planning/keycloak-notes.md). **Database: H2** (the default `dev-file`, on a named volume) in this milestone; Oracle-backed Keycloak is Milestone 3c. The proxy is `nginx:alpine`, **already on this machine** (nginx 1.31.3, arm64, digest `sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752`), so only the Keycloak image needs a pull, and I ask you before it.
+
+**Prerequisite already done (2026-10-09):** the POC CA is name-constrained (critical, `macpro16.local` only), so the first device trust is against the final CA. Commit: `hapi: constrain the local CA to macpro16.local`.
 
 **Tasks:**
-1. Create the `idp/` skeleton (README, `CLAUDE.md`, `.gitignore` for generated secrets and data), add a `test-idp` target to the Makefile and the `idp:` prefix to root `CLAUDE.md` (M0 predates this directory).
-2. Confirm with you before pulling the Keycloak image (needs Docker). Pin a version after checking current Keycloak docs: image name, tags and startup flags are unverified.
-3. Docker Compose: Keycloak in dev mode with its embedded database (POC only), TLS from a certificate issued by the M2 CA for `macpro16.local`, port 8444 published on the network. Generate a strong admin password outside the repo, and restrict the admin console to loopback if the pinned Keycloak version supports it (unverified).
-4. Realm `poc` as code: roles `capture-writer`, `clinician-reader`, `worker-reader`; clients `ios-capture` and `clinician-web` (public, authorization code + PKCE) and `analytics-worker` (confidential, client credentials); mappers for the roles claim and audience; synthetic test users only.
-5. Commit the realm export in templated form with no secrets or passwords; a script generates local secrets and passwords outside the repo.
-6. Document token lifetimes and refresh behavior (including the phone offline case).
+1. Create the `idp/` skeleton (README, `CLAUDE.md`, `.gitignore`), a `test-idp` Makefile target, and the `idp:` prefix in root `CLAUDE.md` (M0 predates this directory).
+2. TLS: issue two more leaf certificates from the same constrained CA, each with its own key (none shared with HAPI): `edge` (the proxy, public-facing) and `keycloak` (internal), both SAN `macpro16.local`, as PEM files. The script is shared now, so move `hapi/tls/make-tls.sh` to `scripts/make-tls.sh` (keep `make tls`).
+3. Compose: `keycloak` in production-mode `start` (HTTPS from the PEM files, `--hostname=https://macpro16.local:8444`, `--proxy-headers=xforwarded`, no published ports, management port 9000 unpublished, memory limit about 1.5 GB, named volume for its database, bootstrap admin from a gitignored env file with a generated password) and `idp-edge` (nginx) publishing 8444.
+4. nginx config: TLS 1.2/1.3 only; allow `/realms/`, `/resources/`, `/.well-known/`; return 404 for `/realms/master/` and for everything else (`/admin/`, `/metrics`, `/health`, `/`); re-encrypt to Keycloak and verify its certificate against our CA (`proxy_ssl_verify on`); a static `/ping` so the phone trust test works before any realm exists.
+5. Admin access: nothing is published. Admin tasks use `kcadm.sh` inside the container (documented); an optional loopback-only admin listener can come later.
+6. Container healthcheck on the management port (approach unverified: the image likely has no `curl`, so try a `bash` `/dev/tcp` probe; confirm whether the management port can bind to the container loopback).
+7. Database: try production mode with the default `dev-file` (H2) on a named volume. The docs call it deprecated and unsuitable for production but do not say it refuses to start. If it refuses, fall back to `start-dev` and record it. Either way it is an accepted POC gap, closed by Milestone 3c.
 
-**Platform notes:** Keycloak issues no FHIR-specific claims; HAPI evaluates the roles and audience in M4. A dev-only test client (direct access grant) lets `curl` obtain user tokens without a browser. It is for testing only and is never used by the apps.
+**Platform notes:** the Keycloak container is never published; a compromised or misconfigured proxy rule is the exposure. A path-normalization bypass of `/admin` blocking has happened before (CVE-2025-10939, fixed in 26.4.4 per a secondary source), so the allowlist must be tested with encoded and dot-segment paths, not only the plain ones. Docker Desktop's VM (about 7.75 GiB) is shared with Oracle and HAPI; raising it to 12 GB or more is your setting.
 
-**Verify:** discovery document and JWKS reachable by `curl` (with the CA) and in iPhone Safari with no trust warning (this is the phone's CA trust test; it also proves the certificate name works for `macpro16.local`); a worker client-credentials token decodes to the expected `iss`, `aud`, `exp` and roles; a test-user token carries the clinician role; a wrong client secret is rejected; `make guard-all` passes with the realm export staged.
+**Verify:** the Keycloak image is pulled by digest (after your approval) and `docker ps` shows no published Keycloak ports; `https://macpro16.local:8444/ping` returns 200 from the Mac (with the CA) and from iPhone Safari with no trust warning (the phone's first CA trust test; it also proves the name works); the proxy returns 404 (never 200 or an admin redirect) for `/admin/`, `//admin/`, `/%61dmin/`, `/realms/master/`, `/realms/%6dmaster/`, `/realms/poc/../master/`, `/metrics`, `/health` and `/`; the TLS checks used for HAPI (CA trust, wrong host rejected, TLS 1.2/1.3 up, TLS 1.1 refused) pass against 8444; both containers healthy and Keycloak stays under its memory limit; `make guard-all` passes.
+
+---
+
+### Milestone 3b: `poc` realm as code and tokens [idp/]
+
+**Goal:** The `poc` realm exists from a committed template and issues signed JWTs with role claims for three principals; the discovery document and JWKS are reachable through the proxy from the Mac and the iPhone, and tokens can be obtained and inspected with a script.
+
+**Depends on:** Milestone 3a.
+
+**Tasks:**
+1. Realm template `idp/realm/poc-realm.json`: roles `capture-writer`, `clinician-reader`, `worker-reader`; clients `ios-capture` and `clinician-web` (public, authorization code + PKCE S256) and `analytics-worker` (confidential, client credentials, service account with `worker-reader`); mappers for the roles claim and for an audience the HAPI check will expect; synthetic test users only. Secrets and passwords come from `${ENV}` placeholders filled from gitignored env files.
+2. Import at first start with `--import-realm` (it is skipped when the realm exists, so changing the template means recreating the realm).
+3. Confirm the unverified JSON shapes by exporting a realm configured once in the console (or by testing the import): the PKCE client attribute, the client-credentials client, the mappers.
+4. A dev-only test client (direct access grant) lets a script obtain user tokens without a browser. It is for testing only and the apps never use it.
+5. Token lifetimes and refresh behavior documented, including the phone offline case.
+6. A token script (client credentials for the worker; the test client for a user) that decodes the claims for verification.
+
+**Platform notes:** Keycloak issues no FHIR-specific claims; HAPI evaluates the roles and audience in M4.
+
+**Verify:** the discovery document and JWKS are reachable through the proxy by `curl` (with the CA) and in iPhone Safari with no warning; the worker client-credentials token decodes to `iss` = `https://macpro16.local:8444/realms/poc`, the expected `aud`, `exp` and `worker-reader`; a test-user token carries the clinician role; a wrong client secret is rejected; `/realms/master/` is still 404 at the proxy; `make guard-all` passes with the realm template staged and no secrets in the repo.
+
+---
+
+### Milestone 3c: Keycloak on Oracle (KEYCLOAKPDB) [db/, idp/]
+
+**Goal:** Keycloak keeps its data in its own PDB on the POC Oracle, with the same owner/app split as HAPI, replacing the H2 file.
+
+**Depends on:** Milestone 3b.
+
+**Why separate:** Keycloak does not bundle the Oracle JDBC driver (a custom image with the `ojdbc17` and `orai18n` jars is required), and its schema migration normally needs DDL rights, which clashes with the owner/app split. The realm is code, so moving the database later loses nothing, and keeping this apart means a proxy problem is not tangled with a driver problem. Facts from Keycloak's DB guide: [docs/planning/keycloak-notes.md](planning/keycloak-notes.md).
+
+**Tasks:**
+1. `KEYCLOAKPDB`, a schema-only `keycloak_owner` (no login) and an application user `keycloak`, through the existing idempotent init (remove `db/.initialized`, rerun `make stack-up`; the other PDBs are untouched). The instance allows 18 PDBs; a new PDB costs about 0.9 to 1 GB of datafiles before data.
+2. Custom Keycloak image: base pinned to the 26.8.0 digest, the two Oracle jars (version 23.26.2.0.0) in `providers`, `KC_DB=oracle`, `kc.sh build`. **Needs your approval for the jar downloads** (Maven Central or Oracle); record their checksums.
+3. Schema migration with `--spi-connections-jpa--quarkus--migration-strategy=manual` (plus `migration-export` and `initialize-empty`): Keycloak writes the SQL, we apply it as the owner, and the runtime user gets DML only. Untested; the Oracle privileges Keycloak needs are not documented, so find them by trial.
+4. Names: use `--db-schema` or synonyms (the docs do not say whether `db-schema` can point at another user's schema; test it).
+5. Cap the connection pool (the default maximum is 100; the instance allows 200 processes and HAPI already holds 10).
+6. Recreate the realm from the template on the new database.
+7. Extend `db/verify.sh` for the new PDB (owner cannot log in, application user has `CREATE SESSION` only, Keycloak connected as the application user).
+
+**Verify:** Keycloak starts on Oracle; the realm imports; the M3b token checks still pass; data survives recreating the Keycloak container; `KEYCLOAKPDB` shows the expected owner/app privileges; `make guard-all` passes.
 
 ---
 
@@ -441,7 +485,7 @@ If this ever leaves local use, run `digital-health-compliance-planning` first.
 
 ## Open Questions
 
-1. **Resolved:** Keycloak is the IdP (decided). Still open for M3: Docker availability and your approval to pull the image, the Keycloak version and port numbers, and whether to run it on the Mac Pro alongside HAPI and Oracle.
+1. **Resolved:** Keycloak **26.8.0**, digest-pinned, behind an nginx path-allowlist proxy on 8444, with H2 in M3a and Oracle in M3c (decided 2026-10-09); the Keycloak container and its admin console are never published. Still open: your approval to pull the Keycloak image for M3a (about 264 MB) and, later, to download the Oracle driver jars for M3c; the memory cap (about 1.5 GB); and the Docker Desktop VM memory, which you are raising to 12 GB (still reports 7.75 GiB; Docker Desktop needs Apply & restart).
 2. **Oracle Free edition limits and host memory** (M1, M9): the POC runs its own Oracle container alongside the governance stack's, so total RAM matters too. CPU, memory and user-data caps apply to the whole instance across PDBs, so HAPI's index-heavy schema and the rollups compete for the same budget. Unverified until M1 measures them.
 3. **Paid Apple Developer account** (M17): whether HealthKit on a personal device needs one is unverified; it would be an account and a cost.
 4. **SpeziHealthKit and SpeziFHIR behaviors** (M8, M17): the reference file's claims (background delivery, HAPI support, data store upload) need verifying against the modules before relying on them.
