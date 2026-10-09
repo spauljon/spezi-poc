@@ -72,6 +72,9 @@ assert_docker_running
 # create gitignored credentials where absent (never overwrites)
 "${RUN_DIR}/db/make-env.sh"
 
+# create the local CA, server certificate and HAPI keystore where absent (idempotent; keys live outside the repo)
+"${RUN_DIR}/hapi/tls/make-tls.sh"
+
 if [ -f "${MARKER_FILE}" ]; then
   run_initialized
 else

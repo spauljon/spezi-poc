@@ -1,5 +1,5 @@
 #!/bin/bash
-# M1 verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
+# M1+M2 verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
 # Run after: make stack-up. Synthetic data only.
 # Addresses services through `docker compose` (project namespace), never by container name.
 # Exits non-zero if any check fails. UNTESTED until you run it.
@@ -63,23 +63,46 @@ echo "== HAPI startup log"
 errs=$(dc logs --no-color --no-log-prefix hapi 2>&1 | grep -c -E 'ORA-|SQLSyntaxError| ERROR |CommandAcceptanceException')
 [ "$errs" = "0" ] && ok "no Oracle/DDL errors in the HAPI log" || bad "$errs Oracle/DDL error lines in the HAPI log (is Hibernate trying to alter the schema?)"
 
-echo "== FHIR round trip (synthetic Patient, loopback)"
-base=http://127.0.0.1:8192/fhir
+# --- TLS (M2): HAPI serves HTTPS only, from a certificate signed by the local CA ---------------------
+tls_dir="${POC_TLS_DIR:-$HOME/.poc-ca}"
+host=macpro16.local
+base="https://$host:8443/fhir"
+# curl that trusts only our CA and maps the host name to loopback (the port is loopback-bound until M4)
+curlt() { curl -s --cacert "$tls_dir/ca.crt" --resolve "$host:8443:127.0.0.1" "$@"; }
+
+echo "== TLS"
+code=$(curlt -o /dev/null -w '%{http_code}' "$base/metadata")
+[ "$code" = "200" ] && ok "GET /fhir/metadata over HTTPS with the POC CA (HTTP $code)" || bad "GET /fhir/metadata over HTTPS returned '$code'"
+if curl -s -o /dev/null --resolve "$host:8443:127.0.0.1" "$base/metadata"; then bad "HTTPS succeeds WITHOUT the POC CA (system store trusts it?)"; else ok "HTTPS fails without the POC CA (not in the system trust store)"; fi
+if curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8443:127.0.0.1" "https://other.local:8443/fhir/metadata"; then bad "a different host name was accepted (hostname verification is off?)"; else ok "a different host name is rejected (SAN is enforced)"; fi
+sclient() { echo | openssl s_client -connect 127.0.0.1:8443 -servername "$host" -CAfile "$tls_dir/ca.crt" "$@" 2>&1; }
+sclient -tls1_2 | grep -q "Verify return code: 0" && ok "TLS 1.2 handshake works and the chain verifies" || bad "TLS 1.2 handshake or chain verification failed"
+sclient -tls1_1 | grep -q "Verify return code: 0" && bad "TLS 1.1 was accepted (protocol floor not enforced)" || ok "TLS 1.1 is refused"
+days=$(python3 - "$tls_dir/server.crt" <<'PY'
+import subprocess,sys,datetime
+out=subprocess.check_output(['openssl','x509','-in',sys.argv[1],'-noout','-enddate']).decode().strip().split('=',1)[1]
+print((datetime.datetime.strptime(out,'%b %d %H:%M:%S %Y %Z')-datetime.datetime.utcnow()).days)
+PY
+)
+[ "${days:-0}" -ge 30 ] && ok "server certificate has $days days left" || bad "server certificate expires in '${days}' days (rerun make tls)"
+if nc -z -G 2 127.0.0.1 8192 >/dev/null 2>&1; then bad "something still listens on 127.0.0.1:8192 (the old plain-HTTP port)"; else ok "no plain-HTTP FHIR port (8192 is closed)"; fi
+
+echo "== FHIR round trip (synthetic Patient, over HTTPS)"
 ident='http://blueysoft.com/fhir/identifier/poc-patient|poc-0001'
 patient='{"resourceType":"Patient","identifier":[{"system":"http://blueysoft.com/fhir/identifier/poc-patient","value":"poc-0001"}],"name":[{"family":"Synthetic","given":["Poc"]}]}'
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/Patient" -H 'Content-Type: application/fhir+json' \
+code=$(curlt -o /dev/null -w '%{http_code}' -X POST "$base/Patient" -H 'Content-Type: application/fhir+json' \
          -H "If-None-Exist: identifier=$ident" -d "$patient")
 case "$code" in
   200|201) ok "conditional create Patient (HTTP $code)" ;;
   *)       bad "conditional create Patient returned HTTP $code" ;;
 esac
 # '|' must be URL-encoded: a raw '|' in the query is rejected with HTTP 400.
-total=$(curl -s -G "$base/Patient" --data-urlencode "identifier=$ident" --data-urlencode "_summary=count" -H 'Accept: application/fhir+json' \
+total=$(curlt -G "$base/Patient" --data-urlencode "identifier=$ident" --data-urlencode "_summary=count" -H 'Accept: application/fhir+json' \
           | python3 -c "import sys,json; print(json.load(sys.stdin).get('total'))" 2>/dev/null)
 [ "$total" = "1" ] && ok "search finds exactly one synthetic Patient" || bad "search returned total='$total', expected 1"
 
 echo "== network exposure"
-for pair in "oracle 1521" "hapi 8080"; do
+for pair in "oracle 1521" "hapi 8443"; do
   set -- $pair
   mapping=$(dc port "$1" "$2" 2>/dev/null)
   case "$mapping" in
@@ -90,7 +113,7 @@ for pair in "oracle 1521" "hapi 8080"; do
 done
 lan=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
 if [ -n "$lan" ]; then
-  for port in 8192 1522; do
+  for port in 8443 8192 1522; do
     if nc -z -G 2 "$lan" "$port" >/dev/null 2>&1; then bad "LAN address $lan accepts connections on $port"; else ok "LAN address $lan refuses $port"; fi
   done
 else

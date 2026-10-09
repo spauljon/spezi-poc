@@ -4,7 +4,7 @@ Status: DRAFT for developer review. Produced with `digital-health-ux-planning`.
 
 ## 1. Purpose and framing
 
-A learning POC that exercises the real shape of a remote-monitoring system: a patient-side **capture app** (Spezi mobile) that sources health metrics from HealthKit or a synthetic device, a **FHIR service** (HAPI FHIR 7.6.0, R4; target endpoint `https://macpro16.local:8443/fhir` with TLS and authentication, built in the implementation plan's M2-M4; the POC's own HAPI starts at a loopback-only `http://127.0.0.1:8192/fhir` (plain HTTP, no authn/authz) in M1 and is HTTPS-only from M2) as the system of record, and a **clinician web app** that reviews longitudinal data by querying the service.
+A learning POC that exercises the real shape of a remote-monitoring system: a patient-side **capture app** (Spezi mobile) that sources health metrics from HealthKit or a synthetic device, a **FHIR service** (HAPI FHIR 7.6.0, R4; target endpoint `https://macpro16.local:8443/fhir` with TLS and authentication, built in the implementation plan's M2-M4; the POC's own HAPI runs HTTPS-only from M2 (loopback-bound until M4)) as the system of record, and a **clinician web app** that reviews longitudinal data by querying the service.
 
 Two projects:
 1. **Capture app** — Spezi mobile (platform to be chosen at platform selection; HealthKit strongly implies Apple-native).

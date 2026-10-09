@@ -4,13 +4,13 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 
 ## Data
 - Real health data is allowed only as the developer's own HealthKit data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
-- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. The loopback-only plain-HTTP dev endpoint (`http://127.0.0.1:8192/fhir`, M1 only) receives synthetic data only.
+- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. Until token verification passes (M4) that TLS endpoint is unauthenticated and receives synthetic data only; there is no plain-HTTP FHIR endpoint.
 - Everything else is synthetic or sandbox only: tests, fixtures, docs, and example data. Never real patient identifiers or anyone else's data.
 - Keep a synthetic data source behind the same ingest interface as HealthKit for development, tests, and the simulator.
 
 ## Isolation
 - This project must never write to, reconfigure, restart, reset, or share volumes or ports with the governance project's stack (`~/repositories/pghd-governance-mapping-tool-service`). Copy and adapt its files; never mount or reference them. Reading them is fine.
-- POC host ports: Oracle 1522 and HAPI 8192 (plain-HTTP dev, M1 only) are published on loopback only (`127.0.0.1`); network-reachable endpoints are TLS only: Keycloak 8444 (from M3) and HAPI 8443 (from M4, after token verification passes; loopback-bound before that). Never publish a plain-HTTP or unauthenticated service on all interfaces.
+- POC host ports: Oracle 1522 and HAPI 8443 (HTTPS) are published on loopback only (`127.0.0.1`); HAPI 8443 is opened to the network only in M4, after token verification passes. Keycloak 8444 (from M3) is the first network-reachable endpoint. All network-reachable endpoints are TLS only. Never publish a plain-HTTP or unauthenticated service on all interfaces.
 
 ## Planning before code
 - Planning briefs go in `docs/planning/`; the build plan goes in `docs/implementation-plan.md`.
