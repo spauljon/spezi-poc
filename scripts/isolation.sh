@@ -4,6 +4,8 @@
 #   scripts/isolation.sh after    snapshot again and diff against the "before" snapshot
 # Membership is decided by the compose project label, not by names. Read-only: only runs
 # docker list commands.
+# Only identity is compared (container name + image, volume names, network names), never run state
+# or ports: those change whenever Docker Desktop restarts and would raise false alarms.
 set -euo pipefail
 
 snap="${TMPDIR:-/tmp}/spezi-poc-isolation.snapshot"
@@ -17,9 +19,9 @@ take() {
   local mine
   mine=$(mktemp); trap 'rm -f "$mine"' RETURN
 
-  echo "## containers (name image ports)"
+  echo "## containers (name image)"
   docker ps -a --filter "label=${label}" --format '{{.Names}}' | sort > "$mine"
-  docker ps -a --format '{{.Names}}	{{.Image}}	{{.Ports}}' | sort \
+  docker ps -a --format '{{.Names}}	{{.Image}}' | sort \
     | awk -F'\t' 'NR==FNR{m[$1]=1;next} !($1 in m)' "$mine" - || true
 
   echo "## volumes"
