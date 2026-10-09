@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Proves the POC stack did not touch anything outside its own compose project.
 #   scripts/isolation.sh before   snapshot containers, volumes and networks NOT in the project
 #   scripts/isolation.sh after    snapshot again and diff against the "before" snapshot

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Creates (once) a local CA, a server certificate for the POC host, and the PKCS12 keystore HAPI
 # serves TLS from. Idempotent: reuses what exists, regenerates the server cert if it is missing
 # or expires within 30 days. Nothing here is committed: keys live outside the repo.

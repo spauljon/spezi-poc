@@ -36,3 +36,8 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 - Never hand-copy codes, units or categories into a project: read `contract/metrics.json` or test against it, and change it and all consumers in one commit.
 - Run `make hooks` once per clone to enable the pre-commit data-leak guard. It is a backstop for obvious secret and export patterns, not proof that no real data is present.
 - `make test` runs every project's tests; `make guard-all` scans the whole working tree.
+
+## Portability and test honesty
+- Supported platforms: macOS and Linux (Windows unsupported; see README). Scripts are `#!/usr/bin/env bash` and avoid BSD-only or GNU-only flags (no `nc -G`, `sed -i ''`, `stat -f`, `ipconfig`, `readlink -f`). Any platform-specific branch must fail or skip loudly, never silently.
+- A negative check ("X is refused", "Y is rejected") must have a positive control proving the probe can see the opposite, and must fail for the stated reason (for example curl exit 60 for a certificate error, not exit 7 for "could not connect"). A check that passes because the tool is broken or the service is down is a bug.
+- `.gitattributes` keeps scripts, SQL, YAML and the Makefile LF; do not remove it.

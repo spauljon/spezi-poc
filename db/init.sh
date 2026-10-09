@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Creates the FHIR and analytics PDBs, their users, and (once) the HAPI schema.
 # Runs inside the oracle-init service (see compose.yaml). Idempotent: existing PDBs and
 # users are skipped. (Ran cleanly on 2026-10-08; the owner/app split, grants and synonyms are newer and unverified on a fresh DB.)

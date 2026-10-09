@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # bootstrap.sh -- starts the POC stack (compose project spezi-poc).
 # Adapted from the governance project's bin/bootstrap.sh.

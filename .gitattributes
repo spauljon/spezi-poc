@@ -1,0 +1,13 @@
+# Line endings. Scripts, configs and SQL must be LF on every platform: with CRLF the shebang becomes
+# "bash\r" and fails, and scripts mounted into Linux containers (db/init.sh) break the same way.
+* text=auto
+*.sh        text eol=lf
+*.sql       text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+Makefile    text eol=lf
+.githooks/* text eol=lf
+.gitignore  text eol=lf
+*.p12       binary

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Generates gitignored local credentials for the POC stack. Never overwrites existing files.
 # Values are random and never printed. Writes db/.env.local and hapi/.env.local.
 set -euo pipefail

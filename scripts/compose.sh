@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Deploys to the POC compose project explicitly: every docker compose call goes through here.
 # Mirrors the governance project's bin/compose.sh (-p <project> -f <file>).
 set -eo pipefail

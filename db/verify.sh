@@ -1,16 +1,22 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # M1+M2 verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
 # Run after: make stack-up. Synthetic data only.
 # Addresses services through `docker compose` (project namespace), never by container name.
 # Exits non-zero if any check fails. UNTESTED until you run it.
 set -uo pipefail
 
+for tool in docker curl openssl python3; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "verify.sh needs $tool on PATH" >&2; exit 2; }
+done
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 dc() { ./scripts/compose.sh "$@"; }
 
 fail=0
+skipped=0
 ok()   { echo "ok   - $1"; }
 bad()  { echo "FAIL - $1"; fail=1; }
+skip() { echo "SKIP - $1"; skipped=$((skipped+1)); }
 check() { if eval "$2" >/dev/null 2>&1; then ok "$1"; else bad "$1"; fi; }
 
 health() { docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q "$1")" 2>/dev/null; }
@@ -63,6 +69,47 @@ echo "== HAPI startup log"
 errs=$(dc logs --no-color --no-log-prefix hapi 2>&1 | grep -c -E 'ORA-|SQLSyntaxError| ERROR |CommandAcceptanceException')
 [ "$errs" = "0" ] && ok "no Oracle/DDL errors in the HAPI log" || bad "$errs Oracle/DDL error lines in the HAPI log (is Hibernate trying to alter the schema?)"
 
+# --- portable helpers (macOS and Linux): no BSD-only or GNU-only flags -------------------------------
+# tcp_state <host> <port> prints "open" or "closed" (refused, unreachable or timed out after 2s).
+tcp_state() {
+  python3 - "$1" "$2" <<'PY'
+import socket, sys
+s = socket.socket(); s.settimeout(2)
+try:
+    s.connect((sys.argv[1], int(sys.argv[2]))); print("open")
+except OSError:
+    print("closed")
+finally:
+    s.close()
+PY
+}
+# host_ips prints every non-loopback IPv4 address of this host, one per line (Linux: `ip`; macOS/BSD:
+# `ifconfig`; both print "inet <addr>"). If neither tool works it falls back to the default-route source
+# address (a UDP "connect" sends no packet). Prints nothing if no address can be found.
+host_ips() {
+  python3 - <<'PY'
+import re, socket, subprocess
+def run(*cmd):
+    try:
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True, timeout=5).stdout
+    except Exception:
+        return ""
+found = set(re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", run("ip", "-o", "-4", "addr", "show")))
+if not found:
+    found = set(re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", run("ifconfig")))
+if not found:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1)); found.add(s.getsockname()[0])
+    except OSError:
+        pass
+    finally:
+        s.close()
+for a in sorted(x for x in found if not x.startswith("127.")):
+    print(a)
+PY
+}
+
 # --- TLS (M2): HAPI serves HTTPS only, from a certificate signed by the local CA ---------------------
 tls_dir="${POC_TLS_DIR:-$HOME/.poc-ca}"
 host=macpro16.local
@@ -72,23 +119,71 @@ curlt() { curl -s --cacert "$tls_dir/ca.crt" --resolve "$host:8443:127.0.0.1" "$
 
 echo "== TLS"
 code=$(curlt -o /dev/null -w '%{http_code}' "$base/metadata")
-[ "$code" = "200" ] && ok "GET /fhir/metadata over HTTPS with the POC CA (HTTP $code)" || bad "GET /fhir/metadata over HTTPS returned '$code'"
+if [ "$code" = "200" ]; then ok "GET /fhir/metadata over HTTPS with the POC CA (HTTP $code)"; tls_up=true
+else bad "GET /fhir/metadata over HTTPS returned '$code'"; tls_up=false; fi
+
 cax=$(openssl x509 -in "$tls_dir/ca.crt" -noout -text)
 echo "$cax" | grep -q "X509v3 Name Constraints: critical" && ok "the POC CA carries a critical Name Constraints extension" || bad "the POC CA is NOT name-constrained (rerun make tls)"
 echo "$cax" | grep -A3 "Name Constraints" | grep -q "DNS:$host" && ok "the CA permits only DNS:$host" || bad "the CA's permitted name is not $host"
-if curl -s -o /dev/null --resolve "$host:8443:127.0.0.1" "$base/metadata"; then bad "HTTPS succeeds WITHOUT the POC CA (system store trusts it?)"; else ok "HTTPS fails without the POC CA (not in the system trust store)"; fi
-if curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8443:127.0.0.1" "https://other.local:8443/fhir/metadata"; then bad "a different host name was accepted (hostname verification is off?)"; else ok "a different host name is rejected (SAN is enforced)"; fi
+
+# Negative checks mean something only if the positive control above passed (otherwise "refused" could just
+# mean "HAPI is down"), and each must fail for the STATED reason: curl exit 60 = certificate not accepted.
+if [ "$tls_up" = true ]; then
+  curl -s -o /dev/null --resolve "$host:8443:127.0.0.1" "$base/metadata"; rc=$?
+  [ "$rc" = "60" ] && ok "HTTPS fails without the POC CA (curl exit 60: certificate not trusted)" || bad "without the POC CA expected curl exit 60 (certificate rejected), got $rc"
+  curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8443:127.0.0.1" "https://other.local:8443/fhir/metadata"; rc=$?
+  [ "$rc" = "60" ] && ok "a different host name is rejected (curl exit 60: name mismatch, SAN enforced)" || bad "other host name: expected curl exit 60 (name mismatch), got $rc"
+else
+  skip "negative TLS checks (HTTPS is not up, so a refusal would prove nothing)"
+fi
+
 sclient() { echo | openssl s_client -connect 127.0.0.1:8443 -servername "$host" -CAfile "$tls_dir/ca.crt" "$@" 2>&1; }
-sclient -tls1_2 | grep -q "Verify return code: 0" && ok "TLS 1.2 handshake works and the chain verifies" || bad "TLS 1.2 handshake or chain verification failed"
-sclient -tls1_1 | grep -q "Verify return code: 0" && bad "TLS 1.1 was accepted (protocol floor not enforced)" || ok "TLS 1.1 is refused"
-days=$(python3 - "$tls_dir/server.crt" <<'PY'
-import subprocess,sys,datetime
-out=subprocess.check_output(['openssl','x509','-in',sys.argv[1],'-noout','-enddate']).decode().strip().split('=',1)[1]
-print((datetime.datetime.strptime(out,'%b %d %H:%M:%S %Y %Z')-datetime.datetime.utcnow()).days)
-PY
-)
-[ "${days:-0}" -ge 30 ] && ok "server certificate has $days days left" || bad "server certificate expires in '${days}' days (rerun make tls)"
-if nc -z -G 2 127.0.0.1 8192 >/dev/null 2>&1; then bad "something still listens on 127.0.0.1:8192 (the old plain-HTTP port)"; else ok "no plain-HTTP FHIR port (8192 is closed)"; fi
+# tls_result <s_client output> -> accepted | refused | unknown.
+# "Verify return code: 0" is NOT evidence of success: a handshake the server aborts also prints it.
+# Success means a real negotiated cipher ("Cipher is ECDHE-..."; a failure prints "Cipher is (NONE)");
+# a server refusal is a protocol-version alert.
+tls_result() {
+  if echo "$1" | grep -qiE "alert protocol version|alert number 70"; then echo refused
+  elif echo "$1" | grep -qE "Cipher is [A-Za-z0-9]"; then echo accepted
+  else echo unknown; fi
+}
+out12=$(sclient -tls1_2)
+if [ "$(tls_result "$out12")" = "accepted" ] && echo "$out12" | grep -q "Verify return code: 0"; then
+  ok "TLS 1.2 handshake completes with a real cipher and the chain verifies"
+  if openssl s_client -help 2>&1 | grep -q -e "-tls1_3"; then
+    out13=$(sclient -tls1_3)
+    [ "$(tls_result "$out13")" = "accepted" ] && ok "TLS 1.3 handshake completes" || bad "TLS 1.3 handshake did not complete"
+  else
+    skip "TLS 1.3 handshake (this openssl has no -tls1_3 option)"
+  fi
+  # TLS 1.1 must be refused BY THE SERVER (a protocol-version alert), not merely fail locally.
+  if openssl s_client -help 2>&1 | grep -q -e "-tls1_1"; then
+    case "$(tls_result "$(sclient -tls1_1)")" in
+      refused)  ok "TLS 1.1 is refused by the server (protocol version alert)" ;;
+      accepted) bad "TLS 1.1 was accepted (protocol floor not enforced)" ;;
+      *)        skip "TLS 1.1 refusal inconclusive (no server alert; this openssl/OS policy may not offer TLS 1.1)" ;;
+    esac
+  else
+    skip "TLS 1.1 refusal (this openssl has no -tls1_1 option)"
+  fi
+else
+  bad "TLS 1.2 handshake did not complete with a verified chain"
+fi
+
+if openssl x509 -in "$tls_dir/server.crt" -noout -checkend $((30*86400)) > /dev/null; then
+  ok "server certificate is valid for at least 30 more days ($(openssl x509 -in "$tls_dir/server.crt" -noout -enddate))"
+else
+  bad "server certificate expires within 30 days (rerun make tls)"
+fi
+
+# Positive control for the port probe: it must be able to see an open port before "closed" means anything.
+if [ "$(tcp_state 127.0.0.1 8443)" = "open" ]; then ok "port probe works (127.0.0.1:8443 is open)"; probe_ok=true
+else bad "port probe cannot see 127.0.0.1:8443 open (HAPI down, or the probe is broken)"; probe_ok=false; fi
+if [ "$probe_ok" = true ]; then
+  [ "$(tcp_state 127.0.0.1 8192)" = "closed" ] && ok "no plain-HTTP FHIR port (8192 is closed)" || bad "something still listens on 127.0.0.1:8192 (the old plain-HTTP port)"
+else
+  skip "plain-HTTP port check (the port probe failed its positive control)"
+fi
 
 echo "== FHIR round trip (synthetic Patient, over HTTPS)"
 ident='http://blueysoft.com/fhir/identifier/poc-patient|poc-0001'
@@ -114,15 +209,23 @@ for pair in "oracle 1521" "hapi 8443"; do
     *)           bad "$1:$2 is published beyond loopback ($mapping)" ;;
   esac
 done
-lan=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
-if [ -n "$lan" ]; then
-  for port in 8443 8192 1522; do
-    if nc -z -G 2 "$lan" "$port" >/dev/null 2>&1; then bad "LAN address $lan accepts connections on $port"; else ok "LAN address $lan refuses $port"; fi
-  done
+ips=$(host_ips)
+if [ -z "$ips" ]; then
+  skip "LAN exposure checks (no non-loopback IPv4 address found); check by hand"
+elif [ "$probe_ok" != true ]; then
+  skip "LAN exposure checks (the port probe failed its positive control)"
 else
-  echo "skip - could not determine the LAN address (check by hand)"
+  for ip in $ips; do
+    for port in 8443 8192 1522; do
+      [ "$(tcp_state "$ip" "$port")" = "closed" ] && ok "$ip refuses $port" || bad "$ip accepts connections on $port"
+    done
+  done
 fi
 
 echo
-[ "$fail" -eq 0 ] && echo "ALL CHECKS PASSED" || echo "SOME CHECKS FAILED"
+if [ "$fail" -eq 0 ]; then
+  echo "ALL CHECKS PASSED ($skipped skipped)"; [ "$skipped" -gt 0 ] && echo "Skipped checks did NOT run: read the SKIP lines above."
+else
+  echo "SOME CHECKS FAILED ($skipped skipped)"
+fi
 exit "$fail"
