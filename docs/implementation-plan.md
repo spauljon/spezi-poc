@@ -452,6 +452,10 @@ If this ever leaves local use, run `digital-health-compliance-planning` first.
 11. **OIDC client library for iOS** (M5): AppAuth or a custom `ASWebAuthenticationSession` implementation; adds a package beyond the template, so it needs your approval.
 12. **Token lifetime vs. offline capture** (M3, M8): how long the capture queue can wait before a refresh is required.
 
+## Parked (not part of this plan)
+
+[docs/future-journeys.md](future-journeys.md) records ideas deliberately set aside, starting with FJ-1: a local Kubernetes cluster with mesh mTLS between pods and cleartext services inside.
+
 ## Next Steps
 
 Review this plan. When approved, start Milestone 0 (repo foundation), then stop for your review before Milestone 2. No application code until you approve (CLAUDE.md).
