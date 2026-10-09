@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M1+M2 verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
+# M1-M3a verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
 # Run after: make stack-up. Synthetic data only.
 # Addresses services through `docker compose` (project namespace), never by container name.
 # Exits non-zero if any check fails. UNTESTED until you run it.
@@ -220,6 +220,73 @@ else
       [ "$(tcp_state "$ip" "$port")" = "closed" ] && ok "$ip refuses $port" || bad "$ip accepts connections on $port"
     done
   done
+fi
+
+echo "== IdP (M3a): Keycloak behind the allowlist proxy"
+if ! docker ps --format '{{.Names}}' | grep -q '^spezi-poc-idp-edge$'; then
+  skip "IdP checks (the IdP containers are not running; start the stack with make stack-up)"
+else
+  idp_health() { docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q "$1")" 2>/dev/null; }
+  for svc in keycloak idp-edge; do
+    [ "$(idp_health $svc)" = healthy ] && ok "$svc is healthy" || bad "$svc health is '$(idp_health $svc)'"
+  done
+  curle() { curl -s --cacert "$tls_dir/ca.crt" --resolve "$host:8444:127.0.0.1" "$@"; }
+  code=$(curle -o /dev/null -w '%{http_code}' "https://$host:8444/ping")
+  if [ "$code" = "200" ]; then
+    ok "GET /ping over HTTPS on 8444 with the POC CA (HTTP $code)"
+    curl -s -o /dev/null --resolve "$host:8444:127.0.0.1" "https://$host:8444/ping"; rc=$?
+    [ "$rc" = "60" ] && ok "8444 fails without the POC CA (curl exit 60)" || bad "8444 without the POC CA: expected curl exit 60, got $rc"
+    curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8444:127.0.0.1" "https://other.local:8444/ping"; rc=$?
+    [ "$rc" = "60" ] && ok "8444 rejects a different host name (curl exit 60, SAN enforced)" || bad "8444 other host name: expected curl exit 60, got $rc"
+  else
+    bad "GET /ping on 8444 returned '$code' (is the proxy up?)"
+  fi
+  sclient_p() { local port=$1; shift; echo | openssl s_client -connect "127.0.0.1:$port" -servername "$host" -CAfile "$tls_dir/ca.crt" "$@" 2>&1; }
+  o12=$(sclient_p 8444 -tls1_2)
+  if [ "$(tls_result "$o12")" = "accepted" ] && echo "$o12" | grep -q "Verify return code: 0"; then
+    ok "8444: TLS 1.2 completes with a verified chain"
+    if openssl s_client -help 2>&1 | grep -q -e "-tls1_3"; then
+      [ "$(tls_result "$(sclient_p 8444 -tls1_3)")" = "accepted" ] && ok "8444: TLS 1.3 completes" || bad "8444: TLS 1.3 did not complete"
+    else skip "8444: TLS 1.3 (this openssl has no -tls1_3 option)"; fi
+    if openssl s_client -help 2>&1 | grep -q -e "-tls1_1"; then
+      case "$(tls_result "$(sclient_p 8444 -tls1_1)")" in
+        refused)  ok "8444: TLS 1.1 refused by the server" ;;
+        accepted) bad "8444: TLS 1.1 was accepted" ;;
+        *)        skip "8444: TLS 1.1 refusal inconclusive" ;;
+      esac
+    else skip "8444: TLS 1.1 refusal (this openssl has no -tls1_1 option)"; fi
+  else
+    bad "8444: TLS 1.2 handshake did not complete with a verified chain"
+  fi
+  if out=$(./idp/verify-allowlist.sh 8444 127.0.0.1 2>&1); then ok "allowlist suite via loopback ($(echo "$out" | grep -c '^ok') checks)"
+  else bad "allowlist suite via loopback failed:"; echo "$out" | grep '^FAIL' | sed 's/^/        /'; fi
+  # Host-port bindings of the Keycloak container; `compose port` is unreliable for this (it prints an error for an unpublished port).
+  kc_bound=$(docker inspect -f '{{range $p,$b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}' "$(dc ps -q keycloak)" 2>/dev/null)
+  [ -z "$kc_bound" ] && ok "Keycloak publishes no host port" || bad "Keycloak has published ports: $kc_bound"
+  nginx_img=nginx@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752
+  if docker image inspect "$nginx_img" >/dev/null 2>&1; then
+    peer() { docker run --rm --pull never --network spezi-poc_default --entrypoint sh "$nginx_img" -c "nc -z -w 3 keycloak $1 >/dev/null 2>&1 && echo reachable || echo refused"; }
+    if [ "$(peer 8443)" = "reachable" ]; then
+      ok "positive control: another container reaches keycloak:8443"
+      [ "$(peer 9000)" = "refused" ] && ok "Keycloak's management port 9000 is NOT reachable from other containers" || bad "keycloak:9000 is reachable from another container"
+    else bad "positive control failed: keycloak:8443 not reachable from another container"; fi
+  else skip "management-port reachability (the pinned nginx image is not local)"; fi
+  if [ "$probe_ok" = true ]; then
+    # 8444 is the one endpoint meant to be network-reachable. Docker serves the LAN interface but not every
+    # interface (a VPN tunnel is not served), so require at least ONE address to serve it and run the
+    # allowlist suite on every address that does; addresses that do not serve it are reported, not failed.
+    served=0
+    for ip in $(host_ips); do
+      if [ "$(tcp_state "$ip" 8444)" = "open" ]; then
+        served=$((served+1)); ok "$ip serves 8444 (the one intended network endpoint)"
+        if out=$(./idp/verify-allowlist.sh 8444 "$ip" 2>&1); then ok "allowlist suite via $ip ($(echo "$out" | grep -c '^ok') checks)"
+        else bad "allowlist suite via $ip failed:"; echo "$out" | grep '^FAIL' | sed 's/^/        /'; fi
+      else
+        echo "info - $ip does not serve 8444 (not required: not the interface a phone would use)"
+      fi
+    done
+    [ "$served" -ge 1 ] && ok "8444 is reachable on $served non-loopback address(es)" || bad "8444 is not reachable on any non-loopback address (a phone could not reach it)"
+  else skip "IdP LAN checks (the port probe failed its positive control)"; fi
 fi
 
 echo

@@ -31,10 +31,16 @@ Researched 2026-10-09. **Nothing was pulled or installed**: only Keycloak's docu
 
 Per the [reverse proxy guide](https://www.keycloak.org/server/reverseproxy): expose only `/realms/` (but not `/realms/master/`), `/resources/` and `/.well-known/`; keep `/admin/`, `/realms/master/`, `/metrics`, `/health` and port 9000 internal. There is no built-in IP restriction and (per searches) no supported switch to turn the console off; `--hostname-admin` only changes URLs. Enforcement is at a proxy or network layer. A path-normalization bypass of `/admin` blocking existed (CVE-2025-10939, fixed in 26.4.4 per a secondary source), so proxy rules need testing, not assuming.
 
+## Verified by running it (2026-10-09, Keycloak 26.8.0 on Docker Desktop, arm64)
+
+- **Production-mode `start` runs on the default `dev-file` (H2) database** (log: `jdbc-h2` feature, Liquibase initialized the schema). No refusal.
+- **`--http-management-host=127.0.0.1` is honored** (`Management interface listening on http://127.0.0.1:9000`), and port 9000 is **refused from other containers**; the container publishes nothing.
+- **The image has no `curl`, `wget`, `nc` or `python3`**, only `bash`, `grep` and `sed`. A `bash` `/dev/tcp` probe of `/health/ready` works as a healthcheck; run verbatim it exits 0 on the ready path and 1 on a bad one, and its first probe failed while the schema initialized.
+- **On disk the image is 750 MB** (264 MB was the compressed download); the container idles around 635 MiB under a 1.5 GiB cap.
+- **`kcadm.sh` works with certificate verification intact** once the container resolves its own public name to loopback (`extra_hosts`) and trusts the CA through the bundled keystore.
+- **The proxy re-encrypts to Keycloak and verifies its certificate against our CA**; an absent realm returns Keycloak's `{"error":"Realm does not exist"}`.
+
 ## Unverified (test or export before relying on it)
 
-- Whether `start` with the default `dev-file` database starts cleanly (deprecation warning vs refusal).
 - The realm-JSON shape for: a public client with PKCE (I believe `"publicClient": true` and a client attribute `pkce.code.challenge.method` = `S256`), a confidential client-credentials client, realm roles, the roles/audience protocol mappers, and test users. Plan: create once in the console and export, or test the import.
-- How to health-check the container (the UBI micro image probably has no `curl`; a `bash` `/dev/tcp` probe against the management port is the likely approach).
-- Whether `--http-management-host` can bind the management port to the container loopback.
 - Brute-force protection defaults on the `master` realm.

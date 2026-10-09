@@ -25,8 +25,8 @@ Known platform limits:
 
 ```bash
 make hooks        # once per clone: enable the pre-commit data-leak guard
-make stack-up     # credentials, local CA and certificates, Oracle, HAPI (first run initializes)
+make stack-up     # credentials, local CA and certificates, Oracle, HAPI, Keycloak + its proxy (first run initializes and pulls the pinned Keycloak image)
 make stack-verify # checks; any FAIL exits non-zero, SKIP lines mean a check did not run
 ```
 
-Endpoint (loopback-only until M4): `https://macpro16.local:8443/fhir`. Details: [hapi/README.md](hapi/README.md) and [db/README.md](db/README.md).
+Endpoints: HAPI `https://macpro16.local:8443/fhir` (loopback-only until M4); the IdP proxy `https://macpro16.local:8444` (the one network-reachable endpoint; only the public OIDC paths). Details: [hapi/README.md](hapi/README.md), [db/README.md](db/README.md), [idp/README.md](idp/README.md). To use a phone, install and trust the CA first (see idp/README.md).

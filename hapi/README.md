@@ -11,7 +11,7 @@ Planned in [docs/implementation-plan.md](../docs/implementation-plan.md) (M1, M2
 | `Dockerfile` | `hapiproject/hapi:v7.6.0` plus busybox (for the healthcheck); `/app/extra-classes` is the additive extension mount point used in M4 |
 | `application.yaml` | Oracle datasource at `jdbc:oracle:thin:@oracle:1521/FHIRPDB` (connects as the application user `hapi`; objects belong to `hapi_owner`, reached through synonyms), `HapiFhirOracleDialect`, R4, request validation on |
 | `schema/oracle.sql` | HAPI 7.6.0 Oracle base schema (54 tables, 96 indexes), loaded once by `db/init.sh` |
-| `tls/make-tls.sh` | Creates the local CA (once), the `macpro16.local` server certificate, and the PKCS12 keystore HAPI serves TLS from. Keys live in `~/.poc-ca/` (outside the repo); run via `make tls` or `make stack-up` |
+| (`scripts/make-tls.sh`) | Creates the local CA (once), the `macpro16.local` server certificate and the PKCS12 keystore HAPI serves TLS from (it also issues the IdP certificates). Keys live in `~/.poc-ca/` (outside the repo); run via `make tls` or `make stack-up` |
 | `.env.example` | Names of the credentials in the gitignored `.env.local` |
 
 Runs in the root [compose.yaml](../compose.yaml), project `spezi-poc`, serving **HTTPS only** at `https://macpro16.local:8443/fhir`, published on loopback only (`127.0.0.1:8443`) until M4; bring-up order is in [db/README.md](../db/README.md).

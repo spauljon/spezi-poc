@@ -1,19 +1,22 @@
-.PHONY: test test-contract test-db test-hapi test-ios test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
 
-test: test-contract test-db test-hapi test-ios test-analytics test-web
+test: test-contract test-db test-idp test-hapi test-ios test-analytics test-web
 
 # Placeholders until each project has tests (replaced milestone by milestone).
 test-contract:
 	@echo "contract: no tests yet (added in M6)"
 # Static checks only: no containers are started.
 test-db:
-	@bash -n db/init.sh db/make-env.sh db/verify.sh hapi/tls/make-tls.sh scripts/isolation.sh scripts/compose.sh scripts/bootstrap.sh scripts/reset.sh && echo "db: shell syntax ok"
+	@bash -n db/init.sh db/make-env.sh db/verify.sh scripts/make-tls.sh idp/make-env.sh scripts/isolation.sh scripts/compose.sh scripts/bootstrap.sh scripts/reset.sh && echo "db: shell syntax ok"
 	@if [ -f db/.env.local ] && [ -f hapi/.env.local ]; then \
 	   ./scripts/compose.sh --profile initialize config -q && echo "db: compose config ok"; \
 	 else echo "db: compose config skipped (run make stack-env first)"; fi
+test-idp:
+	@bash -n idp/make-env.sh idp/verify-allowlist.sh idp/test-config.sh && echo "idp: shell syntax ok"
+	@./idp/test-config.sh
 test-hapi:
 	@echo "hapi: no tests yet (added in M2/M4)"
 test-ios:
@@ -35,11 +38,12 @@ hooks:          ## enable the pre-commit guard for this clone
 # POC stack (compose project: spezi-poc). See db/README.md for the bring-up order.
 stack-env:      ## generate gitignored local credentials (never overwrites)
 	@./db/make-env.sh
-tls:            ## create the local CA, server certificate and HAPI keystore (idempotent)
-	@./hapi/tls/make-tls.sh
+	@./idp/make-env.sh
+tls: stack-env  ## create the local CA and the HAPI, proxy and Keycloak certificates (idempotent)
+	@./scripts/make-tls.sh
 stack-up:       ## first run: init profile once, then marker; later runs: plain up -d
 	@./scripts/bootstrap.sh
-stack-down:     ## stop the POC stack (keeps the data volume)
+stack-down:     ## stop the POC stack including the IdP (keeps the data volumes)
 	@./scripts/compose.sh --profile initialize down
 stack-ps:
 	@./scripts/compose.sh ps

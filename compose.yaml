@@ -3,7 +3,7 @@
 # which labels each container and prefixes the network, volume and built image with "spezi-poc".
 # container_name is set explicitly with the same prefix; container names are unique across the whole
 # Docker host, so keep the "spezi-poc-" prefix to avoid colliding with other stacks.
-# HAPI serves HTTPS only (hapi/tls/make-tls.sh makes the certs).
+# HAPI serves HTTPS only (scripts/make-tls.sh makes the certs).
 # Published ports are bound to loopback only. Never publish a plain-HTTP or unauthenticated
 # service on all interfaces (see root CLAUDE.md, Isolation).
 #
@@ -88,9 +88,71 @@ services:
       retries: 10
       start_period: 120s
 
+  # --- IdP (M3a). Part of the normal stack. Keycloak is NEVER published; only the proxy is (TLS, public
+  # OIDC paths only). The first `make stack-up` pulls the pinned Keycloak image (about 264 MB compressed).
+  keycloak:
+    container_name: spezi-poc-keycloak
+    # Pinned by tag AND digest (multi-arch index digest of 26.8.0).
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
+    command:
+      - start                      # production mode: HTTPS only, hostname required
+      - --hostname=https://macpro16.local:8444
+      - --proxy-headers=xforwarded
+      - --http-enabled=false
+      - --https-key-store-file=/opt/keycloak/tls/keycloak.p12
+      - --https-key-store-type=PKCS12
+      - --health-enabled=true
+      # Management port (health) stays inside the container: plain HTTP, container loopback, unpublished.
+      # [UNVERIFIED] --http-management-host accepting 127.0.0.1; tested when the image is first run.
+      - --http-management-port=9000
+      - --http-management-scheme=http
+      - --http-management-host=127.0.0.1
+    environment:
+      KC_DB: dev-file              # H2 on a volume: accepted POC gap, replaced by Oracle in M3c
+    env_file:
+      - ./idp/.env.local           # bootstrap admin + KC_HTTPS_KEY_STORE_PASSWORD (gitignored)
+    mem_limit: 1536m
+    extra_hosts:
+      # Keycloak (and kcadm inside it) reaches its own public name without leaving the container, so the
+      # certificate name (macpro16.local) verifies and nothing has to be switched off.
+      - "macpro16.local:127.0.0.1"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/keycloak.p12:/opt/keycloak/tls/keycloak.p12:ro
+    healthcheck:
+      # [UNVERIFIED] The image likely has no curl; probe the management port with bash only.
+      test:
+        - CMD-SHELL
+        - 'exec 3<>/dev/tcp/127.0.0.1/9000 && printf "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && while read -r l <&3; do case "$$l" in *\"UP\"*) exit 0;; esac; done; exit 1'
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+
+  idp-edge:
+    container_name: spezi-poc-idp-edge
+    image: nginx@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752   # nginx 1.31.3 (alpine, arm64), already local
+    ports:
+      # The one network-reachable IdP endpoint: TLS only, public OIDC paths only (idp/nginx/nginx.conf).
+      - '8444:8444'
+    volumes:
+      - ./idp/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/edge.crt:/etc/nginx/tls/edge.crt:ro
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/edge.key:/etc/nginx/tls/edge.key:ro
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/ca.crt:/etc/nginx/tls/ca.crt:ro
+    depends_on:
+      keycloak:
+        condition: service_started   # the proxy tolerates Keycloak being down (502); /ping works regardless
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 8444 || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
 configs:
   hapi_config:
     file: ./hapi/application.yaml
 
 volumes:
   oracle_data:
+  keycloak_data:

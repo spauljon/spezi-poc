@@ -6,6 +6,10 @@
 #   ~/.poc-ca/ca.key, ca.crt          the CA (key mode 600, NEVER mounted into a container)
 #   ~/.poc-ca/server.key, server.crt  the server leaf key and certificate
 #   ~/.poc-ca/hapi/server.p12         keystore mounted read-only into the HAPI container
+#   ~/.poc-ca/idp/edge.{key,crt}      the IdP proxy's key and certificate (PEM, for nginx)
+#   ~/.poc-ca/idp/keycloak.{key,crt,p12}  Keycloak's own key and certificate; the p12 is mounted into Keycloak
+#
+# Every service gets its OWN key (none is shared); all are signed by the one name-constrained CA.
 #
 # The keystore password is generated and written to hapi/.env.local (gitignored) as
 # TLS_KEYSTORE_PASSWORD. Override the location with POC_TLS_DIR, the host name with POC_TLS_HOST.
@@ -17,17 +21,19 @@
 # UNTESTED until the first run.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TLS_DIR="${POC_TLS_DIR:-$HOME/.poc-ca}"
 HOST="${POC_TLS_HOST:-macpro16.local}"
 ENV_FILE="${POC_ENV_FILE:-$ROOT/hapi/.env.local}"   # override only for tests
+IDP_ENV_FILE="${POC_IDP_ENV_FILE:-$ROOT/idp/.env.local}"
 
 [ -f "$ENV_FILE" ] || { echo "hapi/.env.local is missing; run 'make stack-env' first" >&2; exit 1; }
+[ -f "$IDP_ENV_FILE" ] || { echo "idp/.env.local is missing; run 'make stack-env' first" >&2; exit 1; }
 
 umask 077
-mkdir -p "$TLS_DIR/hapi"
+mkdir -p "$TLS_DIR/hapi" "$TLS_DIR/idp"
 chmod 700 "$TLS_DIR"
-chmod 755 "$TLS_DIR/hapi"   # the keystore directory must be traversable by the container runtime
+chmod 755 "$TLS_DIR/hapi" "$TLS_DIR/idp"   # keystore directories must be traversable by the container runtime
 cd "$TLS_DIR"
 
 # --- 0. retire a CA that is not name-constrained -----------------------------------------------
@@ -103,8 +109,45 @@ else
   echo "Server certificate is current ($(openssl x509 -in server.crt -noout -enddate))."
 fi
 
+# --- 3b. the IdP leaves: the proxy (PEM) and Keycloak (PKCS12), each with its OWN key -----------------
+set_env() { # set_env <file> <KEY> <value>: replace or add KEY=value without printing the value
+  local tmp; tmp="$(mktemp)"
+  { grep -v "^$2=" "$1" || true; echo "$2=$3"; } > "$tmp"; cat "$tmp" > "$1"; rm -f "$tmp"
+}
+leaf_current() { # leaf_current <name>: key, cert present and not expiring within 30 days
+  [ -f "idp/$1.key" ] && [ -f "idp/$1.crt" ] && openssl x509 -in "idp/$1.crt" -noout -checkend $((30*86400)) > /dev/null
+}
+issue_idp_leaf() { # issue_idp_leaf <name>
+  local name=$1
+  printf '[v3_leaf]\nbasicConstraints = critical,CA:FALSE\nkeyUsage = critical,digitalSignature\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:%s\nsubjectKeyIdentifier = hash\nauthorityKeyIdentifier = keyid\n' "$HOST" > "idp/$name.cnf"
+  openssl ecparam -name prime256v1 -genkey -noout -out "idp/$name.key"
+  openssl req -new -key "idp/$name.key" -subj "/CN=${HOST}" -out "idp/$name.csr"
+  openssl x509 -req -in "idp/$name.csr" -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -days 365 -sha256 -extfile "idp/$name.cnf" -extensions v3_leaf -out "idp/$name.crt" > /dev/null 2>&1
+  rm -f "idp/$name.cnf" "idp/$name.csr" ca.srl
+  chmod 600 "idp/$name.key"; chmod 644 "idp/$name.crt"
+}
+if leaf_current edge; then
+  echo "IdP proxy certificate is current ($(openssl x509 -in idp/edge.crt -noout -enddate))."
+else
+  echo "Creating the IdP proxy (edge) certificate for ${HOST} ..."; issue_idp_leaf edge
+fi
+if leaf_current keycloak && [ -f idp/keycloak.p12 ]; then
+  echo "Keycloak certificate is current ($(openssl x509 -in idp/keycloak.crt -noout -enddate))."
+else
+  echo "Creating the Keycloak certificate for ${HOST} ..."; issue_idp_leaf keycloak
+  kpw="P$(openssl rand -hex 12)"
+  openssl pkcs12 -export -inkey idp/keycloak.key -in idp/keycloak.crt -certfile ca.crt \
+    -name keycloak -passout "pass:${kpw}" -out idp/keycloak.p12
+  chmod 644 idp/keycloak.p12   # password-protected; the password lives only in idp/.env.local
+  set_env "$IDP_ENV_FILE" KC_HTTPS_KEY_STORE_PASSWORD "$kpw"
+  echo "Wrote idp/keycloak.p12 and KC_HTTPS_KEY_STORE_PASSWORD (value not shown) to idp/.env.local"
+fi
+
 # --- 4. self-test: the chain is valid AND the name constraint is actually enforced ---------------
-openssl verify -CAfile ca.crt server.crt > /dev/null || { echo "self-test FAILED: server.crt does not verify against ca.crt" >&2; exit 1; }
+for c in server.crt idp/edge.crt idp/keycloak.crt; do
+  openssl verify -CAfile ca.crt "$c" > /dev/null || { echo "self-test FAILED: $c does not verify against ca.crt" >&2; exit 1; }
+done
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT
 printf '[v3]\nbasicConstraints = critical,CA:FALSE\nkeyUsage = critical,digitalSignature\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:evil.example\n' > "$t/e.cnf"
 openssl ecparam -name prime256v1 -genkey -noout -out "$t/e.key"

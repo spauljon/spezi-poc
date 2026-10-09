@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# reset.sh -- clears the POC project's containers and (after confirmation) its Oracle volume.
+# reset.sh -- clears the POC project's containers and (after separate confirmations) its Oracle and Keycloak volumes.
 # Adapted from the governance project's bin/reset.sh. Touches ONLY compose project spezi-poc.
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -23,7 +23,21 @@ if [[ ${confirm_lc} == "y" ]]; then
   set -e
   rm -vf "${run_dir}/db/.initialized"
 else
-  echo "Volume kept; the .initialized marker is unchanged."
+  echo "Oracle volume kept; the .initialized marker is unchanged."
+fi
+
+read -rp "This will erase Keycloak's data (the H2 file volume). Continue? [y/N]: " confirm_kc
+confirm_kc_lc=$(echo "$confirm_kc" | tr '[:upper:]' '[:lower:]')
+if [[ ${confirm_kc_lc} == "y" ]]; then
+  set +e
+  if docker volume rm spezi-poc_keycloak_data 2>/dev/null; then
+    echo "✅ Docker volume spezi-poc_keycloak_data removed."
+  else
+    echo "✅ Docker volume is not present."
+  fi
+  set -e
+else
+  echo "Keycloak volume kept."
 fi
 
 echo "✅ Done."
