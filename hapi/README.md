@@ -26,6 +26,12 @@ curl --cacert ~/.poc-ca/ca.crt --resolve macpro16.local:8443:127.0.0.1 https://m
 
 The server certificate is valid 365 days; `make tls` regenerates it when under 30 days remain (then restart HAPI).
 
+### The CA is name-constrained
+
+`ca.crt` carries a **critical Name Constraints** extension: it may vouch only for `macpro16.local` (and its subdomains) and for no IP address. So even if `ca.key` leaked, a certificate it signed for any other name (a bank, a mail server) would fail validation on a device that trusts this CA. `make tls` ends with a self-test that issues a throwaway `evil.example` certificate and requires it to be rejected with *permitted subtree violation*, and `make stack-verify` checks the extension is present.
+
+Constraints are part of the CA certificate and cannot be amended. `make tls` therefore **retires** a CA that lacks them (moves it, with its leaf and keystore, to `~/.poc-ca/retired-<timestamp>/`, never deleting it) and creates a constrained one; any device that trusted the retired CA must be re-pointed at the new `ca.crt`. Do this before installing the CA on a phone or browser.
+
 ### Design note: why HAPI terminates TLS itself
 
 Common enterprise alternatives are edge termination (an ingress or reverse proxy terminates TLS and the service speaks cleartext on an internal network) and mesh mTLS (a sidecar terminates and encrypts every hop). For this POC HAPI terminates TLS itself: fewest moving parts, one process to reason about, and no cleartext FHIR listener anywhere. A reverse proxy was considered and deliberately not adopted (decision 2026-10-09); the certificates here would carry over to one if that changes. Whatever the TLS placement, token verification and authorization stay inside HAPI (M4): "trusted because it is inside the network" is not an assumption this design relies on.

@@ -73,6 +73,9 @@ curlt() { curl -s --cacert "$tls_dir/ca.crt" --resolve "$host:8443:127.0.0.1" "$
 echo "== TLS"
 code=$(curlt -o /dev/null -w '%{http_code}' "$base/metadata")
 [ "$code" = "200" ] && ok "GET /fhir/metadata over HTTPS with the POC CA (HTTP $code)" || bad "GET /fhir/metadata over HTTPS returned '$code'"
+cax=$(openssl x509 -in "$tls_dir/ca.crt" -noout -text)
+echo "$cax" | grep -q "X509v3 Name Constraints: critical" && ok "the POC CA carries a critical Name Constraints extension" || bad "the POC CA is NOT name-constrained (rerun make tls)"
+echo "$cax" | grep -A3 "Name Constraints" | grep -q "DNS:$host" && ok "the CA permits only DNS:$host" || bad "the CA's permitted name is not $host"
 if curl -s -o /dev/null --resolve "$host:8443:127.0.0.1" "$base/metadata"; then bad "HTTPS succeeds WITHOUT the POC CA (system store trusts it?)"; else ok "HTTPS fails without the POC CA (not in the system trust store)"; fi
 if curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8443:127.0.0.1" "https://other.local:8443/fhir/metadata"; then bad "a different host name was accepted (hostname verification is off?)"; else ok "a different host name is rejected (SAN is enforced)"; fi
 sclient() { echo | openssl s_client -connect 127.0.0.1:8443 -servername "$host" -CAfile "$tls_dir/ca.crt" "$@" 2>&1; }

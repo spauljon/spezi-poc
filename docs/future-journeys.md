@@ -42,7 +42,7 @@ Cleartext HAPI behind an edge proxy; `compose.yaml` would sit alongside (or be r
 1. Which local cluster tool, and whether to use Docker Desktop's built-in Kubernetes.
 2. Istio ambient vs. Linkerd vs. another mesh (and whether sidecar or sidecar-less).
 3. Oracle in or out of the cluster.
-4. Certificate authority: mesh-internal CA vs. cert-manager with our CA as upstream; add a critical name constraint to our CA.
+4. Certificate authority: mesh-internal CA vs. cert-manager with our CA as upstream. (The POC CA already carries a critical name constraint limiting it to `macpro16.local`; a mesh trust domain would need its own, wider constraint set.)
 5. How the iPhone reaches the cluster (a port published on the Mac, a load-balancer shim, etc.), keeping `macpro16.local` and the existing certificate story.
 6. How to prove it: show ciphertext between pods (packet capture) while the app container sees plain HTTP on localhost; show a denied call from a workload without an allowed identity.
 7. Memory budget (Docker Desktop VM size) and installs (each tool is an external install and needs explicit approval).

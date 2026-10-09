@@ -143,6 +143,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Milestone 2 (local CA and TLS approach).
 
+**Prerequisite already done (2026-10-09):** the POC CA is name-constrained (critical, `macpro16.local` only; retired the unconstrained M2 CA), so the first device trust (the iPhone check below) is against the final CA. Commit: `hapi: constrain the local CA to macpro16.local`.
+
 **Tasks:**
 1. Create the `idp/` skeleton (README, `CLAUDE.md`, `.gitignore` for generated secrets and data), add a `test-idp` target to the Makefile and the `idp:` prefix to root `CLAUDE.md` (M0 predates this directory).
 2. Confirm with you before pulling the Keycloak image (needs Docker). Pin a version after checking current Keycloak docs: image name, tags and startup flags are unverified.
