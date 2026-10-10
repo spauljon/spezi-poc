@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -24,8 +24,10 @@ test-hapi:
 	@out=$$(docker build --progress=plain --no-cache-filter build-ext --target build-ext -t spezi-poc-hapi-ext-test hapi 2>&1) \
 	  || { echo "$$out" | tail -40; echo "hapi: extension build or unit tests FAILED"; exit 1; }; \
 	  echo "hapi: extension unit tests: $$(echo "$$out" | grep 'Tests run:' | tail -1 | sed 's/.*Tests run:/Tests run:/')"
-test-ios:
-	@echo "ios: no tests yet (added in M5/M6)"
+test-ios:  ## iOS unit tests on a simulator (macOS + Xcode); `make test-ios-ui` adds the UI tests
+	@./scripts/ios-test.sh
+test-ios-ui:
+	@./scripts/ios-test.sh --ui
 test-analytics:
 	@echo "analytics: no tests yet (added in M9)"
 test-web:

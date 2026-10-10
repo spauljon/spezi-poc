@@ -1,0 +1,2 @@
+// Copy to Local.xcconfig (git-ignored) to override the defaults for your setup, for example another host name.
+// POC_HOST = macpro16.local

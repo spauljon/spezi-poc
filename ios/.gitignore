@@ -8,3 +8,6 @@ xcuserdata/
 Pods/
 *.ipa
 *.dSYM.zip
+
+# Per-developer build configuration
+Config/Local.xcconfig

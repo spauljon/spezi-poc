@@ -237,18 +237,45 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Milestone 4 (for endpoint and auth config).
 
+**Status (2026-10-10):** tasks 1 to 5 and 7 are built, verified and **committed as `m05`**; task 6 (sign in) moved to Milestone 5b below. Template copied from `d52014a` without its `.git` (you approved the download); trimmed from 20 Swift packages to 5; bundle id `com.blueysoft.spezipoc` (matches the realm's redirect URI). Orientation and source-selection screens, a Home that shows the synthetic source, the endpoint and the sign-in URL from configuration, and "Not signed in". 8 unit tests and 1 UI test pass (`make test-ios-ui`). Findings: the template's onboarding presentation rendered **blank** on Xcode 27 / iOS 27 (SpeziViews `ManagedNavigationStack`: "Accessing State<Path>'s value without being installed on a View"), so the flow is a plain state switch; the template's `setup.sh` installs system-wide tooling and was not run. Details: [ios/README.md](../ios/README.md).
+
 **Tasks:**
 1. Run `spezi-platform-selection` for the Apple-native path, but copy the Spezi Template Application into `ios/` without its `.git` and record the upstream commit in `ios/README.md`. Do not let the skill move `docs/` (they stay at the repo root).
 2. Strip template features not in scope (account, scheduler, notifications, etc.); keep what's needed.
 3. Orientation screen: what data, where it goes, synthetic vs real.
 4. Source selection state (synthetic only enabled).
 5. Config for endpoint and credentials; none committed.
-6. Sign in with Keycloak (authorization code + PKCE) as the synthetic capture user; store tokens in the Keychain; show signed-in state. The OIDC client library (for example AppAuth) is a package beyond the template, so I'll propose it and confirm with you first.
+6. *Moved to Milestone 5b (sign in with Keycloak).*
 7. Fill in `ios/CLAUDE.md` with stack-specific rules (Swift version, Spezi module versions, test commands).
 
 **Platform notes:** `SpeziOnboarding` for the orientation screen. Verify the template's current structure before trimming.
 
 **Verify:** builds and runs on the simulator; no account or consent screens; endpoint config read from outside source control.
+
+---
+
+### Milestone 5b: Sign in with Keycloak [ios/]
+
+**Goal:** The app signs in as the synthetic capture user through Keycloak (authorization code + PKCE in the system browser session), keeps the tokens in the Keychain, and shows the signed-in state; HAPI accepts the token.
+
+**Depends on:** Milestone 5 (scaffold), Milestone 3b (realm and `ios-capture` client), Milestone 4 (HAPI verification).
+
+**Why separate:** the OIDC library is the one package beyond the template, and sign-in is security-sensitive, so it gets its own review (same reasoning as M3a/3b/3c).
+
+**Decision (2026-10-10):** **AppAuth-iOS 3.0.0** (`github.com/openid/AppAuth-iOS`, Apache-2.0, no dependencies; released 2026-08-24, pushed 2026-10-07, not archived) is approved. Confirm the exact version resolves and the license before adding.
+
+**Tasks:**
+1. Add AppAuth as a Swift package dependency (project-file edit, validated as in M5); record version and license in `ios/README.md`.
+2. Discovery from `POC_ISSUER_URL`; authorization code + PKCE (S256) in `ASWebAuthenticationSession`, redirect `com.blueysoft.spezipoc:/oauth2redirect`; `state` and `nonce` checked.
+3. Token storage in the Keychain via `SpeziKeychainStorage` (access token, refresh token, expiry); never in `UserDefaults`, logs or the UI.
+4. Refresh before expiry; sign-out clears the Keychain.
+5. Home shows signed-in state (user name, roles claim, expiry) without showing the token.
+6. A call to HAPI `GET /fhir/metadata` and an authenticated `GET /fhir/Patient` (200 for the capture role) to prove the token works end to end.
+7. Tests: token-handling logic (expiry, refresh decision, storage) as unit tests with synthetic tokens; one UI test of the sign-in screen up to the browser handoff.
+
+**Verify:** sign in as the capture user on the simulator against the running stack; signed-in state shown; HAPI returns 200 with the token and 401 without it; sign out clears state; the token never appears in logs or screenshots; the iPhone simulator trusts the POC CA (the CA must be installed in the simulator, documented).
+
+**Open point to settle first:** the simulator must trust the POC CA (`~/.poc-ca/ca.crt`) for TLS to `macpro16.local`; installing a CA into a simulator's trust store is a system-trust change, so it needs your approval and a documented, reversible procedure.
 
 ---
 
