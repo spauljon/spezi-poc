@@ -16,18 +16,46 @@ Keycloak has no built-in way to restrict its admin console, so the proxy is the 
 | File | Role |
 |---|---|
 | `nginx/nginx.conf` | the allowlist proxy |
-| `make-env.sh` | generates the gitignored `.env.local` (bootstrap admin) |
+| `keycloak/Dockerfile` | Keycloak 26.8.0 (digest-pinned) plus the Oracle JDBC driver, `kc.sh build` (M3c); the two jars are checksum-verified at build time |
+| `db-migrate.sh` | loads Keycloak's schema into `KEYCLOAKPDB` as its schema owner; idempotent; run by the bootstrap before Keycloak starts (M3c) |
+| `make-env.sh` | generates the gitignored `.env.local` (bootstrap admin, realm secrets, Keycloak's database account) |
 | `verify-allowlist.sh` | tests the proxy: blocked paths denied by the edge (marked `X-Edge-Denied`), allowed paths pass, encoding tricks blocked; fails if the proxy is not up |
 | `realm/poc-realm.json` | the `poc` realm as code: 3 roles, 4 clients, 3 users; secrets are `${ENV}` placeholders |
 | `oidc.py` | `token worker\|capture\|clinician` prints a decoded token (claims only; `--raw` for the token); `check` runs the realm's security checks |
 | `test-config.sh` | `nginx -t` with the pinned image (never pulls; SKIPs loudly if it cannot run) |
-| `.env.local` | gitignored: bootstrap admin password, `KC_HTTPS_KEY_STORE_PASSWORD` (added by `scripts/make-tls.sh`) |
+| `.env.local` | gitignored: bootstrap admin password, `KC_DB_USERNAME`/`KC_DB_PASSWORD`, realm secrets, `KC_HTTPS_KEY_STORE_PASSWORD` (added by `scripts/make-tls.sh`) |
 
 Certificates (own key for each service, all from the name-constrained CA) are made by `scripts/make-tls.sh` into `~/.poc-ca/idp/`, outside the repo.
 
 ## Running it
 
-The IdP services are part of the normal stack: `make stack-up` starts them (the first run pulls the pinned Keycloak image, about 264 MB compressed, 750 MB on disk) and `make stack-verify` checks them. The image is pinned by tag and digest in `compose.yaml`.
+The IdP services are part of the normal stack: `make stack-up` starts them (the first run pulls the pinned Keycloak base image, about 264 MB compressed, 750 MB on disk, and builds the Oracle-enabled image on top) and `make stack-verify` checks them. The image is pinned by tag and digest in `compose.yaml`.
+
+## Database (M3c): KEYCLOAKPDB on the POC Oracle
+
+Keycloak keeps its data in its own pluggable database, with the same owner/app split as HAPI:
+
+| Account | Can log in | Rights | Holds |
+|---|---|---|---|
+| `keycloak_owner` | no (`NO AUTHENTICATION`) | none | all 101 tables, 295 indexes |
+| `keycloak` (what Keycloak connects as) | yes | `CREATE SESSION`; `SELECT/INSERT/UPDATE/DELETE` on the owner's tables; synonyms | nothing |
+
+Keycloak runs with `--db-schema=KEYCLOAK_OWNER` (**upper case: see below**), `--db-pool-max-size=10`, and the manual migration strategy with `initialize-empty=false`, so it can never alter the schema. The image is built once (`idp/keycloak/Dockerfile`): the Oracle driver (`ojdbc17` and `orai18n` 23.26.2.0.0, the versions Keycloak's DB guide names, Oracle Free Use Terms) is fetched from Maven Central and verified against the SHA-256 checksums Maven Central publishes; `ADD --checksum` fails the build on any mismatch.
+
+### How the schema gets there, and what was found by doing it
+
+`idp/db-migrate.sh` (run by the bootstrap between Oracle and Keycloak; idempotent):
+
+1. **A throwaway account is needed, because "manual" is not DDL-free.** In manual mode Keycloak writes the schema SQL instead of applying it, but Liquibase still creates its `DATABASECHANGELOG` table in the connecting user's schema, so a no-DDL user fails with ORA-01031 before anything is exported. The script therefore creates a random-password `KC_GEN` account for the export and drops it at once (an exit trap drops it even on failure). The runtime user never has DDL rights and the owner never has a login.
+2. **One prefix rewrite.** Every name in the export is qualified with the generating account (`KC_GEN.`), so `current_schema` alone cannot redirect it; the script rewrites that one prefix to `KEYCLOAK_OWNER.` after checking it occurs in no other form.
+3. **Applied as SYS into the owner; four statements fail, by design, and are tolerated by an exact allowlist** (`CREATE INDEX` only; ORA-00955 or ORA-01408). The export omits Liquibase preconditions, which a live run uses to skip duplicate index creation. Anything else fails the migration. Mutation-tested: not tolerating ORA-01408 makes the script refuse.
+4. **The lock table is missing from the export** (only a live run creates it), so the script creates it from the throwaway account's definition. Without it Keycloak fails to start with ORA-01031 on `CREATE TABLE DATABASECHANGELOGLOCK`.
+5. **One index is missing from the export:** `IDX_ORG_DOMAIN_REALM` (Organizations feature; performance only), found because Keycloak's own startup index checker reports it. The script creates it.
+6. **`IDX_OFFLINE_CSS_BY_CLIENT` is a known duplicate** of `IDX_OFFLINE_CSS_PRELOAD` (same columns; Oracle refuses a second index, ORA-01408), so Keycloak's checker keeps warning about it by name. `make stack-verify` expects exactly that one warning.
+
+**`--db-schema` must be upper case.** With `keycloak_owner` in lower case Keycloak worked but its index checker reported ~125 existing indexes as missing: Oracle's JDBC metadata calls are case-sensitive, while Liquibase and Hibernate quote names. Upper case brought it to the one known duplicate.
+
+**Unverified / accepted:** the Oracle privileges Keycloak needs are not documented; these were found by trial and are exactly `CREATE SESSION` plus DML (no sequences are used, so none are granted). A Keycloak upgrade may add tables or indexes: rerun `idp/db-migrate.sh --reset-schema` to regenerate (the realm is code, so nothing is lost), then check that `make stack-verify` still passes. The HAPI→Oracle and Keycloak→Oracle hops are cleartext on the private Compose network (accepted POC gap, as for HAPI).
 
 ## Admin tasks (nothing is published, so no browser console)
 
@@ -55,7 +83,7 @@ A phone may reach the Mac over IPv6 link-local (`fe80::`) and never use IPv4; th
 
 ## The `poc` realm
 
-Imported from `realm/poc-realm.json` at the first start with an empty Keycloak volume (`--import-realm`; an existing realm is skipped, so change the file and recreate the volume: `make stack-reset`, or remove only `spezi-poc_keycloak_data`).
+Imported from `realm/poc-realm.json` at the first start on an empty database (`--import-realm`; an existing realm is skipped, so a changed file has no effect until the realm is recreated: `idp/db-migrate.sh --reset-schema` drops Keycloak's tables and reloads them empty, then restart Keycloak; `make stack-reset` erases all of Oracle).
 
 | Client | Kind | Used by | Grant |
 |---|---|---|---|

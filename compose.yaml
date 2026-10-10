@@ -95,33 +95,43 @@ services:
   # OIDC paths only). The first `make stack-up` pulls the pinned Keycloak image (about 264 MB compressed).
   keycloak:
     container_name: spezi-poc-keycloak
-    # Pinned by tag AND digest (multi-arch index digest of 26.8.0).
-    image: quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
+    # 26.8.0 (pinned by digest in idp/keycloak/Dockerfile) plus the Oracle JDBC driver, built with `kc.sh build` (M3c).
+    build:
+      context: ./idp/keycloak
+    image: spezi-poc-keycloak:26.8.0-oracle
     command:
-      - start                      # production mode: HTTPS only, hostname required
+      - start
+      - --optimized                # build-time options (db=oracle, health) are baked into the image
       - --hostname=https://macpro16.local:8444
       - --proxy-headers=xforwarded
       - --http-enabled=false
       - --https-key-store-file=/opt/keycloak/tls/keycloak.p12
       - --https-key-store-type=PKCS12
-      - --health-enabled=true
       - --import-realm             # imports idp/realm/poc-realm.json at first start; skipped once the realm exists
       # Management port (health) stays inside the container: plain HTTP, container loopback, unpublished.
       # [UNVERIFIED] --http-management-host accepting 127.0.0.1; tested when the image is first run.
       - --http-management-port=9000
       - --http-management-scheme=http
       - --http-management-host=127.0.0.1
-    environment:
-      KC_DB: dev-file              # H2 on a volume: accepted POC gap, replaced by Oracle in M3c
+      # Database (M3c): KEYCLOAKPDB on the POC Oracle. Connects as the application user `keycloak` (CREATE SESSION +
+      # DML only); the objects belong to keycloak_owner and are reached with --db-schema. The schema is loaded by
+      # idp/db-migrate.sh, so Keycloak must never try to change it: manual strategy, no auto-initialize.
+      - --db-url=jdbc:oracle:thin:@//oracle:1521/KEYCLOAKPDB
+      - --db-schema=KEYCLOAK_OWNER
+      - --db-pool-max-size=10      # default is 100; the instance allows 200 processes and HAPI holds 10
+      - --spi-connections-jpa--quarkus--migration-strategy=manual
+      - --spi-connections-jpa--quarkus--initialize-empty=false
     env_file:
-      - ./idp/.env.local           # bootstrap admin + KC_HTTPS_KEY_STORE_PASSWORD (gitignored)
+      - ./idp/.env.local           # bootstrap admin, KC_DB_USERNAME/KC_DB_PASSWORD, key store password (gitignored)
+    depends_on:
+      oracle:
+        condition: service_healthy
     mem_limit: 1536m
     extra_hosts:
       # Keycloak (and kcadm inside it) reaches its own public name without leaving the container, so the
       # certificate name (macpro16.local) verifies and nothing has to be switched off.
       - "macpro16.local:127.0.0.1"
     volumes:
-      - keycloak_data:/opt/keycloak/data
       - ./idp/realm:/opt/keycloak/data/import:ro   # the realm as code; ${ENV} placeholders come from idp/.env.local
       - ${POC_TLS_DIR:-${HOME}/.poc-ca}/idp/keycloak.p12:/opt/keycloak/tls/keycloak.p12:ro
     healthcheck:
@@ -164,4 +174,3 @@ configs:
 
 volumes:
   oracle_data:
-  keycloak_data:

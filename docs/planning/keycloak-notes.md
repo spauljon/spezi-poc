@@ -45,3 +45,18 @@ Per the [reverse proxy guide](https://www.keycloak.org/server/reverseproxy): exp
 ## Unverified (test or export before relying on it)
 
 - Brute-force protection defaults on the `master` realm.
+
+## Verified by running it on Oracle (2026-10-10, Keycloak 26.8.0, Oracle Free 23.26, `ojdbc17`/`orai18n` 23.26.2.0.0)
+
+- **The driver works** from `/opt/keycloak/providers` after `kc.sh build --db=oracle`; the build is ~6 s on top of the base image.
+- **`--spi-connections-jpa--quarkus--migration-strategy=manual` still needs CREATE TABLE.** Liquibase creates `DATABASECHANGELOG` for real even when only exporting SQL (ORA-01031 as a no-DDL user). A throwaway account does the export.
+- **With `initialize-empty=false` and an empty schema, Keycloak writes the SQL and stops** with "Database not initialized, please initialize database with <file>" (exit before serving).
+- **The export (2,937 lines) is plain DDL/DML** (123 CREATE TABLE, 151 CREATE INDEX, 699 ALTER TABLE, 237 changelog INSERTs); no GRANT/USER/PLSQL. Every name is qualified with the generating account.
+- **Four statements fail when replayed** (3x ORA-00955, 1x ORA-01408), all `CREATE INDEX`; the export has no Liquibase preconditions.
+- **The export omits the lock table** (`DATABASECHANGELOGLOCK`) and, at 26.8.0, one index (`IDX_ORG_DOMAIN_REALM`).
+- **Runtime needs only CREATE SESSION + DML on the owner's tables**; `--db-schema=KEYCLOAK_OWNER` resolves names, so the synonyms are not needed by Keycloak (they are created anyway by the shared grant script and cost nothing).
+- **`--db-schema` is case-sensitive for the index checker**: lower case produced ~125 false "missing index" warnings; upper case, 1 (a true duplicate-column index).
+- **A quarkus `new-connection-sql` env var (`ALTER SESSION SET CURRENT_SCHEMA`) did not change the checker** (tried, reverted).
+- **`start --optimized` works with our flags** (`--import-realm`, hostname, proxy, management port, https keystore are runtime options).
+- **Data persists across a container recreate** (the capture user's id is unchanged; the realm is not re-imported).
+- **Full destroy and recreate** (reset Oracle, then `make stack-up`): 39 s, no manual steps.

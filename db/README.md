@@ -1,11 +1,12 @@
 # POC Oracle (db/)
 
-The POC's own Oracle Database Free container (`container-registry.oracle.com/database/free:23.26.0.0-arm64`), independent of the governance project's Oracle. One container database with two pluggable databases:
+The POC's own Oracle Database Free container (`container-registry.oracle.com/database/free:23.26.0.0-arm64`), independent of the governance project's Oracle. One container database with three pluggable databases:
 
 | PDB            | Schema owner (no login) | Application user | Purpose                                              |
 |----------------|-------------------------|------------------|------------------------------------------------------|
 | `FHIRPDB`      | `hapi_owner`            | `hapi`           | HAPI FHIR's JPA schema (system of record)            |
 | `ANALYTICSPDB` | `analytics_owner`       | `analytics`      | Aggregation worker's rollups (M9 creates its tables) |
+| `KEYCLOAKPDB` | `keycloak_owner`        | `keycloak`       | Keycloak's data (M3c); the schema is loaded by `idp/db-migrate.sh`, not by `db/init.sh` |
 
 ## Owner vs. application user
 

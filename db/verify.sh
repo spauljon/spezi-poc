@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M1-M3b verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
+# M1-M4 and M3c verification for a RUNNING stack (compose project spezi-poc, see compose.yaml).
 # Run after: make stack-up. Synthetic data only.
 # Addresses services through `docker compose` (project namespace), never by container name.
 # Exits non-zero if any check fails. UNTESTED until you run it.
@@ -32,7 +32,7 @@ for svc in oracle hapi; do
 done
 
 echo "== PDBs"
-for p in FHIRPDB ANALYTICSPDB; do
+for p in FHIRPDB ANALYTICSPDB KEYCLOAKPDB; do
   mode=$(scalar FREE "select open_mode from v\$pdbs where name = '$p';")
   [ "$mode" = "READWRITE" ] && ok "$p is open (READ WRITE)" || bad "$p open_mode is '$mode'"
 done
@@ -66,8 +66,17 @@ a_auth=$(scalar ANALYTICSPDB "select authentication_type from dba_users where us
 [ "$a_auth" = "NONE" ] && ok "analytics owner cannot log in" || bad "analytics owner authentication_type is '$a_auth'"
 
 echo "== HAPI startup log"
-errs=$(dc logs --no-color --no-log-prefix hapi 2>&1 | grep -c -E 'ORA-|SQLSyntaxError| ERROR |CommandAcceptanceException')
-[ "$errs" = "0" ] && ok "no Oracle/DDL errors in the HAPI log" || bad "$errs Oracle/DDL error lines in the HAPI log (is Hibernate trying to alter the schema?)"
+hapilog=$(dc logs --no-color --no-log-prefix hapi 2>&1)
+# Positive control: the log must be readable and contain the server's startup line, or "no errors" proves nothing.
+if [[ "$hapilog" == *'Started Application'* ]]; then  # not `echo | grep -q`: under pipefail a SIGPIPE makes that false
+  ok "positive control: the HAPI log is readable and shows the server started"
+  # Error-LEVEL lines only ("ERROR 1 --- [thread]"): HAPI's access log also prints the word ERROR, at INFO, for every
+  # request that was refused or failed (the auth matrix provokes those on purpose), which is not a server error.
+  errs=$(echo "$hapilog" | grep -c -E 'ORA-[0-9]+|SQLSyntaxError|CommandAcceptanceException| ERROR [0-9]+ --- ')
+  [ "$errs" = "0" ] && ok "no Oracle/DDL or error-level lines in the HAPI log" || bad "$errs Oracle/DDL or error-level lines in the HAPI log (is Hibernate trying to alter the schema?)"
+else
+  bad "HAPI log has no startup line (container restarting, or logs unreadable): the error check cannot be trusted"
+fi
 
 # --- portable helpers (macOS and Linux): no BSD-only or GNU-only flags -------------------------------
 # tcp_state <host> <port> prints "open" or "closed" (refused, unreachable or timed out after 2s).
@@ -220,23 +229,32 @@ if [ -z "$ips" ]; then
 elif [ "$probe_ok" != true ]; then
   skip "LAN exposure checks (the port probe failed its positive control)"
 else
+  hapi_served=0
   for ip in $ips; do
     for port in 8192 1522; do
       [ "$(tcp_state "$ip" "$port")" = "closed" ] && ok "$ip refuses $port" || bad "$ip accepts connections on $port"
     done
-    # 8443 is open since M4. Positive control: metadata is served (so the probe reaches HAPI over this address),
-    # then the real assertion: with no token, data is refused with 401 and nothing outside /fhir is served.
-    mcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "$base/metadata")
-    if [ "$mcode" = "200" ]; then
-      ok "$ip:8443 serves /fhir/metadata over TLS (HTTP $mcode)"
-      pcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "$base/Patient")
-      [ "$pcode" = "401" ] && ok "$ip:8443 refuses /fhir/Patient without a token (HTTP 401)" || bad "$ip:8443 /fhir/Patient without a token returned HTTP $pcode, expected 401"
-      jcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "https://$host:8443/control/jobs?pageStart=0&batchSize=1")
-      [ "$jcode" = "404" ] && ok "$ip:8443 does not serve HAPI's /control/jobs (HTTP 404)" || bad "$ip:8443 /control/jobs returned HTTP $jcode, expected 404"
+    # 8443 is open since M4. Docker serves the LAN interface but not every interface (a VPN tunnel is not served), so,
+    # like 8444 below, require at least ONE address to serve it and assert on every address that does. Where it is
+    # served, the metadata request is the positive control; then the real assertions: no token -> 401, and nothing
+    # outside /fhir is served.
+    if [ "$(tcp_state "$ip" 8443)" = "open" ]; then
+      mcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "$base/metadata")
+      if [ "$mcode" = "200" ]; then
+        hapi_served=$((hapi_served+1))
+        ok "$ip:8443 serves /fhir/metadata over TLS (HTTP $mcode)"
+        pcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "$base/Patient")
+        [ "$pcode" = "401" ] && ok "$ip:8443 refuses /fhir/Patient without a token (HTTP 401)" || bad "$ip:8443 /fhir/Patient without a token returned HTTP $pcode, expected 401"
+        jcode=$(curl -s -o /dev/null -w '%{http_code}' --cacert "$tls_dir/ca.crt" --resolve "$host:8443:$ip" "https://$host:8443/control/jobs?pageStart=0&batchSize=1")
+        [ "$jcode" = "404" ] && ok "$ip:8443 does not serve HAPI's /control/jobs (HTTP 404)" || bad "$ip:8443 /control/jobs returned HTTP $jcode, expected 404"
+      else
+        bad "$ip:8443 accepts connections but did not serve /fhir/metadata (HTTP $mcode)"
+      fi
     else
-      bad "$ip:8443 did not serve /fhir/metadata (HTTP $mcode); the network probe cannot be trusted"
+      echo "info - $ip does not serve 8443 (not required: not the interface a phone would use)"
     fi
   done
+  [ "$hapi_served" -ge 1 ] && ok "8443 is reachable on $hapi_served non-loopback address(es)" || bad "8443 is not reachable on any non-loopback address (a phone could not reach HAPI)"
 fi
 
 echo "== IdP (M3a): Keycloak behind the allowlist proxy"
@@ -308,6 +326,62 @@ else
   # --- the poc realm (M3b): tokens, roles, PKCE and refusals, through the same public path a client uses
   if out=$(python3 idp/oidc.py check 2>&1); then ok "poc realm: $(echo "$out" | grep -c '^ok') checks (tokens, roles, audience, PKCE, refusals)"
   else bad "poc realm checks failed:"; echo "$out" | grep '^FAIL' | sed 's/^/        /'; fi
+fi
+
+echo "== Keycloak database (M3c): KEYCLOAKPDB, owner/app split"
+kc_owner=$(envv KEYCLOAK_DB_OWNER keycloak_owner)
+kc_app=$(envv KEYCLOAK_DB_USER keycloak)
+kc_tables=$(scalar KEYCLOAKPDB "select count(*) from dba_tables where owner = '$kc_owner';")
+[ "${kc_tables:-0}" -gt 0 ] 2>/dev/null && ok "$kc_owner owns $kc_tables tables in KEYCLOAKPDB" || bad "$kc_owner owns '$kc_tables' tables (schema not loaded: idp/db-migrate.sh)"
+rows=$(scalar KEYCLOAKPDB "select count(*) from ${kc_owner}.databasechangelog;")
+[ "${rows:-0}" -gt 0 ] 2>/dev/null && ok "Keycloak's changelog has $rows rows (schema fully loaded)" || bad "changelog has '$rows' rows"
+lock=$(scalar KEYCLOAKPDB "select count(*) from dba_tables where owner = '$kc_owner' and table_name = 'DATABASECHANGELOGLOCK';")
+[ "$lock" = "1" ] && ok "Liquibase lock table exists (created by the migration, not by the runtime user)" || bad "lock table missing"
+auth=$(scalar KEYCLOAKPDB "select authentication_type from dba_users where username = '$kc_owner';")
+[ "$auth" = "NONE" ] && ok "$kc_owner cannot log in (authentication NONE)" || bad "$kc_owner authentication_type is '$auth', expected NONE"
+oprivs=$(scalar KEYCLOAKPDB "select count(*) from dba_sys_privs where grantee = '$kc_owner';")
+[ "$oprivs" = "0" ] && ok "$kc_owner holds no system privileges (the throwaway generator rights were never granted to it)" || bad "$kc_owner has $oprivs system privileges"
+extra=$(scalar KEYCLOAKPDB "select count(*) from dba_sys_privs where grantee = '$kc_app' and privilege <> 'CREATE SESSION';")
+has=$(scalar KEYCLOAKPDB "select count(*) from dba_sys_privs where grantee = '$kc_app' and privilege = 'CREATE SESSION';")
+[ "$extra" = "0" ] && [ "$has" = "1" ] && ok "$kc_app has CREATE SESSION only" || bad "$kc_app system privileges: $has CREATE SESSION, $extra others"
+owned=$(scalar KEYCLOAKPDB "select count(*) from dba_objects where owner = '$kc_app' and object_type <> 'SYNONYM';")
+[ "$owned" = "0" ] && ok "$kc_app owns no objects other than synonyms" || bad "$kc_app owns $owned non-synonym objects"
+dml=$(scalar KEYCLOAKPDB "select count(distinct t.table_name) from dba_tab_privs t where t.grantee = '$kc_app' and t.owner = '$kc_owner' and t.privilege in ('INSERT','UPDATE','DELETE') group by t.owner having count(distinct t.privilege) = 3;")
+[ "$dml" = "$kc_tables" ] && ok "$kc_app has INSERT/UPDATE/DELETE on all $kc_tables tables, nothing broader" || bad "$kc_app has full DML on '$dml' of $kc_tables tables"
+ddlp=$(scalar KEYCLOAKPDB "select count(*) from dba_tab_privs where grantee = '$kc_app' and privilege not in ('SELECT','INSERT','UPDATE','DELETE');")
+[ "$ddlp" = "0" ] && ok "$kc_app holds no object privileges beyond SELECT and DML (no ALTER, INDEX, REFERENCES)" || bad "$kc_app holds $ddlp object privileges beyond SELECT/DML"
+gen=$(scalar KEYCLOAKPDB "select count(*) from dba_users where username = 'KC_GEN';")
+[ "$gen" = "0" ] && ok "no leftover migration generator account (KC_GEN)" || bad "KC_GEN still exists: the migration did not clean up"
+kc_pwd=$(grep '^KC_DB_PASSWORD=' idp/.env.local 2>/dev/null | cut -d= -f2-)
+if [ -z "$kc_pwd" ]; then skip "app-user DDL refusal (no KC_DB_PASSWORD in idp/.env.local)"
+else
+  # Positive control first: the probe must be able to connect and read through the app account, otherwise
+  # "CREATE TABLE refused" could just mean "could not log in".
+  probe() { printf 'connect %s/"%s"@localhost:1521/KEYCLOAKPDB\nset heading off feedback off pagesize 0\n%s\nexit\n' "$kc_app" "$kc_pwd" "$1" | dc exec -T oracle sqlplus -S /nolog 2>&1; }
+  pc=$(probe "select count(*) from ${kc_owner}.realm;" | tr -d '[:space:]')
+  if [ "${pc:-x}" -ge 1 ] 2>/dev/null; then
+    ok "positive control: $kc_app logs in and reads ${kc_owner}.realm ($pc realm rows)"
+    r=$(probe "create table kc_probe_should_fail (x number);")
+    echo "$r" | grep -q "ORA-01031" && ok "$kc_app cannot CREATE TABLE (ORA-01031: insufficient privileges)" || bad "$kc_app CREATE TABLE probe returned: $(echo "$r" | head -2 | tr '\n' ' ')"
+    r=$(probe "drop table ${kc_owner}.realm;")
+    echo "$r" | grep -qE "ORA-01031|ORA-00942" && ok "$kc_app cannot DROP the owner's tables" || bad "$kc_app DROP probe returned: $(echo "$r" | head -2 | tr '\n' ' ')"
+  else
+    bad "positive control failed: $kc_app could not read ${kc_owner}.realm (got '$pc')"
+  fi
+fi
+sess=$(scalar KEYCLOAKPDB "select count(*) from v\$session where username = '$kc_app';")
+[ "${sess:-0}" -ge 1 ] 2>/dev/null && ok "Keycloak is connected as $kc_app ($sess sessions)" || bad "no sessions for $kc_app"
+if docker ps --format '{{.Names}}' | grep -q '^spezi-poc-keycloak$'; then
+  kclog=$(docker logs spezi-poc-keycloak 2>&1)
+  n=$(echo "$kclog" | grep -c 'ORA-[0-9]')
+  [ "$n" = "0" ] && ok "no ORA- errors in the Keycloak log" || bad "Keycloak log has $n ORA- lines"
+  # Keycloak's own startup index check. One name is expected: IDX_OFFLINE_CSS_BY_CLIENT is an exact duplicate (same
+  # columns) of IDX_OFFLINE_CSS_PRELOAD, which Oracle refuses to create (ORA-01408). Anything else is a real gap.
+  missing=$(echo "$kclog" | grep 'Missing database index' | sed -E 's/.*Missing database index ([A-Z0-9_]+) .*/\1/' | sort -u | grep -v '^IDX_OFFLINE_CSS_BY_CLIENT$' || true)
+  [ -z "$missing" ] && ok "Keycloak's index checker reports no missing indexes beyond the one known duplicate" \
+    || { bad "Keycloak's index checker reports missing indexes:"; echo "$missing" | sed 's/^/        /'; }
+else
+  skip "Keycloak log checks (container not running)"
 fi
 
 echo

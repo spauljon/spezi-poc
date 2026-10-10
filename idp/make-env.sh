@@ -7,6 +7,7 @@
 #   POC_WORKER_CLIENT_SECRET      secret of the analytics-worker client (client credentials)
 #   POC_CAPTURE_USER_PASSWORD     password of the synthetic capture-user
 #   POC_CLINICIAN_USER_PASSWORD   password of the synthetic clinician-user
+#   KC_DB_USERNAME, KC_DB_PASSWORD  Keycloak's Oracle application account (value shared with db/.env.local)
 # The POC_* values are read by Keycloak's realm import as ${ENV} placeholders (idp/realm/poc-realm.json).
 set -euo pipefail
 
@@ -26,6 +27,16 @@ add KC_BOOTSTRAP_ADMIN_PASSWORD "$(gen)"
 add POC_WORKER_CLIENT_SECRET "$(gen)"
 add POC_CAPTURE_USER_PASSWORD "$(gen)"
 add POC_CLINICIAN_USER_PASSWORD "$(gen)"
+
+# Keycloak's database account (M3c). The password is the one db/make-env.sh generated for the Oracle user, so the
+# account the init script creates and the one Keycloak logs in with are the same by construction.
+db_env="$root/db/.env.local"
+if [ -e "$db_env" ] && grep -q '^KEYCLOAK_DB_PASSWORD=' "$db_env"; then
+  add KC_DB_USERNAME "$(grep '^KEYCLOAK_DB_USER=' "$db_env" | cut -d= -f2-)"
+  add KC_DB_PASSWORD "$(grep '^KEYCLOAK_DB_PASSWORD=' "$db_env" | cut -d= -f2-)"
+else
+  echo "note: db/.env.local has no KEYCLOAK_DB_PASSWORD yet (run db/make-env.sh first); KC_DB_* not added" >&2
+fi
 
 if [ "${#added[@]}" -eq 0 ]; then
   echo "idp/.env.local is complete; nothing added."

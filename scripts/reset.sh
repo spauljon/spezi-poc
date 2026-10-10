@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# reset.sh -- clears the POC project's containers and (after separate confirmations) its Oracle and Keycloak volumes.
+# reset.sh -- clears the POC project's containers and (after confirmation) its Oracle volume (which also holds Keycloak's data since M3c).
 # Adapted from the governance project's bin/reset.sh. Touches ONLY compose project spezi-poc.
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -26,18 +26,10 @@ else
   echo "Oracle volume kept; the .initialized marker is unchanged."
 fi
 
-read -rp "This will erase Keycloak's data (the H2 file volume). Continue? [y/N]: " confirm_kc
-confirm_kc_lc=$(echo "$confirm_kc" | tr '[:upper:]' '[:lower:]')
-if [[ ${confirm_kc_lc} == "y" ]]; then
-  set +e
-  if docker volume rm spezi-poc_keycloak_data 2>/dev/null; then
-    echo "✅ Docker volume spezi-poc_keycloak_data removed."
-  else
-    echo "✅ Docker volume is not present."
-  fi
-  set -e
-else
-  echo "Keycloak volume kept."
+# Keycloak keeps its data in KEYCLOAKPDB inside the Oracle volume (M3c), so erasing Oracle erases it too. A leftover
+# volume from before M3c (the H2 file) is removed here so it cannot be mistaken for live data.
+if docker volume inspect spezi-poc_keycloak_data > /dev/null 2>&1; then
+  docker volume rm spezi-poc_keycloak_data > /dev/null && echo "✅ Removed the obsolete Keycloak H2 volume spezi-poc_keycloak_data."
 fi
 
 echo "✅ Done."
