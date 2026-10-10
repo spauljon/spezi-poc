@@ -309,6 +309,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Milestone 6.
 
+**Status (2026-10-10):** built, verified and **committed as `m07`**. A pure, seeded generator (heart rate, HRV, resting HR, sleep nights) behind the new `IngestSource` protocol; controls for cadence, jitter, gaps, late and batched delivery, duplicates and artifacts; seven presets; a live runner with a time-scale and start-in-the-past; the simulator screen (shown only for the synthetic source) with live counters by metric and by injected anomaly. 83 unit tests and 3 UI tests pass (`make test-ios-ui`). Verified by measurement, not by "output exists": cadence and jitter bounds, gap windows empty and near the configured rate, late delay within bounds and near its fraction, batch alignment, duplicates identical and later, DST day lengths of 23 and 25 hours, and that every sample maps with the M6 mapper. Two mutations (look-back too short; batches rounded the wrong way) are caught by several tests, and a test that was too weak to catch the first was strengthened. Seen on the simulator: Late 75, Batched 241, Duplicates 24, Artifacts 7 after a few seconds of "Everything at once". New assumptions A18 to A23 in [ios/README.md](../ios/README.md). Not done: flagging artifacts and their thresholds (M16), persistence and upload (M8).
+
 **Tasks:**
 1. Ingest source protocol (HealthKit and synthetic will both implement it).
 2. Synthetic generator for the four metrics (plausible waveforms, sleep nights).

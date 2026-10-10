@@ -60,17 +60,24 @@ while kill -0 "$pid" 2> /dev/null; do
   sleep 5
   now=$(wc -c < "$log" | tr -d ' ')
   if [ "$now" != "$last" ]; then last=$now; quiet=0; else quiet=$((quiet + 5)); fi
-  if grep -q -E '\*\* TEST (SUCCEEDED|FAILED) \*\*' "$log" && [ "$quiet" -ge 15 ]; then kill "$pid" 2> /dev/null || true; break; fi
+  # The run is over once xcodebuild prints its verdict, or Swift Testing its run summary (xcodebuild can then fail to
+  # exit after a failed test); give it a short grace period, then stop it.
+  if grep -q -E '\*\* TEST (SUCCEEDED|FAILED) \*\*|Test run with [0-9]+ tests? in [0-9]+ suites? (passed|failed)' "$log" && [ "$quiet" -ge 20 ]; then
+    kill "$pid" 2> /dev/null || true; break
+  fi
   if [ "$quiet" -ge "$stall" ]; then
     echo "ios: STALLED: no output for ${stall}s, stopping xcodebuild. Last lines:" >&2; tail -8 "$log" >&2
-    kill "$pid" 2> /dev/null || true; pkill -f "xcodebuild test.*$dd" 2> /dev/null || true; exit 1
+    kill "$pid" 2> /dev/null || true; pkill -f "xcodebuild test.*$dd" 2> /dev/null || true
+    trap - EXIT   # keep the log for inspection
+    echo "ios: log kept at $log" >&2
+    exit 1
   fi
 done
 wait "$pid" 2> /dev/null || true
 out=$(cat "$log")
 # Pattern match, not `echo | grep -q`: under pipefail a SIGPIPE from an early-exiting grep -q fails the pipeline.
-if [[ "$out" != *"** TEST SUCCEEDED **"* ]]; then
-  echo "$out" | grep -E "error:|✘|failed|TEST FAILED" | head -30 >&2
+if [[ "$out" != *"** TEST SUCCEEDED **"* && ! ( "$out" =~ Test\ run\ with\ [0-9]+\ tests?\ in\ [0-9]+\ suites?\ passed && "$out" != *"** TEST FAILED **"* && "$out" != *"✘"* ) ]]; then
+  echo "$out" | grep -E "error:|✘|failed|TEST FAILED" | sed -n '1,30p' >&2
   echo "ios: TESTS FAILED (log: $log)" >&2
   trap - EXIT   # keep the log for inspection
   exit 1

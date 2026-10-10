@@ -67,6 +67,40 @@ HealthKit both produce) to FHIR. Everything it knows comes from the bundled `met
 Tests (`TemplateApplicationTests/Metrics`): the contract and its refusals, the independent golden fixtures
 (`contract/golden/`), the spec's own printed samples, device keys, determinism, and that no date string ever uses `Z`.
 
+## Synthetic source and simulator (M7)
+
+The simulated device is a **pure function** of (config, seed, time), so tests, demos and history backfill are one code
+path, and the live runner is that function over a moving window.
+
+| Piece | Role |
+|---|---|
+| `Ingest/IngestSource.swift` | `IngestSource` protocol (the seam HealthKit will implement in M17), `IngestedSample`, and `InjectedAnomalies` (ground truth: late, batched, artifact, duplicate) |
+| `Ingest/KeyedRandom.swift` | Stateless SplitMix64 over (seed, stream, index); reference vectors from an independent Python implementation |
+| `Ingest/SyntheticConfig.swift` | The controls (cadence, jitter, gaps, late delivery, batching, duplicates, artifacts) and seven presets |
+| `Ingest/SyntheticGenerator.swift` | `emissions(deliveredIn:)`: heart rate, HRV, resting heart rate, sleep nights, with the faults applied |
+| `Ingest/SyntheticIngestSource.swift` | The live runner: virtual time at `speed` times real time, from a start up to 14 days ago; injectable clock |
+| `Simulator/SimulatorModel.swift`, `SimulatorView.swift` | Controls, run/stop, counters by metric and by injected anomaly, the latest samples; shown only for the synthetic source |
+
+Guarantees (each tested, several by mutation): the same config and seed give the same samples; a window generated in
+pieces equals the whole; delivery is never before measurement; late and batched samples keep their true measurement
+time and get a later `issued`; duplicates keep identity and content; ids carry the seed so two seeds never collide on
+a conditional create; every emitted sample is valid input for the M6 mapper (`inBed` maps to nothing).
+
+### Assumptions made in M7 (review these)
+
+| # | Assumption | Why it matters |
+|---|---|---|
+| A18 | The waveforms are plausible, not physiological: a circadian heart rate with a night dip and a daily exercise bout, HRV higher at night and inversely related to heart rate, one resting value a day, sleep in ~90-minute cycles | Clinician views get realistic shapes, but nothing here is a clinical model |
+| A19 | Gaps remove heart-rate and HRV samples only (a watch off the wrist); sleep intervals and the resting value, which a phone derives, are not dropped | A gap-heavy scenario still shows a night's sleep |
+| A20 | Late and batched delivery change only `issued`; measurement times are untouched. A start in the past includes samples measured before the start that are still in flight | Matches how a device that was offline behaves; the first minutes of a "1 day ago" run are mostly late samples |
+| A21 | Artifact values are 25/240/280 (heart rate), 3/450 (HRV), 25/230 (resting): implausible but never zero (M6 refuses zero) | The mapper must accept them so they can be stored and flagged, not dropped |
+| A22 | Resting heart rate is one period per local day, delivered 60 s after the day ends; DST days are 23 or 25 hours | Matches the spec's "one sample per day" and A6 |
+| A23 | A night is in bed from about 23:00 (±45 min) for 6.5 to 8.5 hours asleep, and includes an `inBed` interval | Exercises the unmapped path end to end |
+
+Not done here (by design): flagging artifacts as data-quality tags and the plausibility thresholds for it (M16;
+the generator only records ground truth), persistence and upload (M8), and any claim about performance for very large
+windows (the 5 s cadence for a day is quick; 14 days at the dense 1 s preset was not measured).
+
 ## Sign in (M5b)
 
 | Piece | What it does |

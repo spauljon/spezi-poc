@@ -15,6 +15,7 @@ struct TemplateApplication: App {
     @UIApplicationDelegateAdaptor(TemplateApplicationDelegate.self) var appDelegate
     @AppStorage(StorageKeys.onboardingFlowComplete) var completedOnboardingFlow = false
     @State private var auth = AuthService.live()
+    @State private var simulator = SimulatorModel()
     
     
     var body: some Scene {
@@ -30,6 +31,7 @@ struct TemplateApplication: App {
                 }
             }
             .environment(auth)
+            .environment(simulator)
             .testingSetup()
             .spezi(appDelegate)
         }

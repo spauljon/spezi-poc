@@ -35,6 +35,11 @@ enum DataSource: String, CaseIterable, Identifiable, Sendable {
         self == .synthetic
     }
     
+    /// The simulator controls exist only for the synthetic source; a real source has no such controls.
+    var showsSimulator: Bool {
+        self == .synthetic
+    }
+    
     /// A stored choice that is not available (for example left over from a newer build) falls back to synthetic.
     static func effective(_ stored: DataSource) -> DataSource {
         stored.isAvailable ? stored : .synthetic

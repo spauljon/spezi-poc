@@ -46,6 +46,8 @@ final class OnboardingTests: XCTestCase {
         // Home.
         XCTAssertTrue(app.navigationBars["Capture"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Synthetic"].exists)
-        XCTAssertTrue(app.staticTexts["Not signed in"].exists)
+        // For the synthetic source the simulator is reachable from Home. (Account state is deliberately not asserted
+        // here: a previous sign-in can persist in the Keychain, and this test is about onboarding.)
+        XCTAssertTrue(app.buttons["Simulator controls"].waitForExistence(timeout: 5))
     }
 }

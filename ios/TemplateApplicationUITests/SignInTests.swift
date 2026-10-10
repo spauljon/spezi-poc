@@ -33,13 +33,27 @@ final class SignInTests: XCTestCase {
         app.launchArguments = ["--skipOnboarding"]
         app.launch()
         
-        // Start from signed out, whatever a previous run left behind.
-        if app.buttons["Sign out"].waitForExistence(timeout: 3) {
-            app.buttons["Sign out"].tap()
+        // Start from signed out, whatever a previous (possibly failed) run left in the Keychain. A List renders only
+        // the rows on screen, so scroll until one of the two account buttons is reachable.
+        var attempts = 0
+        while attempts < 8 {
+            if app.buttons["Sign out"].exists && app.buttons["Sign out"].isHittable {
+                app.buttons["Sign out"].tap()
+                break
+            }
+            if app.buttons["Sign in"].exists && app.buttons["Sign in"].isHittable {
+                break
+            }
+            app.swipeUp()
+            attempts += 1
+        }
+        attempts = 0
+        while !(app.buttons["Sign in"].exists && app.buttons["Sign in"].isHittable) && attempts < 8 {
+            app.swipeUp()
+            attempts += 1
         }
         XCTAssertTrue(app.staticTexts["Not signed in"].waitForExistence(timeout: 5))
-        
-        XCTAssertTrue(app.buttons["Sign in"].exists)
+        XCTAssertTrue(app.buttons["Sign in"].isHittable)
         app.buttons["Sign in"].tap()
         
         // The Keycloak login page, in the system browser session (a separate process).
@@ -78,8 +92,13 @@ final class SignInTests: XCTestCase {
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == 'HTTP 200, expected 200'")).count, 2)
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == 'HTTP 401, expected 401'")).count, 1)
         
-        // Sign out clears the state.
-        app.swipeDown()
+        // Sign out clears the state. The page's length changes as sections are added, so scroll until the button is
+        // reachable instead of assuming a distance.
+        attempts = 0
+        while !(app.buttons["Sign out"].exists && app.buttons["Sign out"].isHittable) && attempts < 8 {
+            app.swipeDown()
+            attempts += 1
+        }
         XCTAssertTrue(app.buttons["Sign out"].waitForExistence(timeout: 5))
         app.buttons["Sign out"].tap()
         XCTAssertTrue(app.staticTexts["Not signed in"].waitForExistence(timeout: 5))

@@ -34,6 +34,15 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
                 
+                if source.showsSimulator {
+                    Section("Simulator") {
+                        NavigationLink("Simulator controls") {
+                            SimulatorView()
+                        }
+                        .accessibilityIdentifier("simulatorLink")
+                    }
+                }
+                
                 Section("Server") {
                     switch configuration {
                     case .success(let configuration):
@@ -135,4 +144,5 @@ struct HomeView: View {
 #Preview {
     HomeView()
         .environment(AuthService(client: AppAuthClient(), store: InMemoryTokenStore()))
+        .environment(SimulatorModel())
 }
