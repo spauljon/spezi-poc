@@ -12,6 +12,7 @@
 		2FE5DC9929EDD9D9004B9AB4 /* XCTestExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 2FE5DC9829EDD9D9004B9AB4 /* XCTestExtensions */; };
 		80CC1A2C2D678F5B008654B5 /* SpeziKeychainStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 80CC1A2B2D678F5B008654B5 /* SpeziKeychainStorage */; };
 		9733CFC62A8066DE001B7ABC /* SpeziOnboarding in Frameworks */ = {isa = PBXBuildFile; productRef = 2FE5DC8029EDD91D004B9AB4 /* SpeziOnboarding */; };
+		3C210634D7B649C290D7CAD1 /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 0FC5BE3B82624C9B8EBB5223 /* AppAuth */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -77,6 +78,7 @@
 			files = (
 				9733CFC62A8066DE001B7ABC /* SpeziOnboarding in Frameworks */,
 				80CC1A2C2D678F5B008654B5 /* SpeziKeychainStorage in Frameworks */,
+				3C210634D7B649C290D7CAD1 /* AppAuth in Frameworks */,
 				2F49B7762980407C00BCB272 /* Spezi in Frameworks */,
 				2FE5DC8F29EDD980004B9AB4 /* SpeziViews in Frameworks */,
 			);
@@ -162,6 +164,7 @@
 				2FE5DC8E29EDD980004B9AB4 /* SpeziViews */,
 				2FE5DC8029EDD91D004B9AB4 /* SpeziOnboarding */,
 				80CC1A2B2D678F5B008654B5 /* SpeziKeychainStorage */,
+				0FC5BE3B82624C9B8EBB5223 /* AppAuth */,
 			);
 			productName = TemplateApplication;
 			productReference = 653A254D283387FE005D4D48 /* TemplateApplication.app */;
@@ -251,6 +254,7 @@
 				2FE5DC8D29EDD980004B9AB4 /* XCRemoteSwiftPackageReference "SpeziViews" */,
 				2FE5DC9729EDD9D9004B9AB4 /* XCRemoteSwiftPackageReference "XCTestExtensions" */,
 				97F466E62A76BBEE005DC9B4 /* XCRemoteSwiftPackageReference "SpeziOnboarding" */,
+				6C63E50E4F4D49AD8D2369D6 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 653A254E283387FE005D4D48 /* Products */;
@@ -663,6 +667,14 @@
 				minimumVersion = 2.0.3;
 			};
 		};
+		6C63E50E4F4D49AD8D2369D6 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/openid/AppAuth-iOS.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -690,6 +702,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 2FE5DC8829EDD972004B9AB4 /* XCRemoteSwiftPackageReference "SpeziStorage" */;
 			productName = SpeziKeychainStorage;
+		};
+		0FC5BE3B82624C9B8EBB5223 /* AppAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6C63E50E4F4D49AD8D2369D6 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
+			productName = AppAuth;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

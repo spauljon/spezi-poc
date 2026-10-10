@@ -38,7 +38,7 @@ buys nothing); the product is **Spezi POC Capture**, bundle id `com.blueysoft.sp
 | Onboarding as a `.sheet` over an `EmptyView`, steps in SpeziViews' `ManagedNavigationStack` | The root view switches between onboarding and home; two steps are a plain `@State` switch in `OnboardingFlow` | The template's pattern came up **blank** on the Xcode 27 / iOS 27 simulator: SwiftUI logged the runtime fault "Accessing State<Path>'s value without being installed on a View" (`ManagedNavigationStack.Path`, SpeziViews 1.12.14, the latest 1.x). The same screens render correctly without it (0 faults). Revisit when SpeziViews is updated for that SDK. |
 | UI test deletes and reinstalls the app via Springboard | UI test launches with `--showOnboarding` | `deleteAndLaunch(withSpringboardAppName:)` could not find the app icon by name and hung |
 
-### Swift packages (5 direct)
+### Swift packages (6 direct)
 
 | Package | Requirement | Used for |
 |---|---|---|
@@ -47,6 +47,46 @@ buys nothing); the product is **Spezi POC Capture**, bundle id `com.blueysoft.sp
 | `SpeziOnboarding` | up to next major from 2.0.3 | the orientation screen |
 | `SpeziStorage` (`SpeziKeychainStorage`) | up to next major from 2.1.4 | token storage (sign-in step) |
 | `XCTestExtensions` (StanfordBDHG) | up to next major from 1.2.2 | UI tests |
+| `AppAuth-iOS` (openid) | **exactly 3.0.0** (commit `a972daac82d449d58ab119e91c68153e29ddac33`), Apache-2.0, no dependencies | OIDC: discovery, authorization code + PKCE, token exchange and refresh (M5b) |
+
+## Sign in (M5b)
+
+| Piece | What it does |
+|---|---|
+| `Auth/AppAuthClient.swift` | The only code that touches AppAuth. Discovery from the issuer, authorization code + **PKCE S256** (`state` and `nonce` generated and checked by AppAuth; the ID token's issuer, audience, expiry and nonce validated), in an **ephemeral** `ASWebAuthenticationSession` (no shared Safari cookies, so no lingering single-sign-on). Public client: no secret. |
+| `Auth/AuthService.swift` | Sign in, restore at launch, refresh when the access token is within 60 s of expiry, sign out. Talks only to the `OIDCClient` and `TokenStore` protocols, so it is unit-tested with fakes. |
+| `Auth/TokenStore.swift` | Tokens live **only in the Keychain** (`SpeziKeychainStorage`, one generic-password item). Never `UserDefaults`, a file, or the UI. |
+| `Auth/TokenSet.swift` | The stored value. Its `description` is redacted so a token cannot reach a log by interpolation. |
+| `Auth/TokenClaims.swift` | Reads user, roles and expiry from the access token's payload **without verifying the signature**: display only. HAPI verifies the token on every request; nothing here authorizes anything. |
+| `Auth/ServerProbe.swift` | "Check server": metadata (200, no token), Patient search without a token (401), and with the user's token (200). |
+
+### The simulator must trust the POC CA
+
+The simulator's keychain is its own, so it does not trust the POC CA until told to. Without that, sign-in fails with
+"The certificate for this server is invalid" (shown by the app; this is how the trust step was verified).
+
+```bash
+scripts/ios-sim-trust.sh install [simulator]   # adds ~/.poc-ca/ca.crt (the PUBLIC certificate) to that simulator only
+scripts/ios-sim-trust.sh reset   [simulator]   # the way back: resets that simulator's keychain (CA and stored sign-in)
+```
+
+It changes only the named simulator's trust store (not the Mac's keychain, not your iPhone). The CA is name-constrained
+to `DNS:macpro16.local`, and the script prints the subject, SHA-256 fingerprint and constraints before installing.
+There is no per-certificate removal in `simctl keychain`: `reset`, or erasing the simulator, undoes it.
+
+### What is and is not verified
+
+Verified: the full flow against the running stack (login page, PKCE code exchange, roles claim, 200/401/200 from HAPI,
+sign out) by `SignInTests`; the refresh *decision*, storage, restore and sign-out logic by 19 unit tests; that the
+test fails when the token is not sent (mutation); that no token or password appears in simulator or xcodebuild logs.
+
+**Not verified live:** the refresh-token grant against Keycloak (access tokens last 10 minutes; the refresh path is
+covered with a fake client only), and what happens when Keycloak is down mid-session.
+
+Known gaps, accepted for the POC: **sign-out clears the device only**. It does not call Keycloak's logout or revocation
+endpoint, so the refresh token stays valid server-side until the realm's session idle timeout (14 days) even though the
+app has discarded it. Revoking it (RFC 7009) is the fix and is not implemented. Keychain items use the default
+accessibility.
 
 ## Configuration (nothing environment-specific in Swift source)
 
@@ -73,11 +113,16 @@ xcodebuild -project TemplateApplication.xcodeproj -scheme TemplateApplication \
   -destination 'generic/platform=iOS Simulator' -skipMacroValidation -skipPackagePluginValidation build
 ```
 
-From the repo root: `make test-ios` runs the 8 unit tests and `make test-ios-ui` adds the UI test
+From the repo root: `make test-ios` runs the 27 unit tests and `make test-ios-ui` adds the 2 UI tests
 ([scripts/ios-test.sh](../scripts/ios-test.sh): picks the first available iPhone simulator, or `$POC_IOS_SIMULATOR`;
-fails if no tests ran). It SKIPs loudly on a host without macOS and Xcode. The UI test asserts the orientation screen,
-that Apple Health is listed but cannot be selected, that no account, consent or HealthKit screen appears, and that Home
-shows the synthetic source.
+fails if no tests ran or xcodebuild stalls; reports skipped tests). It SKIPs loudly on a host without macOS and Xcode.
+
+- `OnboardingTests` asserts the orientation screen, that Apple Health is listed but cannot be selected, that no
+  account, consent or HealthKit screen appears, and that Home shows the synthetic source.
+- `SignInTests` is end to end and needs the stack running, the simulator trusting the CA, and the capture user's
+  password. The script takes that from the git-ignored `idp/.env.local` and passes it only as an environment variable
+  (`TEST_RUNNER_POC_CAPTURE_PASSWORD`); the test types it into Keycloak's login page, and it is never printed. Without
+  it the test is SKIPPED and the script says so.
 
 ## Launch arguments (UI tests and development)
 

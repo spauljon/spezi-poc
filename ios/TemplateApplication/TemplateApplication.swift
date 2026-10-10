@@ -14,6 +14,7 @@ import SwiftUI
 struct TemplateApplication: App {
     @UIApplicationDelegateAdaptor(TemplateApplicationDelegate.self) var appDelegate
     @AppStorage(StorageKeys.onboardingFlowComplete) var completedOnboardingFlow = false
+    @State private var auth = AuthService.live()
     
     
     var body: some Scene {
@@ -28,6 +29,7 @@ struct TemplateApplication: App {
                     OnboardingFlow()
                 }
             }
+            .environment(auth)
             .testingSetup()
             .spezi(appDelegate)
         }

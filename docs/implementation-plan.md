@@ -262,6 +262,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Why separate:** the OIDC library is the one package beyond the template, and sign-in is security-sensitive, so it gets its own review (same reasoning as M3a/3b/3c).
 
+**Status (2026-10-10):** built, verified and **committed as `m05b`**. AppAuth-iOS is pinned to exactly 3.0.0 (commit `a972daac`, confirmed against the approved tag). Tasks 1 to 7 are done; the CA step (approved) is `scripts/ios-sim-trust.sh`. Verified end to end against the running stack: Keycloak login page over the trusted CA, PKCE code exchange, signed in as `capture-user` with `capture-writer`, HAPI metadata 200, anonymous Patient search 401, authenticated Patient search 200, sign out. 27 unit tests and 2 UI tests (`make test-ios-ui`, 87 s); a mutation (token not sent) fails the end-to-end test; 186,000 simulator log lines, every xcodebuild log and the repo contain no token or password. **Not verified live:** the refresh grant against Keycloak (fake-client unit tests only; 10-minute tokens). **Known gap:** sign-out clears the device only; the refresh token stays valid server-side until the 14-day session idle timeout (RFC 7009 revocation not implemented). Details: [ios/README.md](../ios/README.md).
+
 **Decision (2026-10-10):** **AppAuth-iOS 3.0.0** (`github.com/openid/AppAuth-iOS`, Apache-2.0, no dependencies; released 2026-08-24, pushed 2026-10-07, not archived) is approved. Confirm the exact version resolves and the license before adding.
 
 **Tasks:**
