@@ -1,0 +1,169 @@
+{
+  "contractVersion": "1.0.0",
+  "cases": [
+    {
+      "name": "device-synthetic",
+      "note": "The synthetic simulator has a fixed key and fixed descriptive fields.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "synthetic"
+      },
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "synthetic-simulator"
+          }
+        ],
+        "status": "active",
+        "manufacturer": "Spezi POC",
+        "deviceName": [
+          {
+            "name": "Synthetic simulator",
+            "type": "model-name"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-healthkit-full",
+      "note": "All five fields present; the key is SHA-256 over them joined by U+001F.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "healthKit",
+        "name": "Apple Watch",
+        "manufacturer": "Apple Inc.",
+        "model": "Watch7,1",
+        "hardwareVersion": "Watch7,1",
+        "softwareVersion": "11.2"
+      },
+      "expectedKey": "e6e81c93680bf7b928774101baff724230f4a4f637576041dd28a46c32a53c21",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "e6e81c93680bf7b928774101baff724230f4a4f637576041dd28a46c32a53c21"
+          }
+        ],
+        "status": "active",
+        "manufacturer": "Apple Inc.",
+        "deviceName": [
+          {
+            "name": "Apple Watch",
+            "type": "model-name"
+          }
+        ],
+        "modelNumber": "Watch7,1",
+        "version": [
+          {
+            "type": {
+              "text": "hardware"
+            },
+            "value": "Watch7,1"
+          },
+          {
+            "type": {
+              "text": "software"
+            },
+            "value": "11.2"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-healthkit-trimmed",
+      "note": "Leading/trailing whitespace is trimmed: same key as the untrimmed device.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "healthKit",
+        "name": "  Apple Watch ",
+        "manufacturer": "Apple Inc.",
+        "model": "Watch7,1",
+        "hardwareVersion": "Watch7,1",
+        "softwareVersion": "11.2"
+      },
+      "expectedKey": "e6e81c93680bf7b928774101baff724230f4a4f637576041dd28a46c32a53c21",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "e6e81c93680bf7b928774101baff724230f4a4f637576041dd28a46c32a53c21"
+          }
+        ],
+        "status": "active",
+        "manufacturer": "Apple Inc.",
+        "deviceName": [
+          {
+            "name": "Apple Watch",
+            "type": "model-name"
+          }
+        ],
+        "modelNumber": "Watch7,1",
+        "version": [
+          {
+            "type": {
+              "text": "hardware"
+            },
+            "value": "Watch7,1"
+          },
+          {
+            "type": {
+              "text": "software"
+            },
+            "value": "11.2"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-healthkit-minimal",
+      "note": "Absent fields are omitted from the resource and are empty strings in the key.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "healthKit",
+        "name": "Some Sensor"
+      },
+      "expectedKey": "1504eec16fda3ba3384ea0b077db9a35e1774bbd1c9dbdced64789538873a2c8",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "1504eec16fda3ba3384ea0b077db9a35e1774bbd1c9dbdced64789538873a2c8"
+          }
+        ],
+        "status": "active",
+        "deviceName": [
+          {
+            "name": "Some Sensor",
+            "type": "model-name"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-healthkit-empty",
+      "note": "No field present: refused (it would collide with every other unknown device).",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "healthKit"
+      },
+      "expectedError": "emptyDeviceDescriptor"
+    }
+  ]
+}

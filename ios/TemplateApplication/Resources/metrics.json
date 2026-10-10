@@ -1,0 +1,113 @@
+{
+  "contractVersion": "1.0.0",
+  "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
+  "fhirVersion": "4.0.1",
+  "verification": {
+    "verifiedOn": "2026-10-10",
+    "loinc": "Each code matched exactly in NLM Clinical Tables (clinicaltables.nlm.nih.gov, loinc_items v3); coding.display is the LOINC LONG_COMMON_NAME.",
+    "ucum": "Each unit returned true from the NLM UCUM service (ucum.nlm.nih.gov, isValidUCUM). LOINC's own example-unit field is empty for all of these codes, so UCUM alone confirms the units. 'beats/min' returned false and is not used.",
+    "category": "Codes present in http://terminology.hl7.org/CodeSystem/observation-category version 2.0.0 (terminology.hl7.org).",
+    "deviceNameType": "model-name is in http://hl7.org/fhir/device-nametype (R4 4.0.1).",
+    "heartRateProfile": "http://hl7.org/fhir/StructureDefinition/heartrate (R4, status draft) fixes category vital-signs, valueQuantity.system http://unitsofmeasure.org and valueQuantity.code /min, and requires subject and effective[x]. No meta.profile claim is made (spec: Conformance)."
+  },
+  "systems": {
+    "loinc": "http://loinc.org",
+    "ucum": "http://unitsofmeasure.org",
+    "observationCategory": "http://terminology.hl7.org/CodeSystem/observation-category",
+    "identifier": {
+      "synthetic": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+      "healthKit": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+      "deviceKey": "http://blueysoft.com/fhir/identifier/device-key"
+    },
+    "metaSource": {
+      "synthetic": "http://blueysoft.com/fhir/capture-app/synthetic",
+      "healthKit": "http://blueysoft.com/fhir/capture-app/healthkit"
+    }
+  },
+  "categories": {
+    "vital-signs": { "code": "vital-signs", "display": "Vital Signs" },
+    "activity": { "code": "activity", "display": "Activity" }
+  },
+  "rules": {
+    "status": "final",
+    "identifierValue": {
+      "synthetic": "as given",
+      "healthKit": "lowercase of the sample UUID string"
+    },
+    "effective": {
+      "instantOrPeriod": "effectiveDateTime when start equals end, otherwise effectivePeriod",
+      "period": "always effectivePeriod",
+      "offset": "every dateTime carries the numeric offset (+hh:mm or -hh:mm) of the sample's own time zone AT THAT INSTANT; never Z, never the ingest-time offset",
+      "fraction": "omitted when the sub-second part is zero, otherwise exactly 3 digits (milliseconds)"
+    },
+    "issued": "capture-app production time, always with exactly 3 fractional digits and the sample's offset",
+    "value": "valueQuantity must be finite and strictly greater than zero",
+    "sleepDuration": "valueQuantity in UCUM min, derived from the period: (end - start) in seconds / 60, rounded half-up to 2 decimals; period must have end strictly after start"
+  },
+  "deviceKey": {
+    "syntheticValue": "synthetic-simulator",
+    "syntheticManufacturer": "Spezi POC",
+    "syntheticName": "Synthetic simulator",
+    "healthKitAlgorithm": "SHA-256, lowercase hex, over the UTF-8 bytes of the five fields name, manufacturer, model, hardwareVersion, softwareVersion (each trimmed; an absent field is the empty string) joined with the single character U+001F",
+    "deviceResource": "status active; manufacturer, modelNumber and each Device.version entry only when the field is present; deviceName = [{name, type model-name}] only when name is present; patient = the capture patient; at least one of the five fields must be present"
+  },
+  "metrics": [
+    {
+      "id": "heartRate",
+      "kind": "quantity",
+      "loinc": { "code": "8867-4", "display": "Heart rate" },
+      "unit": { "ucum": "/min", "display": "/min" },
+      "category": "vital-signs",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierHeartRate",
+      "claimsProfile": null
+    },
+    {
+      "id": "restingHeartRate",
+      "kind": "quantity",
+      "loinc": { "code": "40443-4", "display": "Heart rate --resting" },
+      "unit": { "ucum": "/min", "display": "/min" },
+      "category": "vital-signs",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierRestingHeartRate",
+      "claimsProfile": null
+    },
+    {
+      "id": "hrvSdnn",
+      "kind": "quantity",
+      "loinc": { "code": "112429-6", "display": "Heart rate variability SDNN [Time]" },
+      "unit": { "ucum": "ms", "display": "ms" },
+      "category": "vital-signs",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "claimsProfile": null
+    },
+    {
+      "id": "sleepStage",
+      "kind": "sleepStage",
+      "unit": { "ucum": "min", "display": "min" },
+      "category": "activity",
+      "effective": "period",
+      "healthKit": "HKCategoryTypeIdentifierSleepAnalysis",
+      "stages": {
+        "asleepCore": { "code": "93830-8", "display": "Light sleep duration" },
+        "asleepDeep": { "code": "93831-6", "display": "Deep sleep duration" },
+        "asleepREM": { "code": "93829-0", "display": "REM sleep duration" },
+        "asleepUnspecified": { "code": "93832-4", "display": "Sleep duration" },
+        "awake": { "code": "103210-1", "display": "Awakening duration" }
+      },
+      "unmapped": ["inBed"],
+      "claimsProfile": null
+    }
+  ],
+  "assumptions": {
+    "A4": "asleepCore is mapped to LOINC Light sleep duration (a clinical judgment, not a standard mapping); awake uses 103210-1 Awakening duration (93828-2 Nighttime awakening duration is the narrower alternative); inBed has no verified code and produces no Observation in v1.",
+    "A3": "hrvSdnn and restingHeartRate use category vital-signs; FHIR's vital-signs set does not include HRV, so this is a pragmatic choice.",
+    "A5": "Sleep stages are one duration-valued Observation per stage interval, category activity.",
+    "A6": "The offset comes from the time zone the SAMPLE carries; a source that has none supplies the device's zone at ingest, which can be wrong across travel.",
+    "A14": "Fraction rule (3 digits when non-zero) and the half-up 2-decimal sleep duration are choices of this contract, not of FHIR.",
+    "A15": "Device.version entries carry only value and type.text ('hardware' or 'software'); no code system is invented for version types.",
+    "A16": "HealthKit sample UUIDs are lowercased for identifier.value so that identity does not depend on which API produced the string.",
+    "A17": "Zero is rejected for every metric; no plausibility ranges are applied in v1 (artifact flagging is a later milestone)."
+  }
+}

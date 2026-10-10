@@ -1,0 +1,90 @@
+{
+  "contractVersion": "1.0.0",
+  "cases": [
+    {
+      "name": "error-zero-value",
+      "note": "Zero is refused for every metric (A17).",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "heartRate",
+        "value": 0,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-err-1"
+      },
+      "expectedError": "nonPositiveValue"
+    },
+    {
+      "name": "error-negative-value",
+      "note": "Negative values are refused.",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "hrvSdnn",
+        "value": -5,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-err-2"
+      },
+      "expectedError": "nonPositiveValue"
+    },
+    {
+      "name": "error-end-before-start",
+      "note": "An interval that ends before it starts is refused.",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-01-15T16:30:45Z",
+        "end": "2026-01-15T16:30:00Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-err-3"
+      },
+      "expectedError": "endBeforeStart"
+    },
+    {
+      "name": "error-zero-length-sleep",
+      "note": "A sleep interval must have end strictly after start.",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepDeep",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:10:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-err-4"
+      },
+      "expectedError": "emptySleepInterval"
+    },
+    {
+      "name": "error-empty-sample-id",
+      "note": "A sample without an identity cannot be deduplicated: refused.",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "  "
+      },
+      "expectedError": "emptySampleID"
+    }
+  ]
+}

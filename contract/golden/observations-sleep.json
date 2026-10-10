@@ -1,0 +1,616 @@
+{
+  "contractVersion": "1.0.0",
+  "cases": [
+    {
+      "name": "sleep-deep",
+      "note": "The spec's sample: 01:10 to 01:52 local, 42 min.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepDeep",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:52:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93831-6",
+              "display": "Deep sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 42,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:52:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-core",
+      "note": "asleepCore maps to Light sleep duration (A4).",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepCore",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:52:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0002"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0002"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93830-8",
+              "display": "Light sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 42,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:52:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-rem",
+      "note": "asleepREM.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepREM",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:52:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0003"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0003"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93829-0",
+              "display": "REM sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 42,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:52:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-unspecified",
+      "note": "asleepUnspecified.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepUnspecified",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:52:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0004"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0004"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93832-4",
+              "display": "Sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 42,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:52:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-awake",
+      "note": "awake maps to Awakening duration 103210-1 (A4).",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "awake",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:52:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0005"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0005"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "103210-1",
+              "display": "Awakening duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 42,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:52:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-in-bed-is-unmapped",
+      "note": "inBed has no verified code: no Observation, and not an error.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "inBed",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:52:00Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0006"
+      },
+      "expectedOutcome": "unmapped"
+    },
+    {
+      "name": "sleep-half-minute",
+      "note": "30 s is 0.5 min.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepCore",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:10:30Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0007"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0007"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93830-8",
+              "display": "Light sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 0.5,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:10:30-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-one-second-rounds-half-up",
+      "note": "1 s is 0.01666... min, rounded to 0.02.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepCore",
+        "start": "2026-01-15T09:10:00Z",
+        "end": "2026-01-15T09:10:01Z",
+        "issued": "2026-01-15T17:55:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0008"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0008"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93830-8",
+              "display": "Light sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T09:55:00.000-08:00",
+        "valueQuantity": {
+          "value": 0.02,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T01:10:00-08:00",
+          "end": "2026-01-15T01:10:01-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-across-spring-forward",
+      "note": "01:30 PST to 03:30 PDT is ONE elapsed hour (the 02:00 hour does not exist): 60 min.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepCore",
+        "start": "2026-03-08T09:30:00Z",
+        "end": "2026-03-08T10:30:00Z",
+        "issued": "2026-03-08T11:00:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0009"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0009"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93830-8",
+              "display": "Light sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-03-08T04:00:00.000-07:00",
+        "valueQuantity": {
+          "value": 60,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-03-08T01:30:00-08:00",
+          "end": "2026-03-08T03:30:00-07:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "sleep-across-fall-back",
+      "note": "00:30 PDT to 02:30 PST is THREE elapsed hours (01:00 occurs twice): 180 min.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "sleepStage",
+        "stage": "asleepCore",
+        "start": "2026-11-01T07:30:00Z",
+        "end": "2026-11-01T10:30:00Z",
+        "issued": "2026-11-01T11:00:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-sleep-0010"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-sleep-0010"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "activity",
+                "display": "Activity"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "93830-8",
+              "display": "Light sleep duration"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-11-01T03:00:00.000-08:00",
+        "valueQuantity": {
+          "value": 180,
+          "unit": "min",
+          "system": "http://unitsofmeasure.org",
+          "code": "min"
+        },
+        "effectivePeriod": {
+          "start": "2026-11-01T00:30:00-07:00",
+          "end": "2026-11-01T02:30:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    }
+  ]
+}

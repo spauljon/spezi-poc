@@ -49,6 +49,24 @@ buys nothing); the product is **Spezi POC Capture**, bundle id `com.blueysoft.sp
 | `XCTestExtensions` (StanfordBDHG) | up to next major from 1.2.2 | UI tests |
 | `AppAuth-iOS` (openid) | **exactly 3.0.0** (commit `a972daac82d449d58ab119e91c68153e29ddac33`), Apache-2.0, no dependencies | OIDC: discovery, authorization code + PKCE, token exchange and refresh (M5b) |
 
+## Metrics layer (M6)
+
+Pure Swift, no network and no HealthKit: it maps the app's own `MetricSample` (what the synthetic source and, later,
+HealthKit both produce) to FHIR. Everything it knows comes from the bundled `metrics.json`, a byte-identical copy of
+[contract/metrics.json](../contract/metrics.json) (`contract/sync.sh`; tests fail if they differ).
+
+| File | Role |
+|---|---|
+| `Metrics/MetricRegistry.swift` | Loads and self-checks the contract (supported major version, every metric present, every sleep stage mapped or listed unmapped) |
+| `Metrics/MetricSample.swift` | `MetricSample`, `MetricID`, `SleepStage`, `DeviceDescriptor` |
+| `Metrics/ObservationMapper.swift` | Sample to Observation, with validation; `inBed` is `.unmapped`, not an error |
+| `Metrics/DeviceMapper.swift` | Device resource and the deterministic key (SHA-256, or the fixed synthetic value) |
+| `Metrics/FHIRDateTime.swift` | Hand-written `dateTime`: offset at the sample's own instant, no `Z`, fraction only when non-zero |
+| `Metrics/FHIRResources.swift` | The minimal Codable FHIR shapes it writes |
+
+Tests (`TemplateApplicationTests/Metrics`): the contract and its refusals, the independent golden fixtures
+(`contract/golden/`), the spec's own printed samples, device keys, determinism, and that no date string ever uses `Z`.
+
 ## Sign in (M5b)
 
 | Piece | What it does |

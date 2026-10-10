@@ -287,6 +287,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Milestone 5.
 
+**Status (2026-10-10):** built, verified and **committed as `m06`**. Contract `1.0.0` with every code and unit re-verified against NLM Clinical Tables, the NLM UCUM service and terminology.hl7.org (evidence recorded in the file; the spec's `[UNVERIFIED]` HRV unit `ms` is now verified). Mapper for heart rate, resting HR, HRV and sleep stages (`inBed` produces nothing), device mapping and key, per-metric validation. 34 golden fixtures written by an **independent Python implementation** (own tz database, decimals, hash) and checked by the Swift mapper; the two samples printed in the spec are reproduced exactly. 45 iOS unit tests and 36 offline contract checks pass; two mutations (contract edited alone; offset taken at "now") both fail the suite (10 of 14 quantity goldens). **HAPI 7.6.0 with request validation on accepted all 23 Observations and the Devices**; a re-sent equivalent Device was matched, not duplicated. Findings: the spec's sleep sample lacked `issued` (corrected, A7); LOINC's example-unit field is empty for all these codes, so UCUM alone confirms units. New assumptions A14 to A17 are in [contract/README.md](../contract/README.md). `verify-hapi.py` left `golden-` synthetic resources in HAPI.
+
 **Tasks:**
 1. Create `contract/metrics.json` (metric -> LOINC, UCUM unit, category, `effective[x]` rule, sleep stage mapping) with a version field; this is the single source of truth.
 2. Load it in the app's registry (bundled copy, with a test that fails if it differs from `contract/metrics.json`).

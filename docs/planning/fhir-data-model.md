@@ -152,6 +152,7 @@ Stage mapping (every row below is an assumption, A4 and A5):
   "code": { "coding": [{ "system": "http://loinc.org", "code": "93831-6", "display": "Deep sleep duration" }] },
   "subject": { "reference": "Patient/example-patient" },
   "effectivePeriod": { "start": "2026-01-15T01:10:00-08:00", "end": "2026-01-15T01:52:00-08:00" },
+  "issued": "2026-01-15T09:55:00.000-08:00",
   "valueQuantity": { "value": 42, "unit": "min", "system": "http://unitsofmeasure.org", "code": "min" },
   "device": { "reference": "Device/example-synthetic-device" }
 }
@@ -293,7 +294,7 @@ Edition limits for CPU, RAM and data size should be checked for your specific Or
 | A4 | Sleep stage mapping: Apple "Core" = LOINC "Light sleep"; `awake` = `103210-1`; `inBed` has no verified code. The "Core vs light" equivalence is a clinical judgment, not a standard mapping. | Mislabeling stages in a clinical view. |
 | A5 | Sleep uses category `activity`, each stage as a duration-valued Observation over `effectivePeriod`. Alternatives: a single nightly Observation with components, or a `Procedure`-like model. **[UNVERIFIED]** whether a better-fitting standard modeling exists. | Determines hypnogram queries and size. |
 | A6 | `effective[x]` carries a timezone offset. HealthKit samples carry absolute times and sometimes a timezone in metadata; where absent, the offset used is the device's at ingest, which can be wrong across travel or DST. "Day" for aggregation uses patient-local time. | Daily boundaries, DST edge cases. |
-| A7 | `Observation.issued` = capture-app production time; `meta.lastUpdated` = server time. | Late-arrival detection. |
+| A7 | `Observation.issued` = capture-app production time; `meta.lastUpdated` = server time. **On every Observation, including sleep intervals** (the sleep sample printed above omitted it until M6 found the disagreement while testing the mapper against the spec). | Late-arrival detection. |
 | A8 | Data-quality flags as `meta.tag` with a custom CodeSystem. Alternatives: `Observation.interpretation`, `Observation.note`, `dataAbsentReason`. Flagged values are stored, not dropped. | How artifacts surface to clinicians. |
 | A9 | No Provenance. Source system is recorded in `Observation.meta.source` as a placeholder URI scheme (`http://blueysoft.com/fhir/capture-app/{healthkit|synthetic}`), and mapping version is not tracked. | Can't tell which mapping version produced old data; can't group by ingest batch. |
 | A10 | Cardinality: `Observation.value[x]` is always `valueQuantity` (1..1 in practice). No `component`, no `referenceRange`, no `interpretation` stored; reference bands are a UI concern. `performer` omitted (device-originated). | Search and UI don't depend on these. |

@@ -6,8 +6,8 @@
 test: test-contract test-db test-idp test-hapi test-ios test-analytics test-web
 
 # Placeholders until each project has tests (replaced milestone by milestone).
-test-contract:
-	@echo "contract: no tests yet (added in M6)"
+test-contract:  ## offline contract checks: structure, LOINC check digits, bundled copy, golden fixtures
+	@python3 contract/check.py
 # Static checks only: no containers are started.
 test-db:
 	@bash -n db/init.sh db/make-env.sh db/verify.sh scripts/make-tls.sh idp/make-env.sh scripts/isolation.sh scripts/compose.sh scripts/bootstrap.sh scripts/reset.sh && echo "db: shell syntax ok"

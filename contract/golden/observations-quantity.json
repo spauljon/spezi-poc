@@ -1,0 +1,893 @@
+{
+  "contractVersion": "1.0.0",
+  "cases": [
+    {
+      "name": "heart-rate-instant",
+      "note": "The spec's sample (fhir-data-model.md), plus meta.source.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-period",
+      "note": "start != end gives effectivePeriod.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-01-15T16:30:00Z",
+        "end": "2026-01-15T16:30:45Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T08:30:00-08:00",
+          "end": "2026-01-15T08:30:45-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-fractional-seconds",
+      "note": "A non-zero sub-second part is kept to 3 digits.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-01-15T16:30:05.250Z",
+        "end": "2026-01-15T16:30:05.250Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T08:30:05.250-08:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-decimal-value",
+      "note": "A non-integer value is kept.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72.5,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 72.5,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-no-device",
+      "note": "Without a device reference there is no device element.",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T08:30:05-08:00"
+      }
+    },
+    {
+      "name": "heart-rate-healthkit-uuid-lowercased",
+      "note": "HealthKit identity: healthkit-sample system, lowercase UUID, healthkit meta.source.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-watch",
+      "sample": {
+        "metric": "heartRate",
+        "value": 64,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "3F2504E0-4F89-11D3-9A0C-0305E82C3301"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 64,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+        "device": {
+          "reference": "Device/example-watch"
+        }
+      }
+    },
+    {
+      "name": "resting-heart-rate-day-period",
+      "note": "Resting HR over a local day: LOINC 40443-4 and a period.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "restingHeartRate",
+        "value": 58,
+        "start": "2026-01-15T08:00:00Z",
+        "end": "2026-01-16T08:00:00Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-rest-0001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-rest-0001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "40443-4",
+              "display": "Heart rate --resting"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 58,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectivePeriod": {
+          "start": "2026-01-15T00:00:00-08:00",
+          "end": "2026-01-16T00:00:00-08:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "hrv-sdnn-instant",
+      "note": "HRV SDNN: LOINC 112429-6, UCUM ms.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "hrvSdnn",
+        "value": 48.3,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-hrv-0001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-hrv-0001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "112429-6",
+              "display": "Heart rate variability SDNN [Time]"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T08:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 48.3,
+          "unit": "ms",
+          "system": "http://unitsofmeasure.org",
+          "code": "ms"
+        },
+        "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-utc-zone-is-plus-zero-not-Z",
+      "note": "A UTC sample carries +00:00, never Z.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 70,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "UTC",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T16:31:00.000+00:00",
+        "valueQuantity": {
+          "value": 70,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T16:30:05+00:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-half-hour-offset",
+      "note": "Asia/Kolkata is +05:30.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 70,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "Asia/Kolkata",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T22:01:00.000+05:30",
+        "valueQuantity": {
+          "value": 70,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-01-15T22:00:05+05:30",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-negative-half-hour-dst",
+      "note": "America/St_Johns in July is -02:30 (daylight time).",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 70,
+        "start": "2026-07-01T15:00:05Z",
+        "end": "2026-07-01T15:00:05Z",
+        "issued": "2026-07-01T15:01:00Z",
+        "timeZone": "America/St_Johns",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-07-01T12:31:00.000-02:30",
+        "valueQuantity": {
+          "value": 70,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-07-01T12:30:05-02:30",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-period-across-spring-forward",
+      "note": "Start in PST (-08:00), end in PDT (-07:00): each end has its own offset.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-03-08T09:30:00Z",
+        "end": "2026-03-08T10:30:00Z",
+        "issued": "2026-03-08T10:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-03-08T03:31:00.000-07:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectivePeriod": {
+          "start": "2026-03-08T01:30:00-08:00",
+          "end": "2026-03-08T03:30:00-07:00"
+        },
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-fall-back-first-1:30",
+      "note": "01:30 local on 2026-11-01 occurs twice; this is the first (PDT, -07:00).",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-11-01T08:30:00Z",
+        "end": "2026-11-01T08:30:00Z",
+        "issued": "2026-11-01T08:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000001"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-11-01T01:31:00.000-07:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-11-01T01:30:00-07:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "heart-rate-fall-back-second-1:30",
+      "note": "...and this is the second (PST, -08:00): same wall clock, different instant.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-synthetic-device",
+      "sample": {
+        "metric": "heartRate",
+        "value": 72,
+        "start": "2026-11-01T09:30:00Z",
+        "end": "2026-11-01T09:30:00Z",
+        "issued": "2026-11-01T09:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "synthetic",
+        "id": "syn-000002"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/synthetic"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/synthetic-sample",
+            "value": "syn-000002"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-11-01T01:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        },
+        "effectiveDateTime": "2026-11-01T01:30:00-08:00",
+        "device": {
+          "reference": "Device/example-synthetic-device"
+        }
+      }
+    }
+  ]
+}
