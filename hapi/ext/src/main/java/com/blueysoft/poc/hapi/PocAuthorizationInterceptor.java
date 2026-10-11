@@ -3,15 +3,21 @@ package com.blueysoft.poc.hapi;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
+import ca.uhn.fhir.parser.DataFormatException;
+import ca.uhn.fhir.parser.IParser;
+import ca.uhn.fhir.rest.api.EncodingEnum;
 import ca.uhn.fhir.rest.api.RequestTypeEnum;
 import ca.uhn.fhir.rest.api.RestOperationTypeEnum;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
+import ca.uhn.fhir.rest.server.RestfulServerUtils;
 import ca.uhn.fhir.rest.server.exceptions.AuthenticationException;
+import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
 import ca.uhn.fhir.rest.server.exceptions.UnclassifiedServerFailureException;
 import ca.uhn.fhir.rest.server.interceptor.auth.AuthorizationInterceptor;
 import ca.uhn.fhir.rest.server.interceptor.auth.IAuthRule;
 import ca.uhn.fhir.rest.server.interceptor.auth.PolicyEnum;
 import ca.uhn.fhir.rest.server.interceptor.auth.RuleBuilder;
+import ca.uhn.fhir.rest.server.method.ResourceParameter;
 import jakarta.annotation.Nonnull;
 import java.util.List;
 import org.hl7.fhir.r4.model.Observation;
@@ -56,11 +62,44 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 		myVerifier = theVerifier;
 	}
 
-	/** Authorization shifted left: runs before the request validator (order 0). Failures throw (401/403/503). */
+	private static final String RULES_KEY = PocAuthorizationInterceptor.class.getName() + ".rules";
+
+	/**
+	 * Authorization shifted left: runs before the request validator (order 0). Failures throw (401/403/503).
+	 *
+	 * <p>Order matters:
+	 * <ol>
+	 *   <li>Authenticate. A caller who cannot prove who they are never has a body parsed (that would be the
+	 *       validator-before-authorization problem again).</li>
+	 *   <li>Parse the body, for a transaction or batch ONLY. Their entries are authorized one by one
+	 *       ({@code andApplyNormalRules}), which needs the entries in hand; single-resource requests are authorized by
+	 *       type and operation and need no parsing here.</li>
+	 *   <li>Evaluate the rules.</li>
+	 * </ol>
+	 */
 	@Hook(value = Pointcut.SERVER_INCOMING_REQUEST_POST_PROCESSED, order = -1)
 	public boolean incomingRequestPostProcessed(@Nonnull RequestDetails theRequest) {
+		theRequest.getUserData().put(RULES_KEY, computeRules(theRequest)); // throws 401 / 503
+		RestOperationTypeEnum operation = theRequest.getRestOperationType();
+		if ((operation == RestOperationTypeEnum.TRANSACTION || operation == RestOperationTypeEnum.BATCH)
+				&& theRequest.getResource() == null) {
+			parseBody(theRequest);
+		}
 		super.incomingRequestPreHandled(theRequest, Pointcut.SERVER_INCOMING_REQUEST_POST_PROCESSED);
 		return true;
+	}
+
+	private static void parseBody(RequestDetails theRequest) {
+		EncodingEnum encoding = RestfulServerUtils.determineRequestEncodingNoDefault(theRequest);
+		IParser parser = encoding == EncodingEnum.XML
+				? theRequest.getFhirContext().newXmlParser()
+				: theRequest.getFhirContext().newJsonParser();
+		try {
+			theRequest.setResource(parser.parseResource(ResourceParameter.createRequestReader(theRequest)));
+		} catch (DataFormatException e) {
+			// Reached only after authentication, so this reveals nothing to an anonymous caller.
+			throw new InvalidRequestException("The request body could not be parsed");
+		}
 	}
 
 	/** The parent's work already ran above; running it again at PRE_HANDLED would verify the token twice. */
@@ -71,6 +110,16 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 
 	@Override
 	public List<IAuthRule> buildRuleList(RequestDetails theRequest) {
+		Object cached = theRequest.getUserData().get(RULES_KEY);
+		if (cached instanceof List<?>) {
+			@SuppressWarnings("unchecked")
+			List<IAuthRule> rules = (List<IAuthRule>) cached;
+			return rules; // already authenticated by incomingRequestPostProcessed in this request
+		}
+		return computeRules(theRequest);
+	}
+
+	private List<IAuthRule> computeRules(RequestDetails theRequest) {
 		String header = theRequest.getHeader("Authorization");
 
 		if (header == null) {
@@ -110,6 +159,11 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 				b.allow().create().resourcesOfType(type).withAnyId().andThen();
 				b.allow().read().resourcesOfType(type).withAnyId().andThen();
 			}
+			// The capture app uploads in transaction Bundles (M8). Allowing the transaction itself grants nothing more:
+			// "andApplyNormalRules" authorizes EVERY entry by the rules above, so a Bundle may only create or read
+			// Observation, Device and Patient, and one entry outside that (an update, a delete, another type) makes the
+			// whole Bundle 403.
+			b.allow().transaction().withAnyOperation().andApplyNormalRules().andThen();
 			any = true;
 		}
 		if (theRoles.contains(ROLE_CLINICIAN) || theRoles.contains(ROLE_WORKER)) {

@@ -80,13 +80,13 @@ Nothing calls either: no class, template or script in the image references them,
 
 | Role (token `roles` claim) | Allowed | Everything else |
 |---|---|---|
-| `capture-writer` | create and read (search) `Observation`, `Device`, `Patient` | 403: update, delete, other types, `$lastn`, transactions |
+| `capture-writer` | create and read (search) `Observation`, `Device`, `Patient`; **transaction Bundles whose every entry is one of those** (M8) | 403: update, delete, other types, `$lastn`; a Bundle containing even one disallowed entry is refused as a whole |
 | `clinician-reader`, `worker-reader` | read and search every type; `Observation/$lastn`; metadata | 403: any write, any transaction, admin operations |
 | any other or no role | metadata only | 403 |
 
 ### Assumptions to review
 
-- **Transactions are refused for every role.** If the iOS upload sends a transaction or batch Bundle (decide in the upload milestone), a rule is added then. Note for that milestone: a Bundle entry needs `fullUrl` when its resource holds relative references, or the request validator answers 422.
+- **Transactions** are allowed for `capture-writer` only (M8), with `andApplyNormalRules`: each entry is authorized by the create/read rules, so a Bundle can carry nothing the role could not do one request at a time. A Bundle entry needs `fullUrl` when its resource holds relative references, or the request validator answers 422. `clinician-reader` and `worker-reader` still get 403.
 - **`SearchNarrowingInterceptor` is not used.** There is one patient; narrowing reads on a claim would add a moving part with nothing to narrow. Revisit when a second patient exists: the token would carry a patient-compartment claim.
 - **Roles come from a flat `roles` claim** that the realm's client mappers add (idp/realm/poc-realm.json); `realm_access` is deliberately not read. A role outside the three grants nothing.
 - **Request bodies are not parsed before the rules run** (unlike the VA service, whose compartment rules need the resource). Our rules are by resource type and operation, which HAPI evaluates from the request; creates are re-checked per resource at the storage hooks. The matrix proves creates of other types and all transactions are 403 and that updates/deletes are 403.

@@ -112,7 +112,8 @@ def observation(patient_id):
 def txn_entry(patient_id):
     """A well-formed transaction entry (R4 needs fullUrl when the resource has relative references), so a 403 below
     can only come from authorization, not from validation."""
-    return {"fullUrl": "urn:uuid:11111111-2222-4333-8444-555555555555", "request": {"method": "POST", "url": "Observation"},
+    return {"fullUrl": "urn:uuid:11111111-2222-4333-8444-555555555555",
+            "request": {"method": "POST", "url": "Observation", "ifNoneExist": "identifier=%s|%s" % (OBS_SYSTEM, OBS_VALUE)},
             "resource": observation(patient_id)}
 
 
@@ -221,8 +222,28 @@ def cmd_check():
     expect("create a type outside Observation/Device/Patient is refused", st, 403)
     st, _ = call("GET", BASE + "/Encounter", cap)
     expect("read a type outside Observation/Device/Patient is refused", st, 403)
+    # M8: the capture role may upload in transaction Bundles, but every entry is still held to the create/read rules.
     st, _ = call("POST", BASE + "", cap, {"resourceType": "Bundle", "type": "transaction", "entry": [txn_entry(pid)]})
-    expect("transaction bundle is refused (no transaction rule yet; the upload milestone decides)", st, 403)
+    expect("a transaction of creates of allowed types is accepted (conditional create matches or creates)", st, 200)
+    with_outside_type = {"resourceType": "Bundle", "type": "transaction", "entry": [
+        txn_entry(pid),
+        {"fullUrl": "urn:uuid:22222222-3333-4444-8555-666666666666", "request": {"method": "POST", "url": "Encounter"},
+         "resource": {"resourceType": "Encounter", "status": "finished", "class": {"code": "AMB"}}}]}
+    st, _ = call("POST", BASE + "", cap, with_outside_type)
+    expect("a transaction that includes ONE create of a type outside the allowed three is refused as a whole", st, 403)
+    with_update = {"resourceType": "Bundle", "type": "transaction", "entry": [
+        txn_entry(pid),
+        {"fullUrl": "urn:uuid:33333333-4444-4555-8666-777777777777", "request": {"method": "PUT", "url": "Patient/" + pid},
+         "resource": dict(patient_resource(), id=pid)}]}
+    st, _ = call("POST", BASE + "", cap, with_update)
+    expect("a transaction that includes an update is refused as a whole", st, 403)
+    with_delete = {"resourceType": "Bundle", "type": "transaction", "entry": [
+        txn_entry(pid), {"request": {"method": "DELETE", "url": "Patient/" + pid}}]}
+    st, _ = call("POST", BASE + "", cap, with_delete)
+    expect("a transaction that includes a delete is refused as a whole", st, 403)
+    # nothing from the refused Bundles was applied: the Patient still exists unchanged
+    st, text = call("GET", BASE + "/Patient/" + pid, cap)
+    expect("a refused Bundle applied nothing (the Patient is still there)", st, 200)
 
     for who, tok in (("clinician-reader", cli), ("worker-reader", wrk)):
         print("== %s: read-only" % who)
