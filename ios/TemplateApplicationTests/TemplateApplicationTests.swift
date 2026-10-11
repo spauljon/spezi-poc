@@ -18,7 +18,8 @@ struct ServerConfigurationTests {
             ServerConfiguration.Key.fhirBaseURL: "https://fhir.example.test:8443/fhir",
             ServerConfiguration.Key.issuerURL: "https://idp.example.test:8444/realms/poc",
             ServerConfiguration.Key.clientID: "ios-capture",
-            ServerConfiguration.Key.redirectScheme: "com.example.poc"
+            ServerConfiguration.Key.redirectScheme: "com.example.poc",
+        ServerConfiguration.Key.patientIdentifier: "poc-test"
         ]
     }
     

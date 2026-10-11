@@ -34,7 +34,8 @@ private func configuration(issuer: String = issuer) throws -> ServerConfiguratio
         ServerConfiguration.Key.fhirBaseURL: "https://fhir.example.test:8443/fhir",
         ServerConfiguration.Key.issuerURL: issuer,
         ServerConfiguration.Key.clientID: "ios-capture",
-        ServerConfiguration.Key.redirectScheme: "com.example.poc"
+        ServerConfiguration.Key.redirectScheme: "com.example.poc",
+        ServerConfiguration.Key.patientIdentifier: "poc-test"
     ])
 }
 

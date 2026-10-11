@@ -10,6 +10,8 @@ POC_FHIR_BASE_URL = https:/$()/$(POC_HOST):8443/fhir
 POC_ISSUER_URL = https:/$()/$(POC_HOST):8444/realms/poc
 POC_CLIENT_ID = ios-capture
 POC_REDIRECT_SCHEME = com.blueysoft.spezipoc
+// The capture patient's business identifier (value only; the system comes from contract/metrics.json). Synthetic.
+POC_PATIENT_IDENTIFIER = poc-0001
 
 // Optional per-developer overrides (same keys as above); the file is not committed.
 #include? "Local.xcconfig"

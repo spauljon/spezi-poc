@@ -326,6 +326,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Goal:** Synthetic samples reach HAPI as FHIR Observations over TLS with authentication, surviving offline periods and resends without duplicates.
 
+**Status (2026-10-11):** built and verified; **awaiting your review** (not committed). SQLite queue, transaction Bundles of conditional creates (Device + Observations), Patient resolution, retry with backoff, bisect-and-quarantine for refused samples, sync status section on Home, and the HAPI capture-role `transaction` rule (matrix and mutation checks in `hapi/auth.py`). Contract 1.1.0 adds the patient identifier system. 106 unit tests and 3 UI tests pass; `make test-ios-integration` uploads 64 synthetic samples to the live stack and checks the server's own count, a byte-for-byte resend (0 created, 64 already present), and a 3-request outage whose backlog arrives once. Mutation: breaking `ifNoneExist` failed the integration test (and exposed that the unit test was too weak, now strengthened). Assumptions A24 to A29 in [ios/README.md](../ios/README.md). Stray data: the mutation run left synthetic Observations in 2001-2015 windows (no role can delete; `make stack-reset` clears).
+
 **Depends on:** Milestones 4, 7.
 
 **Tasks:**

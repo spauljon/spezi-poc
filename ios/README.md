@@ -101,6 +101,48 @@ Not done here (by design): flagging artifacts as data-quality tags and the plaus
 the generator only records ground truth), persistence and upload (M8), and any claim about performance for very large
 windows (the 5 s cadence for a day is quick; 14 days at the dense 1 s preset was not measured).
 
+## Local queue and upload (M8)
+
+`Sync/` turns what a source emits into FHIR on the server, without losing or duplicating anything.
+
+| Piece | What it does |
+|---|---|
+| `SampleQueue` | SQLite file (system library, no package) in Application Support. Stores the sample in the app's own terms, not FHIR, keyed by `source|sample id`; states pending / sent / rejected / skipped; attempts and next-attempt time per item. Survives a kill or restart. |
+| `BundleBuilder` | One `transaction` Bundle per batch (default 100): the emitting `Device` first, then the `Observation`s, every entry a **conditional create** (`request.ifNoneExist = identifier=<system>|<value>`, FHIR-token- and URL-escaped). Deterministic `urn:uuid:` fullUrls, so a resend is byte-identical. A Device entry is sent only if an Observation uses it. |
+| `SyncEngine` | Resolves the Patient (search by identifier, conditional create if absent), then drains. Failure handling below. |
+| `SyncModel` / `SyncSection` | Debounced trigger on new samples, on connectivity returning (`NWPathMonitor`), when a backoff comes due, and on "Sync now"; shows source, state, last sync, queued/uploaded/rejected/skipped, duplicates dropped, last error; "Pause upload" emulates offline. |
+
+Failure handling (all in `SyncEngine`, tested with a fake server):
+
+| Response | Behavior |
+|---|---|
+| network error, 408, 429, 5xx, or a 2xx whose response does not account for every entry | keep the data; exponential backoff (5 s base, 15 min cap, ±20 % jitter) |
+| 401 | one more try with a freshly obtained token, then "sign in required" |
+| 403 | blocked, data kept (retrying cannot help; a role or rule must change) |
+| other 4xx on a batch | bisect until the one refused sample is isolated, quarantine it as rejected with the server's reason; the rest upload |
+| `inBed` (unmapped in contract v1) | counted as "not uploaded", never sent |
+
+The server side: the capture role gained `transaction` with `andApplyNormalRules` (each entry authorized by the
+create/read rules, so one disallowed entry refuses the whole Bundle); see `hapi/README.md`.
+
+### Assumptions made in M8 (review these)
+
+- **A24 Identity is the identifier.** Duplicates are recognised by `Observation.identifier` (source system + sample
+  id), locally (queue key) and on the server (`ifNoneExist`). Two different samples must never share an id; HealthKit
+  UUIDs and the generator's keyed ids satisfy that.
+- **A25 Transaction, not batch.** A Bundle is all-or-nothing, so a refused sample needs bisection (log2 n extra
+  requests) rather than per-entry outcomes. A `batch` would report per entry but is not atomic.
+- **A26 One patient.** The Patient is found by `systems.identifier.patient|POC_PATIENT_IDENTIFIER` and cached for the
+  process lifetime; more than one match blocks upload.
+- **A27 Retry ceiling.** Items are retried indefinitely (offline capture must not drop data); the token's 10-minute
+  life is handled by refresh at use time, not by the queue.
+- **A28 Server-side search caching.** HAPI reuses identical search results for 60 s by default; the integration test
+  sends `Cache-Control: no-cache` on its counts, otherwise "nothing there yet" is returned again after an upload.
+- **A29 "Airplane mode" on the simulator.** Not available; the engine is tested with failing transports (unit and
+  against the live server) and the app has "Pause upload". Real airplane mode on a device belongs to M17.
+- Contract bumped to **1.1.0** (adds `systems.identifier.patient`); it is a minor change, the app still supports
+  major 1.
+
 ## Sign in (M5b)
 
 | Piece | What it does |
@@ -142,13 +184,14 @@ accessibility.
 
 ## Configuration (nothing environment-specific in Swift source)
 
-The app reads four settings from its Info.plist, which Xcode fills from build settings:
+The app reads five settings from its Info.plist, which Xcode fills from build settings:
 
 | Setting | Default (`Config/Defaults.xcconfig`) |
 |---|---|
 | `POC_FHIR_BASE_URL` | `https://macpro16.local:8443/fhir` |
 | `POC_ISSUER_URL` | `https://macpro16.local:8444/realms/poc` |
 | `POC_CLIENT_ID` | `ios-capture` (a public client: no secret exists) |
+| `POC_PATIENT_IDENTIFIER` | `poc-0001` (synthetic business identifier of the capture patient; its system is `systems.identifier.patient` in the contract) |
 | `POC_REDIRECT_SCHEME` | `com.blueysoft.spezipoc` (redirect URI `com.blueysoft.spezipoc:/oauth2redirect`, registered in the realm) |
 
 To override for your setup copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` (git-ignored). **No

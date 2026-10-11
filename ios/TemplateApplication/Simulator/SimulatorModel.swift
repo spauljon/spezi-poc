@@ -46,6 +46,9 @@ final class SimulatorModel {
     /// Start the virtual clock this many days in the past (history), or 0 for now.
     var startDaysAgo = 0
     
+    /// Where emitted samples go (the upload queue). `nil` in previews and tests that do not care.
+    @ObservationIgnored var onEmit: (@MainActor (IngestedSample, DeviceDescriptor) -> Void)?
+    
     private(set) var isRunning = false
     private(set) var counts = Counts()
     private(set) var recent: [Recent] = []
@@ -81,10 +84,12 @@ final class SimulatorModel {
         let origin = nowProvider().addingTimeInterval(-Double(startDaysAgo) * 86_400)
         let source = SyntheticIngestSource(config: config, virtualStart: origin, speed: speed, clock: clock)
         let formatter = Self.formatter(for: config.timeZone)
+        let device = source.device
         task = Task { [weak self] in
             for await ingested in source.stream() {
                 guard let self else { return }
                 self.record(ingested, formatter: formatter)
+                self.onEmit?(ingested, device)
             }
         }
     }

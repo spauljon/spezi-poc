@@ -10,7 +10,7 @@ import Foundation
 
 
 /// The metrics that carry a single numeric value. Sleep is separate: its value is derived from the interval.
-enum MetricID: String, CaseIterable, Sendable {
+enum MetricID: String, CaseIterable, Codable, Sendable {
     case heartRate
     case restingHeartRate
     case hrvSdnn
@@ -18,7 +18,7 @@ enum MetricID: String, CaseIterable, Sendable {
 
 
 /// HealthKit's `HKCategoryValueSleepAnalysis` values, by name.
-enum SleepStage: String, CaseIterable, Sendable {
+enum SleepStage: String, CaseIterable, Codable, Sendable {
     case asleepCore
     case asleepDeep
     case asleepREM
@@ -29,14 +29,14 @@ enum SleepStage: String, CaseIterable, Sendable {
 }
 
 
-enum SampleSource: String, Sendable {
+enum SampleSource: String, Codable, Sendable {
     case synthetic
     case healthKit
 }
 
 
 /// What produced a sample, enough to key and describe a `Device`.
-enum DeviceDescriptor: Equatable, Sendable {
+enum DeviceDescriptor: Hashable, Codable, Sendable {
     case synthetic
     case healthKit(name: String?, manufacturer: String?, model: String?, hardwareVersion: String?, softwareVersion: String?)
 }
@@ -44,8 +44,8 @@ enum DeviceDescriptor: Equatable, Sendable {
 
 /// One measurement in the app's own terms: what both the synthetic source and HealthKit will produce, so everything
 /// downstream (mapping, queue, upload) is the same for both. No FHIR, no HealthKit types.
-struct MetricSample: Equatable, Sendable {
-    enum Measurement: Equatable, Sendable {
+struct MetricSample: Equatable, Codable, Sendable {
+    enum Measurement: Equatable, Codable, Sendable {
         case quantity(MetricID, Double)
         case sleep(SleepStage)
     }

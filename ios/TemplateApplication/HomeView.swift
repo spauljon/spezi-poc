@@ -71,6 +71,8 @@ struct HomeView: View {
                         }
                     }
                 }
+                
+                SyncSection()
             }
             .navigationTitle("Capture")
             .task {
@@ -145,4 +147,5 @@ struct HomeView: View {
     HomeView()
         .environment(AuthService(client: AppAuthClient(), store: InMemoryTokenStore()))
         .environment(SimulatorModel())
+        .environment(SyncModel(queue: try! SampleQueue(path: nil), engine: nil, monitorNetwork: false))
 }

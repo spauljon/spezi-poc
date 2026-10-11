@@ -38,6 +38,7 @@ struct ServerConfiguration: Equatable, Sendable {
         static let issuerURL = "POCIssuerURL"
         static let clientID = "POCClientID"
         static let redirectScheme = "POCRedirectScheme"
+        static let patientIdentifier = "POCPatientIdentifier"
     }
     
     /// The FHIR base, for example `https://macpro16.local:8443/fhir`.
@@ -47,6 +48,8 @@ struct ServerConfiguration: Equatable, Sendable {
     let clientID: String
     /// The custom URL scheme of the redirect URI.
     let redirectScheme: String
+    /// The business identifier value of the capture patient (system: `systems.identifier.patient` in the contract).
+    let patientIdentifier: String
     
     /// The redirect URI registered for this client in the realm (`<scheme>:/oauth2redirect`).
     var redirectURI: URL {
@@ -60,6 +63,7 @@ struct ServerConfiguration: Equatable, Sendable {
         issuerURL = try Self.httpsURL(info, Key.issuerURL)
         clientID = try Self.string(info, Key.clientID)
         redirectScheme = try Self.string(info, Key.redirectScheme)
+        patientIdentifier = try Self.string(info, Key.patientIdentifier)
         guard redirectScheme.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*$"#, options: .regularExpression) != nil else {
             throw .invalid(Key.redirectScheme)
         }

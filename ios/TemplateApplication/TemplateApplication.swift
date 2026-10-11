@@ -14,9 +14,20 @@ import SwiftUI
 struct TemplateApplication: App {
     @UIApplicationDelegateAdaptor(TemplateApplicationDelegate.self) var appDelegate
     @AppStorage(StorageKeys.onboardingFlowComplete) var completedOnboardingFlow = false
-    @State private var auth = AuthService.live()
-    @State private var simulator = SimulatorModel()
+    @State private var auth: AuthService
+    @State private var simulator: SimulatorModel
+    @State private var sync: SyncModel
     
+    
+    init() {
+        let auth = AuthService.live()
+        let simulator = SimulatorModel()
+        let sync = SyncModel.live(auth: auth)
+        simulator.onEmit = { ingested, device in sync.enqueue(ingested, device: device) }
+        _auth = State(initialValue: auth)
+        _simulator = State(initialValue: simulator)
+        _sync = State(initialValue: sync)
+    }
     
     var body: some Scene {
         WindowGroup {
@@ -32,6 +43,7 @@ struct TemplateApplication: App {
             }
             .environment(auth)
             .environment(simulator)
+            .environment(sync)
             .testingSetup()
             .spezi(appDelegate)
         }

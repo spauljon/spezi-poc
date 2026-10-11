@@ -26,6 +26,8 @@
 	<false/>
 	<key>POCClientID</key>
 	<string>$(POC_CLIENT_ID)</string>
+	<key>POCPatientIdentifier</key>
+	<string>$(POC_PATIENT_IDENTIFIER)</string>
 	<key>POCFHIRBaseURL</key>
 	<string>$(POC_FHIR_BASE_URL)</string>
 	<key>POCIssuerURL</key>
