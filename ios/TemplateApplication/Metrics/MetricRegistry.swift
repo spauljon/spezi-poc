@@ -48,6 +48,7 @@ struct MetricRegistry: Sendable {
     
     struct Systems: Decodable, Equatable, Sendable {
         struct Identifier: Decodable, Equatable, Sendable {
+            let patient: String
             let synthetic: String
             let healthKit: String
             let deviceKey: String

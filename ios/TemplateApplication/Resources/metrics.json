@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.0.0",
+  "contractVersion": "1.1.0",
   "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
   "fhirVersion": "4.0.1",
   "verification": {
@@ -15,6 +15,7 @@
     "ucum": "http://unitsofmeasure.org",
     "observationCategory": "http://terminology.hl7.org/CodeSystem/observation-category",
     "identifier": {
+      "patient": "http://blueysoft.com/fhir/identifier/poc-patient",
       "synthetic": "http://blueysoft.com/fhir/identifier/synthetic-sample",
       "healthKit": "http://blueysoft.com/fhir/identifier/healthkit-sample",
       "deviceKey": "http://blueysoft.com/fhir/identifier/device-key"
