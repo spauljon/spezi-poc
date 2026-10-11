@@ -3,6 +3,9 @@
 #
 #   scripts/ios-test.sh          unit tests (Swift Testing), fast
 #   scripts/ios-test.sh --ui     unit tests and the UI tests (launches the app in the simulator)
+#   scripts/ios-test.sh --integration
+#                                unit tests plus the upload test against the live POC stack (needs `make stack-up`,
+#                                the CA trusted in the simulator, and idp/.env.local; skipped otherwise)
 #
 # Simulator: $POC_IOS_SIMULATOR (a name or UDID), else the first available iPhone.
 # Derived data goes to a temp dir, never into the repo. Exits non-zero on any failure.
@@ -10,7 +13,9 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ui=false
+integration=false
 [ "${1:-}" = "--ui" ] && ui=true
+[ "${1:-}" = "--integration" ] && integration=true
 
 if [ "$(uname -s)" != "Darwin" ] || ! command -v xcodebuild > /dev/null 2>&1; then
   echo "ios: SKIPPED (needs macOS with Xcode; this host has neither)" >&2
@@ -40,7 +45,7 @@ cd "$root/ios"
 # The sign-in UI test types the synthetic capture user's password into Keycloak's login page. It comes from the
 # git-ignored idp/.env.local and reaches the test runner only as an environment variable (xcodebuild forwards
 # TEST_RUNNER_-prefixed ones); it is never printed or put on a command line. Without it that test is skipped.
-if $ui && [ -f "$root/idp/.env.local" ]; then
+if { $ui || $integration; } && [ -f "$root/idp/.env.local" ]; then
   pw=$(grep '^POC_CAPTURE_USER_PASSWORD=' "$root/idp/.env.local" | cut -d= -f2- || true)
   [ -n "$pw" ] && export TEST_RUNNER_POC_CAPTURE_PASSWORD="$pw"
   unset pw
