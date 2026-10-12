@@ -15,5 +15,8 @@
   },
   "dependencies": {
     "oracledb": "26.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

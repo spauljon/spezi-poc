@@ -11,6 +11,7 @@ ca="${POC_TLS_DIR:-$HOME/.poc-ca}/ca.crt"
 [ -f "$ca" ] || { echo "web: CA certificate not found at $ca" >&2; exit 1; }
 export POC_CLINICIAN_USER_PASSWORD="$pw" NODE_EXTRA_CA_CERTS="$ca" POC_WEB_LIVE=1
 unset pw
+"$root/scripts/check-node.sh"
 cd "$root/web"
 [ -d node_modules ] || npm ci --silent
 exec npx vitest run test/live.test.ts

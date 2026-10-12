@@ -1,6 +1,6 @@
 # Analytics worker and API
 
-Node.js and TypeScript. Aggregation worker and analytic API over Oracle 26ai. M9 built the worker and the store;
+Node.js (version pinned in the root `.nvmrc`; `nvm use`) and TypeScript. Aggregation worker and analytic API over Oracle 26ai. M9 built the worker and the store;
 the API arrives in M10/M11. Planned in [docs/implementation-plan.md](../docs/implementation-plan.md).
 
 ## What M9 does

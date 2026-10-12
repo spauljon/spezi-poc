@@ -15,4 +15,5 @@ export ANALYTICS_DB_USER ANALYTICS_DB_PASSWORD POC_WORKER_CLIENT_SECRET
 ca="${POC_TLS_DIR:-$HOME/.poc-ca}/ca.crt"
 [ -f "$ca" ] || { echo "analytics: CA certificate not found at $ca" >&2; return 1; }
 export NODE_EXTRA_CA_CERTS="$ca"
+"$root/scripts/check-node.sh" || return 1
 [ -d "$root/analytics/node_modules" ] || { echo "analytics: run 'npm ci' in analytics/ first" >&2; return 1; }

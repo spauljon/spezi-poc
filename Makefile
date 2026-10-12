@@ -31,7 +31,7 @@ test-ios-ui:
 test-ios-integration:  ## upload to the live POC stack (synthetic data); needs the stack up and the CA trusted in the simulator
 	@./scripts/ios-test.sh --integration
 test-analytics:  ## worker unit and contract tests (Node); `make test-analytics-live` needs the stack
-	@cd analytics && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
+	@./scripts/check-node.sh && cd analytics && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
 test-analytics-live:  ## rollups against the live stack: HAPI + Keycloak + Oracle (synthetic data)
 	@./analytics/live-test.sh
 analytics-migrate:  ## create the analytic store tables (idempotent)
@@ -41,11 +41,11 @@ analytics-run:  ## one worker cycle on the host
 analytics-api:  ## the analytic API on https://127.0.0.1:8445 (loopback, TLS, clinician token); Ctrl-C to stop
 	@./analytics/run.sh api
 test-web:  ## clinician web app: typecheck + unit and component tests (Node; no stack needed)
-	@cd web && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
+	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
 test-web-live:  ## read-only banner data path against the live stack (HAPI + Keycloak)
 	@./web/live-test.sh
 web-dev:  ## the web app's dev server: https://macpro16.local:3000 (TLS, all interfaces); Ctrl-C stops
-	@cd web && { [ -d node_modules ] || npm ci --silent; } && npm run dev
+	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm run dev
 
 guard:          ## scan staged files
 	@./scripts/guard.sh
