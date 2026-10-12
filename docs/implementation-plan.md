@@ -408,10 +408,12 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 **Tasks:**
 1. Scaffold the repo and typed FHIR client.
 2. Sign in with Keycloak (authorization code + PKCE) as the synthetic clinician; token handling and refresh.
-3. Banner: `Observation/$lastn`, staleness, source kinds.
+3. Banner: latest value per metric, last data received, staleness, source kinds (`Observation/$lastn` was found unusable on this HAPI, see the status).
 4. Error and empty states.
 
 **Verify:** banner reflects latest synthetic data; stopping the synthetic source makes staleness appear.
+
+**Status (2026-10-12):** built and verified except an interactive sign-in; **awaiting your review** (not committed). Decisions taken with you: the standard package set (react, react-dom, oidc-client-ts; typescript, vite, @vitejs/plugin-react, vitest, jsdom, @testing-library/react and the type packages) and a web dev server on all interfaces :3000 with TLS (no hosts entry). The dev server serves `web/` and `contract/` only and relays `/fhir` and `/analytics`. 51 tests pass (banner model with the staleness boundary, client error mapping, loader, auth settings and callback flow, component states, contract tests); `make test-web-live` checks the banner against the live HAPI independently (every Observation of each metric read and the newest taken in the test; last-received compared to the newest receipt) and that staleness follows the clock. Checked with curl against the running server: TLS verified by the POC CA, `/fhir` 401 without a token and 200 with one, POST 405, `/analytics` 401/200/400 through the relay, `/@fs` of `idp/.env.local` and `db/.env.local` refused (403) with `contract/metrics.json` served as the control, Keycloak's preflight and discovery send the registered origin. **Finding:** `$lastn` returns unrelated, unordered Observations on this HAPI (ignores `code` and `max`), so the banner uses sorted searches. Not verified: the interactive Keycloak login (a person types the password; the built-in browser pane also refused the origin). Assumptions W1 to W7 in [web/README.md](../web/README.md).
 
 ---
 
