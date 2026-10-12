@@ -1,0 +1,19 @@
+{
+  "name": "poc-analytics",
+  "private": true,
+  "type": "module",
+  "description": "POC analytics worker: daily rollups from HAPI into Oracle (M9). Synthetic data only.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && node --import tsx --test test/*.test.ts",
+    "worker": "node --import tsx src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.9",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "oracledb": "26.0.0"
+  }
+}

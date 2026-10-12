@@ -1,0 +1,1 @@
+{ "contractVersion": "2.0.0", "systems": { "loinc": "http://loinc.org", "ucum": "http://unitsofmeasure.org" }, "metrics": [] }

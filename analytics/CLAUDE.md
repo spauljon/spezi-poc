@@ -2,9 +2,13 @@
 
 Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR rules). The data rules apply here without exception: synthetic data only in fixtures, tests and logs.
 
-- Stack: Node.js (latest) and TypeScript. Aggregation worker and analytic API over Oracle 26ai.
+- Stack: Node.js and TypeScript (ESM, `strict`), `tsx` to run, Node's built-in test runner, `oracledb` in thin mode. Packages are pinned exactly and were approved for M9; adding any other needs approval.
+- The worker reads HAPI only through the FHIR API (never `FHIRPDB`) and connects to `ANALYTICSPDB` as the `analytics` application user (DML only). Tables are created by `db-migrate.sh` as the no-login owner; the worker never gets DDL rights.
+- Codes, units and categories come from `contract/metrics.json` (read at start-up), never hand-copied; `test/contract.test.ts` fails on a literal in `src/`.
+- The rollup day is the UTC date of the instant (A6, decided in M9). Do not reintroduce a local-day or timezone key without a decision.
+- Every write path is idempotent and every state change that must be atomic is one transaction. A negative test needs a positive control.
+- Credentials are environment variables sourced from the git-ignored env files by `env.sh`; never print them, never put them on a command line, never include them in an error message.
+- Search requests send `Cache-Control: no-cache` (HAPI's 60 s result reuse otherwise serves stale counts).
+- Tests: `make test-analytics` (no stack); `make test-analytics-live` (needs the stack, schema and seeded patient; leaves Observations in HAPI, cleans its own rollup rows).
 - Milestones: M9-M11
-- Contract: codes, units and categories come from `contract/metrics.json` (added in M6), never hand-copied.
 - Commit prefix: `analytics:`
-
-Stack-specific rules (versions, test commands) are added when this project's first milestone runs.

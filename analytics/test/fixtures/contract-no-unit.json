@@ -1,0 +1,2 @@
+{ "contractVersion": "1.1.0", "systems": { "loinc": "http://loinc.org", "ucum": "http://unitsofmeasure.org" },
+  "metrics": [ { "id": "x", "kind": "quantity", "loinc": { "code": "1-1" } } ] }

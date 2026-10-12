@@ -350,14 +350,16 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 **Depends on:** Milestones 1 (analytics PDB), 4, 8.
 
 **Tasks:**
-1. Schema for daily rollups (key: patient, metric code, local day, timezone).
+1. Schema for daily rollups (key: patient, metric, UTC day; the timezone column was dropped when A6 was decided as UTC).
 2. Node/TypeScript worker: obtain tokens with the client-credentials grant (refresh before expiry), then poll `Observation?_lastUpdated=gt{watermark}`, record touched windows.
 3. Recompute touched windows with idempotent upsert; persist the watermark.
-4. Day definition per A6 (patient-local day); DST-aware.
+4. Day definition per A6: **UTC calendar day of the instant** (decided at M9 start; DST-independent).
 5. Tests with synthetic late, duplicate and out-of-order data.
 6. Contract test: the worker's metric list and codes match `contract/metrics.json`.
 
 **Verify:** run twice and rows are identical; a late Tuesday sample delivered Thursday changes only Tuesday's row.
+
+**Status (2026-10-12):** built and verified; **awaiting your review** (not committed). Schema (`daily_rollup`, `rollup_touched`, `rollup_watermark`) applied as the owner by `analytics/db-migrate.sh`; worker, Oracle and in-memory stores, client-credentials auth with renewal, paging with same-server link check; run on the host (`make analytics-run`). 31 unit/contract tests pass; `make test-analytics-live` passes end to end (3 samples across a UTC midnight, rerun identical with revisions unchanged, late sample changes only its own day, duplicate resend is a no-op, worker token refused for writes). Three mutations (day from written offset, revision bumped on no change, no `Cache-Control`) each fail tests. The real worker against the stack: first cycle 12 windows changed, second 0. Decisions A6 (UTC) and A30 to A36 in [analytics/README.md](../analytics/README.md). Packages installed with your approval: typescript, tsx, @types/node (dev), oracledb.
 
 ---
 
