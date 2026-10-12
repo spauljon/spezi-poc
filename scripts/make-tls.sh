@@ -9,6 +9,7 @@
 #   ~/.poc-ca/idp/edge.{key,crt}      the IdP proxy's key and certificate (PEM, for nginx)
 #   ~/.poc-ca/idp/keycloak.{key,crt,p12}  Keycloak's own key and certificate; the p12 is mounted into Keycloak
 #   ~/.poc-ca/analytics/api.{key,crt}     the analytic API's key and certificate (PEM; a host process reads them)
+#   ~/.poc-ca/web/web.{key,crt}           the clinician web app's dev server key and certificate (PEM; M12)
 #
 # Every service gets its OWN key (none is shared); all are signed by the one name-constrained CA.
 #
@@ -32,10 +33,10 @@ IDP_ENV_FILE="${POC_IDP_ENV_FILE:-$ROOT/idp/.env.local}"
 [ -f "$IDP_ENV_FILE" ] || { echo "idp/.env.local is missing; run 'make stack-env' first" >&2; exit 1; }
 
 umask 077
-mkdir -p "$TLS_DIR/hapi" "$TLS_DIR/idp" "$TLS_DIR/analytics"
+mkdir -p "$TLS_DIR/hapi" "$TLS_DIR/idp" "$TLS_DIR/analytics" "$TLS_DIR/web"
 chmod 700 "$TLS_DIR"
 chmod 755 "$TLS_DIR/hapi" "$TLS_DIR/idp"
-chmod 700 "$TLS_DIR/analytics"   # keystore directories must be traversable by the container runtime
+chmod 700 "$TLS_DIR/analytics" "$TLS_DIR/web"   # keystore directories must be traversable by the container runtime
 cd "$TLS_DIR"
 
 # --- 0. retire a CA that is not name-constrained -----------------------------------------------
@@ -161,8 +162,23 @@ else
   chmod 600 analytics/api.key; chmod 644 analytics/api.crt
 fi
 
+# --- 3d. the clinician web app's dev server leaf (M12): its own key, PEM, read by the host process ------
+mkdir -p web
+if [ -f web/web.key ] && [ -f web/web.crt ] && openssl x509 -in web/web.crt -noout -checkend $((30*86400)) > /dev/null; then
+  echo "Web dev server certificate is current ($(openssl x509 -in web/web.crt -noout -enddate))."
+else
+  echo "Creating the web dev server certificate for ${HOST} ..."
+  printf '[v3_leaf]\nbasicConstraints = critical,CA:FALSE\nkeyUsage = critical,digitalSignature\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:%s\nsubjectKeyIdentifier = hash\nauthorityKeyIdentifier = keyid\n' "$HOST" > web/web.cnf
+  openssl ecparam -name prime256v1 -genkey -noout -out web/web.key
+  openssl req -new -key web/web.key -subj "/CN=${HOST}" -out web/web.csr
+  openssl x509 -req -in web/web.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -days 365 -sha256 -extfile web/web.cnf -extensions v3_leaf -out web/web.crt > /dev/null 2>&1
+  rm -f web/web.cnf web/web.csr ca.srl
+  chmod 600 web/web.key; chmod 644 web/web.crt
+fi
+
 # --- 4. self-test: the chain is valid AND the name constraint is actually enforced ---------------
-for c in server.crt idp/edge.crt idp/keycloak.crt analytics/api.crt; do
+for c in server.crt idp/edge.crt idp/keycloak.crt analytics/api.crt web/web.crt; do
   openssl verify -CAfile ca.crt "$c" > /dev/null || { echo "self-test FAILED: $c does not verify against ca.crt" >&2; exit 1; }
 done
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT

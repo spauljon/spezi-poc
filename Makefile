@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run analytics-api test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run analytics-api web-dev test-web-live test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -40,8 +40,12 @@ analytics-run:  ## one worker cycle on the host
 	@./analytics/run.sh once
 analytics-api:  ## the analytic API on https://127.0.0.1:8445 (loopback, TLS, clinician token); Ctrl-C to stop
 	@./analytics/run.sh api
-test-web:
-	@echo "web: no tests yet (added in M12)"
+test-web:  ## clinician web app: typecheck + unit and component tests (Node; no stack needed)
+	@cd web && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
+test-web-live:  ## read-only banner data path against the live stack (HAPI + Keycloak)
+	@./web/live-test.sh
+web-dev:  ## the web app's dev server: https://macpro16.local:3000 (TLS, all interfaces); Ctrl-C stops
+	@cd web && { [ -d node_modules ] || npm ci --silent; } && npm run dev
 
 guard:          ## scan staged files
 	@./scripts/guard.sh
