@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -30,8 +30,14 @@ test-ios-ui:
 	@./scripts/ios-test.sh --ui
 test-ios-integration:  ## upload to the live POC stack (synthetic data); needs the stack up and the CA trusted in the simulator
 	@./scripts/ios-test.sh --integration
-test-analytics:
-	@echo "analytics: no tests yet (added in M9)"
+test-analytics:  ## worker unit and contract tests (Node); `make test-analytics-live` needs the stack
+	@cd analytics && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
+test-analytics-live:  ## rollups against the live stack: HAPI + Keycloak + Oracle (synthetic data)
+	@./analytics/live-test.sh
+analytics-migrate:  ## create the analytic store tables (idempotent)
+	@./analytics/db-migrate.sh
+analytics-run:  ## one worker cycle on the host
+	@./analytics/run.sh once
 test-web:
 	@echo "web: no tests yet (added in M12)"
 
