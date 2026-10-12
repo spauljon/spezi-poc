@@ -68,6 +68,9 @@
         { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-analytics-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "poc-analytics", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
         { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
           "consentRequired": false,
           "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }
@@ -116,6 +119,9 @@
         { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-analytics-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "poc-analytics", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
         { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
           "consentRequired": false,
           "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }

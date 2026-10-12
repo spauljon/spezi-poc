@@ -158,11 +158,24 @@ def cmd_check():
         roles = as_list(c.get("roles"))
         expect(c.get("iss") == ISSUER, "%s token: iss is the public issuer" % who, "%s token: iss is %r" % (who, c.get("iss")))
         expect("hapi-fhir" in as_list(c.get("aud")), "%s token: audience includes hapi-fhir" % who, "%s token: aud is %r" % (who, c.get("aud")))
+        # the analytic API's audience goes only to the clinician's web app (and the dev-only client scripts use);
+        # the worker's token must not have it, and the clinician's must (positive control for the negative)
+        if who == "clinician":
+            expect("poc-analytics" in as_list(c.get("aud")), "clinician token: audience includes poc-analytics", "clinician token: aud is %r" % (c.get("aud"),))
+        if who == "worker":
+            expect("poc-analytics" not in as_list(c.get("aud")), "worker token: audience does NOT include poc-analytics", "worker token: aud is %r" % (c.get("aud"),))
         expect(want_role in roles, "%s token: roles claim has %s" % (who, want_role), "%s token: roles are %r" % (who, roles))
         expect(not any(r in roles for r in other_roles), "%s token: has none of the other POC roles" % who, "%s token: unexpected roles %r" % (who, roles))
         expect(c["exp"] - c["iat"] == 600, "%s token: lifetime is 600 s" % who, "%s token: lifetime is %s s" % (who, c["exp"] - c["iat"]))
         if user:
             expect(c.get("preferred_username") == user, "%s token: subject user is %s" % (who, user), "%s token: user is %r" % (who, c.get("preferred_username")))
+
+    # --- the analytic API audience is minted only for clinician-web and the dev-only client (static, from the realm
+    # file: a public client cannot get a token without a browser, so behavior cannot show ios-capture's)
+    realm = json.loads(open(os.path.join(HERE, "realm", "poc-realm.json")).read().replace("${POC_WORKER_CLIENT_SECRET}", "x"))
+    with_aud = sorted(c["clientId"] for c in realm["clients"]
+                      if any(m.get("config", {}).get("included.custom.audience") == "poc-analytics" for m in c.get("protocolMappers", [])))
+    expect(with_aud == ["clinician-web", "poc-devtest"], "poc-analytics audience is on clinician-web and poc-devtest only", "poc-analytics audience is on %r" % (with_aud,))
 
     # --- things that must be REFUSED, each for the stated reason
     status, _, body = http("POST", TOKEN_PATH, {"grant_type": "client_credentials", "client_id": "analytics-worker", "client_secret": "wrong"})

@@ -98,7 +98,7 @@ Imported from `realm/poc-realm.json` at the first start on an empty database (`-
 | `clinician-user` | `clinician-reader` |
 | `service-account-analytics-worker` | `worker-reader` |
 
-Every client's access token carries `aud` = `hapi-fhir` and a flat `roles` claim (the user's realm roles). HAPI checks both in M4.
+Every client's access token carries `aud` = `hapi-fhir` and a flat `roles` claim (the user's realm roles). HAPI checks both in M4. `clinician-web` (and the dev-only `poc-devtest`) tokens also carry `aud` = `poc-analytics`, which the analytic API requires (M11); `ios-capture` and `analytics-worker` tokens do not.
 
 | Setting | Value | Why |
 |---|---|---|
