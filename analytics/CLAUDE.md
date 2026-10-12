@@ -10,5 +10,6 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - Credentials are environment variables sourced from the git-ignored env files by `env.sh`; never print them, never put them on a command line, never include them in an error message.
 - Search requests send `Cache-Control: no-cache` (HAPI's 60 s result reuse otherwise serves stale counts).
 - Tests: `make test-analytics` (no stack); `make test-analytics-live` (needs the stack, schema and seeded patient; leaves Observations in HAPI, cleans its own rollup rows).
+- Sleep logic is pure (`src/sleep.ts`); a contract sleep stage that module does not classify must fail the test, not be miscounted.
 - Milestones: M9-M11
 - Commit prefix: `analytics:`

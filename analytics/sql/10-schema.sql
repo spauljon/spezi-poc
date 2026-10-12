@@ -53,6 +53,37 @@ begin
          constraint rollup_watermark_pk primary key (worker_name)
        )');
 
+  -- One row per sleep session (M10), grouped under the UTC date of the final waking. Several sessions can share a
+  -- date (a nap); `is_main` marks the one with the most time asleep. Instants are epoch milliseconds, durations are
+  -- minutes. A session's start can change when a late interval merges it with its neighbour, so the key includes it
+  -- and the worker replaces all rows of a (patient, night) as a set.
+  ddl('create table &owner..sleep_session (
+         patient_id          varchar2(64)  not null,
+         night               date          not null,
+         session_start_ms    number(16)    not null,
+         session_end_ms      number(16)    not null,
+         onset_ms            number(16)    not null,
+         last_asleep_end_ms  number(16)    not null,
+         latency_min         binary_double not null,
+         wake_after_end_min  binary_double not null,
+         asleep_min          binary_double not null,
+         core_min            binary_double not null,
+         deep_min            binary_double not null,
+         rem_min             binary_double not null,
+         unspecified_min     binary_double not null,
+         awake_min           binary_double not null,
+         unscored_min        binary_double not null,
+         overlap_min         binary_double not null,
+         awakenings          number(5)     not null,
+         interval_count      number(6)     not null,
+         is_main             number(1)     not null,
+         revision            number(10)    default 1 not null,
+         updated_at          timestamp(3) with time zone default systimestamp not null,
+         constraint sleep_session_pk primary key (patient_id, night, session_start_ms),
+         constraint sleep_session_night_ck check (night = trunc(night)),
+         constraint sleep_session_main_ck check (is_main in (0, 1))
+       )');
+
   dbms_output.put_line('analytics schema present in ' || upper('&owner'));
 end;
 /

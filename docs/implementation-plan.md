@@ -377,6 +377,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Verify:** known synthetic night yields the expected stage totals; reruns are stable.
 
+**Status (2026-10-12):** built and verified; **awaiting your review** (not committed). Decisions taken with you: session gaps (2 h) for grouping, night dated by the UTC date of the final waking, main sleep plus separately reported naps, awakenings at least 5 minutes. Pure logic in `analytics/src/sleep.ts`, a `sleep_session` table, and sleep windows in the existing worker. 53 tests (51 run, 2 live skipped without the stack) cover a known night with exact totals, the threshold edges, session-gap edges, overlap resolution, order independence, a late interval that bridges two sessions (one row removed), and rerun stability; `make test-analytics-live` adds a night across UTC midnight on the real stack (stable on rerun, a late stage changes only that night). Four mutations (gap boundary, overlap precedence, stale rows not deleted, awakening threshold ignored) each fail tests. Assumptions A37 to A42 in [analytics/README.md](../analytics/README.md). No contract change.
+
 ---
 
 ### Milestone 11: Analytic API [analytics/]

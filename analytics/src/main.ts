@@ -32,6 +32,7 @@ async function main(): Promise<number> {
   try {
     if (command === "status") {
       const rows = await store.rollups();
+      const sleep = await store.nights();
       const pending = await store.pendingWindows(10_000);
       const watermark = await store.getWatermark(name);
       console.log(JSON.stringify({
@@ -39,6 +40,7 @@ async function main(): Promise<number> {
         contract: contract.version,
         watermark: watermark === null ? null : new Date(watermark).toISOString(),
         rollupRows: rows.length,
+        sleepSessions: sleep.length,
         pendingWindows: pending.length,
       }));
       return 0;

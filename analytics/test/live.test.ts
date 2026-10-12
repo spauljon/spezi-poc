@@ -8,6 +8,9 @@ import type { Window } from "../src/store.ts";
 import { RollupWorker } from "../src/worker.ts";
 import { contract, heartRate } from "./support.ts";
 
+const sleepMetric = contract.sleep!;
+const codeOf = (stage: string) => [...sleepMetric.stageByCode].find(([, s]) => s === stage)![0];
+
 /**
  * End to end against the live POC stack (HAPI over TLS, Keycloak, Oracle). Skipped unless POC_ANALYTICS_LIVE=1;
  * run it with `make test-analytics-live`, which supplies the credentials from the git-ignored env files.
@@ -154,4 +157,88 @@ test("live: the worker's token is refused by HAPI for anything but reads (positi
     body: JSON.stringify({ resourceType: "Observation", status: "final", code: { text: "x" } }),
   });
   assert.equal(write.status, 403);
+});
+
+async function uploadSleep(token: string, patient: string, tag: string, stages: { key: string; stage: string; start: string; end: string }[]) {
+  const entry = stages.map((s) => {
+    const identifier = `syn-live-${tag}-sleep-${s.key}`;
+    return {
+      fullUrl: `urn:uuid:${crypto.randomUUID()}`,
+      resource: {
+        resourceType: "Observation",
+        identifier: [{ system: sampleSystem, value: identifier }],
+        status: "final",
+        category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "activity" }] }],
+        code: { coding: [{ system: contract.loincSystem, code: codeOf(s.stage) }] },
+        subject: { reference: `Patient/${patient}` },
+        effectivePeriod: { start: s.start, end: s.end },
+        issued: new Date().toISOString(),
+        valueQuantity: {
+          value: (Date.parse(s.end) - Date.parse(s.start)) / 60_000, unit: "min",
+          system: contract.ucumSystem, code: "min",
+        },
+      },
+      request: { method: "POST", url: "Observation", ifNoneExist: `identifier=${encodeURIComponent(`${sampleSystem}|${identifier}`)}` },
+    };
+  });
+  const response = await fhir(token, "", { method: "POST", body: JSON.stringify({ resourceType: "Bundle", type: "transaction", entry }) });
+  assert.equal(response.status, 200, `sleep upload failed with HTTP ${response.status}`);
+}
+
+test("live: a night across UTC midnight is summarized, stable on rerun, and a late stage changes only that night", { skip: !live && "set POC_ANALYTICS_LIVE=1" }, async (t) => {
+  const capture = await captureToken();
+  const patient = await patientId(capture);
+  const tag = randomBytes(4).toString("hex");
+  const year = 2001 + (randomBytes(1)[0]! % 15);
+  const d0 = `${year}-06-20`, d1 = `${year}-06-21`;
+  const nightWindows: Window[] = [`${year}-06-19`, d0, d1, `${year}-06-22`, `${year}-06-23`].map((day) => ({
+    patientId: patient, metricId: sleepMetric.id, day,
+  }));
+  const store = await OracleStore.connect({
+    user: required("ANALYTICS_DB_USER"), password: required("ANALYTICS_DB_PASSWORD"),
+    connectString: process.env["POC_ANALYTICS_CONNECT"] ?? "127.0.0.1:1522/ANALYTICSPDB",
+  });
+  const name = `live-sleep-${tag}`;
+  t.after(async () => {
+    await store.purge(name, nightWindows);
+    await store.close();
+  });
+  await store.recordTouched(name, [], Date.now() - 5 * 60_000);
+  const credentials = new ClientCredentials(issuer, "analytics-worker", required("POC_WORKER_CLIENT_SECRET"));
+  const worker = new RollupWorker({ name, contract, store, fhir: new HapiClient(fhirBase, () => credentials.token()) });
+
+  // 22:30 on d0 to 06:30 on d1, UTC; 30 awake before onset, 8 h of stages with one 6-minute awakening
+  await uploadSleep(capture, patient, tag, [
+    { key: "1", stage: "awake", start: `${d0}T22:30:00Z`, end: `${d0}T23:00:00Z` },
+    { key: "2", stage: "asleepCore", start: `${d0}T23:00:00Z`, end: `${d1}T01:00:00Z` },
+    { key: "3", stage: "asleepDeep", start: `${d1}T01:00:00Z`, end: `${d1}T02:00:00Z` },
+    { key: "4", stage: "awake", start: `${d1}T02:00:00Z`, end: `${d1}T02:06:00Z` },
+    { key: "5", stage: "asleepREM", start: `${d1}T02:06:00Z`, end: `${d1}T05:00:00Z` },
+    { key: "6", stage: "asleepCore", start: `${d1}T05:00:00Z`, end: `${d1}T06:00:00Z` },
+  ]);
+
+  await worker.runOnce();
+  const mine = async () => (await store.nights(patient)).filter((s) => nightWindows.some((w) => w.day === s.night));
+  const first = await mine();
+  assert.equal(first.length, 1);
+  const s = first[0]!;
+  assert.equal(s.night, d1);
+  assert.deepEqual(
+    [s.latencyMin, s.coreMin, s.deepMin, s.remMin, s.awakeMin, s.awakenings, s.asleepMin, s.isMain, s.revision],
+    [30, 180, 60, 174, 6, 1, 414, true, 1],
+  );
+
+  const second = await worker.runOnce();
+  assert.ok(second.recomputed > 0);
+  assert.equal(second.changed, 0);
+  assert.deepEqual(await mine(), first);
+
+  // a late interval: 06:00-06:30 more core sleep (the phone delivered it hours later)
+  await uploadSleep(capture, patient, tag, [
+    { key: "7", stage: "asleepCore", start: `${d1}T06:00:00Z`, end: `${d1}T06:30:00Z` },
+  ]);
+  await worker.runOnce();
+  const third = await mine();
+  assert.equal(third.length, 1);
+  assert.deepEqual([third[0]!.coreMin, third[0]!.asleepMin, third[0]!.revision], [210, 444, 2]);
 });

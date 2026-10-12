@@ -1,5 +1,7 @@
 import oracledb, { type Connection } from "oracledb";
-import type { Rollup, Store, StoredRollup, Window } from "./store.ts";
+import type { SleepSession } from "./sleep.ts";
+import { sameSession } from "./store.ts";
+import type { Rollup, Store, StoredRollup, StoredSleepSession, Window } from "./store.ts";
 
 export interface OracleConfig {
   readonly user: string;
@@ -140,11 +142,101 @@ export class OracleStore implements Store {
     }));
   }
 
+  async applyNights(window: Window, sessions: readonly SleepSession[]): Promise<boolean> {
+    const existing = new Map(
+      (await this.nights(window.patientId)).filter((s) => s.night === window.day).map((s) => [s.sessionStartMs, s]),
+    );
+    const key = { p: window.patientId, d: window.day };
+    try {
+      let changed = false;
+      const keep = new Set<number>();
+      for (const s of sessions) {
+        keep.add(s.sessionStartMs);
+        const old = existing.get(s.sessionStartMs);
+        if (old && sameSession(old, s)) {
+          continue;
+        }
+        const binds = {
+          ...key, b_st: s.sessionStartMs, b_en: s.sessionEndMs, b_on: s.onsetMs, b_la: s.lastAsleepEndMs,
+          b_lat: s.latencyMin, b_wae: s.wakeAfterEndMin, b_asl: s.asleepMin, b_core: s.coreMin, b_deep: s.deepMin,
+          b_rem: s.remMin, b_uns: s.unspecifiedMin, b_awk: s.awakeMin, b_unsc: s.unscoredMin, b_ovl: s.overlapMin,
+          b_nawk: s.awakenings, b_ic: s.intervalCount, b_main: s.isMain ? 1 : 0,
+        };
+        if (old) {
+          await this.connection.execute(
+            `update sleep_session set session_end_ms = :b_en, onset_ms = :b_on, last_asleep_end_ms = :b_la,
+                    latency_min = :b_lat, wake_after_end_min = :b_wae, asleep_min = :b_asl, core_min = :b_core,
+                    deep_min = :b_deep, rem_min = :b_rem, unspecified_min = :b_uns, awake_min = :b_awk,
+                    unscored_min = :b_unsc, overlap_min = :b_ovl, awakenings = :b_nawk, interval_count = :b_ic,
+                    is_main = :b_main, revision = revision + 1, updated_at = systimestamp
+              where patient_id = :p and night = to_date(:d, 'YYYY-MM-DD') and session_start_ms = :b_st`,
+            binds,
+          );
+        } else {
+          await this.connection.execute(
+            `insert into sleep_session (patient_id, night, session_start_ms, session_end_ms, onset_ms,
+                    last_asleep_end_ms, latency_min, wake_after_end_min, asleep_min, core_min, deep_min, rem_min,
+                    unspecified_min, awake_min, unscored_min, overlap_min, awakenings, interval_count, is_main)
+             values (:p, to_date(:d, 'YYYY-MM-DD'), :b_st, :b_en, :b_on, :b_la, :b_lat, :b_wae, :b_asl, :b_core, :b_deep, :b_rem,
+                    :b_uns, :b_awk, :b_unsc, :b_ovl, :b_nawk, :b_ic, :b_main)`,
+            binds,
+          );
+        }
+        changed = true;
+      }
+      for (const start of existing.keys()) {
+        if (!keep.has(start)) {
+          await this.connection.execute(
+            "delete from sleep_session where patient_id = :p and night = to_date(:d, 'YYYY-MM-DD') and session_start_ms = :b_st",
+            { ...key, b_st: start },
+          );
+          changed = true;
+        }
+      }
+      await this.connection.execute(
+        "delete from rollup_touched where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')",
+        { p: window.patientId, m: window.metricId, d: window.day },
+      );
+      await this.connection.commit();
+      return changed;
+    } catch (error) {
+      await this.connection.rollback();
+      throw error;
+    }
+  }
+
+  async nights(patientId?: string): Promise<StoredSleepSession[]> {
+    const result = await this.connection.execute<Record<string, number | string>>(
+      `select patient_id, to_char(night, 'YYYY-MM-DD') as night, session_start_ms, session_end_ms, onset_ms,
+              last_asleep_end_ms, latency_min, wake_after_end_min, asleep_min, core_min, deep_min, rem_min,
+              unspecified_min, awake_min, unscored_min, overlap_min, awakenings, interval_count, is_main, revision
+         from sleep_session
+        where (:p is null or patient_id = :p)
+        order by patient_id, session_start_ms`,
+      { p: patientId ?? null },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+    return (result.rows ?? []).map((r) => ({
+      patientId: String(r["PATIENT_ID"]), night: String(r["NIGHT"]),
+      sessionStartMs: Number(r["SESSION_START_MS"]), sessionEndMs: Number(r["SESSION_END_MS"]),
+      onsetMs: Number(r["ONSET_MS"]), lastAsleepEndMs: Number(r["LAST_ASLEEP_END_MS"]),
+      latencyMin: Number(r["LATENCY_MIN"]), wakeAfterEndMin: Number(r["WAKE_AFTER_END_MIN"]),
+      asleepMin: Number(r["ASLEEP_MIN"]), coreMin: Number(r["CORE_MIN"]), deepMin: Number(r["DEEP_MIN"]),
+      remMin: Number(r["REM_MIN"]), unspecifiedMin: Number(r["UNSPECIFIED_MIN"]), awakeMin: Number(r["AWAKE_MIN"]),
+      unscoredMin: Number(r["UNSCORED_MIN"]), overlapMin: Number(r["OVERLAP_MIN"]),
+      awakenings: Number(r["AWAKENINGS"]), intervalCount: Number(r["INTERVAL_COUNT"]),
+      isMain: Number(r["IS_MAIN"]) === 1, revision: Number(r["REVISION"]),
+    }));
+  }
+
   /** Test support: remove one worker's watermark and the given windows' rows. */
   async purge(worker: string, windows: readonly Window[]): Promise<void> {
     await this.connection.execute("delete from rollup_watermark where worker_name = :w", { w: worker });
     for (const w of windows) {
       const key = { p: w.patientId, m: w.metricId, d: w.day };
+      await this.connection.execute(
+        "delete from sleep_session where patient_id = :p and night = to_date(:d, 'YYYY-MM-DD')",
+        { p: w.patientId, d: w.day });
       await this.connection.execute(
         "delete from daily_rollup where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')", key);
       await this.connection.execute(

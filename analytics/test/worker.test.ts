@@ -132,7 +132,7 @@ test("observations in another unit are left out and counted", async () => {
   assert.deepEqual([r.n, r.max], [1, 60]);
 });
 
-test("only the contract's quantity metrics are asked for (sleep stages are not rolled up here)", async () => {
+test("only the contract's metric codes are asked for", async () => {
   const { fhir, worker } = make();
   await worker.runOnce();
   const scan = decodeURIComponent(fhir.requests[0]!);
@@ -140,7 +140,7 @@ test("only the contract's quantity metrics are asked for (sleep stages are not r
     assert.ok(scan.includes(`${contract.loincSystem}|${m.loincCode}`), `${m.id} missing from the scan`);
   }
   const requested = (scan.match(/code=([^&]*)/)![1]!).split(",");
-  assert.equal(requested.length, contract.quantityMetrics.length);
+  assert.equal(requested.length, contract.quantityMetrics.length + contract.sleep!.stageByCode.size);
 });
 
 test("an observation with no usable subject, code or time is ignored, not fatal", async () => {
@@ -198,4 +198,82 @@ test("patientIdOf accepts Patient references only", () => {
   assert.equal(patientIdOf("Group/42"), null);
   assert.equal(patientIdOf("Patient/"), null);
   assert.equal(patientIdOf(undefined), null);
+});
+
+// ---- sleep nights (M10) ----
+
+import { sleepStage } from "./support.ts";
+
+const stage = (patient: string, name: string, from: string, to: string) => sleepStage(patient, name, from, to);
+
+test("sleep stage observations become one session per night with the expected totals", async () => {
+  const { fhir, store, worker } = make();
+  // 23:00 on the 6th to 03:00 on the 7th, UTC: 10 awake, 40 core, 30 deep, 5 awake, 45 core, 30 REM, 18 unspecified, 10 awake
+  const plan: [string, string, string][] = [
+    ["awake", "23:00", "23:10"], ["asleepCore", "23:10", "23:50"], ["asleepDeep", "23:50", "00:20"],
+    ["awake", "00:20", "00:25"], ["asleepCore", "00:25", "01:10"], ["asleepREM", "01:10", "01:40"],
+    ["asleepUnspecified", "01:40", "02:00"], ["awake", "02:00", "02:10"],
+  ];
+  for (const [name, a, b] of plan) {
+    const day = (t: string) => (t >= "23:00" ? TUE : WED);
+    fhir.add(stage("p1", name, `${day(a)}T${a}:00+00:00`, `${day(b)}T${b}:00+00:00`));
+  }
+  const report = await worker.runOnce();
+  assert.ok(report.changed >= 1);
+  const nights = await store.nights();
+  assert.equal(nights.length, 1);
+  const s = nights[0]!;
+  assert.equal(s.night, WED);
+  assert.deepEqual(
+    [s.latencyMin, s.coreMin, s.deepMin, s.remMin, s.unspecifiedMin, s.awakeMin, s.awakenings, s.wakeAfterEndMin, s.revision],
+    [10, 85, 30, 30, 20, 5, 1, 10, 1],
+  );
+});
+
+test("running again changes no night; a late interval changes only the nights it can affect", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(stage("p1", "asleepCore", `${TUE}T23:00:00+00:00`, `${WED}T03:00:00+00:00`)); // night of WED
+  fhir.add(stage("p1", "asleepCore", `${THU}T00:00:00+00:00`, `${THU}T06:00:00+00:00`)); // night of THU
+  await worker.runOnce();
+  const first = await store.nights();
+  assert.deepEqual(first.map((s) => s.night), [WED, THU]);
+
+  const again = await worker.runOnce();
+  assert.ok(again.recomputed > 0);
+  assert.equal(again.changed, 0);
+  assert.deepEqual(await store.nights(), first);
+
+  // a late 30-min core interval that extends Wednesday's night (03:00-03:30); Thursday's night is untouched
+  fhir.serverNow += 3_600_000;
+  fhir.add(stage("p1", "asleepCore", `${WED}T03:00:00+00:00`, `${WED}T03:30:00+00:00`));
+  await worker.runOnce();
+  const after = await store.nights();
+  assert.deepEqual(after.map((s) => [s.night, s.revision]), [[WED, 2], [THU, 1]]);
+  assert.equal(after[0]!.asleepMin, 270);
+});
+
+test("a late interval that bridges two sessions merges them into one row and removes the other", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(stage("p1", "asleepCore", `${TUE}T21:00:00+00:00`, `${TUE}T23:00:00+00:00`)); // night TUE
+  fhir.add(stage("p1", "asleepCore", `${WED}T03:00:00+00:00`, `${WED}T05:00:00+00:00`)); // 4 h later: a separate session, night WED
+  await worker.runOnce();
+  assert.deepEqual((await store.nights()).map((s) => s.night), [TUE, WED]);
+
+  fhir.serverNow += 3_600_000;
+  fhir.add(stage("p1", "asleepCore", `${TUE}T23:00:00+00:00`, `${WED}T03:00:00+00:00`)); // the missing four hours
+  await worker.runOnce();
+  const nights = await store.nights();
+  assert.equal(nights.length, 1, "the earlier session's row must be gone");
+  assert.equal(nights[0]!.night, WED);
+  assert.equal(nights[0]!.asleepMin, 8 * 60);
+});
+
+test("sleep stages of one patient never leak into another's night", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(stage("p1", "asleepCore", `${TUE}T23:00:00+00:00`, `${WED}T03:00:00+00:00`));
+  fhir.add(stage("p2", "asleepDeep", `${TUE}T23:00:00+00:00`, `${WED}T01:00:00+00:00`));
+  await worker.runOnce();
+  const byPatient = new Map((await store.nights()).map((s) => [s.patientId, s]));
+  assert.equal(byPatient.get("p1")!.asleepMin, 240);
+  assert.equal(byPatient.get("p2")!.deepMin, 120);
 });

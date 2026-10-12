@@ -1,3 +1,5 @@
+import type { SleepSession } from "./sleep.ts";
+
 /** A patient, metric and UTC day: the unit that is recomputed as a whole. */
 export interface Window {
   readonly patientId: string;
@@ -45,12 +47,34 @@ export interface Store {
   applyRollup(window: Window, rollup: Rollup | null): Promise<boolean>;
 
   rollups(patientId?: string): Promise<StoredRollup[]>;
+
+  /**
+   * In ONE transaction: make the stored sleep sessions of (patient, night) exactly `sessions` (insert, change or
+   * delete as needed) and clear the window's touched mark. Sessions whose values are identical are left alone,
+   * revision included.
+   * @returns whether anything stored changed.
+   */
+  applyNights(window: Window, sessions: readonly SleepSession[]): Promise<boolean>;
+
+  nights(patientId?: string): Promise<StoredSleepSession[]>;
+}
+
+export interface StoredSleepSession extends SleepSession {
+  readonly revision: number;
+}
+
+/** Equality of everything but the revision. */
+export function sameSession(a: SleepSession, b: SleepSession): boolean {
+  // `a` may be a stored row carrying a revision; compare only the session's own fields
+  const keys = Object.keys(b) as (keyof SleepSession)[];
+  return keys.every((k) => a[k] === b[k]);
 }
 
 export class MemoryStore implements Store {
   private readonly watermarks = new Map<string, number>();
   private readonly touched = new Map<string, Window>();
   private readonly stored = new Map<string, StoredRollup>();
+  private readonly sessions = new Map<string, StoredSleepSession>();
 
   async getWatermark(worker: string): Promise<number | null> {
     return this.watermarks.get(worker) ?? null;
@@ -84,6 +108,35 @@ export class MemoryStore implements Store {
     }
     this.stored.set(key, { ...rollup, revision: (existing?.revision ?? 0) + 1 });
     return true;
+  }
+
+  async applyNights(window: Window, sessions: readonly SleepSession[]): Promise<boolean> {
+    this.touched.delete(windowKey(window));
+    let changed = false;
+    const keep = new Set<string>();
+    for (const s of sessions) {
+      const key = `${s.patientId}|${s.night}|${s.sessionStartMs}`;
+      keep.add(key);
+      const existing = this.sessions.get(key);
+      if (existing && sameSession(existing, s)) {
+        continue;
+      }
+      this.sessions.set(key, { ...s, revision: (existing?.revision ?? 0) + 1 });
+      changed = true;
+    }
+    for (const [key, s] of [...this.sessions]) {
+      if (s.patientId === window.patientId && s.night === window.day && !keep.has(key)) {
+        this.sessions.delete(key);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  async nights(patientId?: string): Promise<StoredSleepSession[]> {
+    return [...this.sessions.values()]
+      .filter((s) => patientId === undefined || s.patientId === patientId)
+      .sort((a, b) => a.patientId.localeCompare(b.patientId) || a.sessionStartMs - b.sessionStartMs);
   }
 
   async rollups(patientId?: string): Promise<StoredRollup[]> {

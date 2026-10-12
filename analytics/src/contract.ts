@@ -8,11 +8,21 @@ export interface QuantityMetric {
   readonly ucum: string;
 }
 
+/** The sleep-stage metric: one duration Observation per stage interval, code per stage. */
+export interface SleepMetric {
+  readonly id: string;
+  /** LOINC code -> contract stage id (`asleepCore`, `awake`, ...). */
+  readonly stageByCode: ReadonlyMap<string, string>;
+  /** Stage ids the contract says have no Observation (`inBed`). */
+  readonly unmapped: readonly string[];
+}
+
 export interface Contract {
   readonly version: string;
   readonly loincSystem: string;
   readonly ucumSystem: string;
   readonly quantityMetrics: readonly QuantityMetric[];
+  readonly sleep: SleepMetric | null;
 }
 
 export const SUPPORTED_MAJOR = 1;
@@ -24,6 +34,8 @@ interface RawMetric {
   kind?: unknown;
   loinc?: { code?: unknown };
   unit?: { ucum?: unknown };
+  stages?: Record<string, { code?: unknown }>;
+  unmapped?: unknown;
 }
 
 /**
@@ -47,9 +59,26 @@ export function loadContract(path: string = defaultContractPath): Contract {
     throw new Error("contract has no LOINC or UCUM system");
   }
   const quantityMetrics: QuantityMetric[] = [];
+  let sleep: SleepMetric | null = null;
   for (const metric of raw.metrics ?? []) {
+    if (metric.kind === "sleepStage") {
+      const stageByCode = new Map<string, string>();
+      for (const [stage, coding] of Object.entries(metric.stages ?? {})) {
+        const code = String(coding.code ?? "");
+        if (!code) {
+          throw new Error(`contract sleep stage ${stage} lacks a code`);
+        }
+        stageByCode.set(code, stage);
+      }
+      if (stageByCode.size === 0) {
+        throw new Error("contract sleep metric has no stages");
+      }
+      const unmapped = Array.isArray(metric.unmapped) ? metric.unmapped.map(String) : [];
+      sleep = { id: String(metric.id ?? ""), stageByCode, unmapped };
+      continue;
+    }
     if (metric.kind !== "quantity") {
-      continue; // sleep stages are nightly summaries (M10), not daily min/median/max
+      continue; // an unknown kind is not rolled up
     }
     const id = String(metric.id ?? "");
     const loincCode = String(metric.loinc?.code ?? "");
@@ -62,5 +91,5 @@ export function loadContract(path: string = defaultContractPath): Contract {
   if (quantityMetrics.length === 0) {
     throw new Error("contract has no quantity metrics");
   }
-  return { version, loincSystem, ucumSystem, quantityMetrics };
+  return { version, loincSystem, ucumSystem, quantityMetrics, sleep };
 }

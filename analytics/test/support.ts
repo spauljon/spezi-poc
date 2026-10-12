@@ -59,3 +59,20 @@ export function quantity(
     ...overrides,
   };
 }
+
+/** A sleep stage Observation: a duration over `effectivePeriod`, coded per the contract. */
+export function sleepStage(patient: string, stage: string, start: string, end: string): Omit<ObservationLite, "meta"> {
+  const code = [...contract.sleep!.stageByCode].find(([, s]) => s === stage)?.[0];
+  if (!code) {
+    throw new Error(`contract has no stage ${stage}`);
+  }
+  return {
+    id: `obs-${++counter}`,
+    subject: { reference: `Patient/${patient}` },
+    code: { coding: [{ system: contract.loincSystem, code }] },
+    effectivePeriod: { start, end },
+    valueQuantity: {
+      value: (Date.parse(end) - Date.parse(start)) / 60_000, system: contract.ucumSystem, code: "min",
+    },
+  };
+}

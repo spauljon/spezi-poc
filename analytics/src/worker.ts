@@ -1,5 +1,6 @@
 import type { Contract, QuantityMetric } from "./contract.ts";
 import { nextDay, utcDay } from "./day.ts";
+import { affectedNights, buildSessions, fetchRange, type StageInterval } from "./sleep.ts";
 import type { FhirSearch, ObservationLite } from "./fhir.ts";
 import { summarize } from "./rollup.ts";
 import type { Store, Window } from "./store.ts";
@@ -49,6 +50,13 @@ export function effectiveInstant(o: ObservationLite): string | undefined {
   return o.effectiveDateTime ?? o.effectivePeriod?.start;
 }
 
+/** A period with both ends and end after start, as epoch ms; sleep stages are always intervals. */
+export function periodMs(o: ObservationLite): { startMs: number; endMs: number } | null {
+  const startMs = Date.parse(o.effectivePeriod?.start ?? "");
+  const endMs = Date.parse(o.effectivePeriod?.end ?? "");
+  return Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs ? { startMs, endMs } : null;
+}
+
 const isoMs = (ms: number): string => new Date(ms).toISOString();
 
 export class RollupWorker {
@@ -78,7 +86,10 @@ export class RollupWorker {
     const { contract, fhir, store, name } = this.o;
     const watermark = await store.getWatermark(name);
     const since = Math.max(0, (watermark ?? 0) - this.overlapMs);
-    const codes = contract.quantityMetrics.map((m) => `${contract.loincSystem}|${m.loincCode}`).join(",");
+    const codes = [
+      ...contract.quantityMetrics.map((m) => m.loincCode),
+      ...(contract.sleep ? [...contract.sleep.stageByCode.keys()] : []),
+    ].map((code) => `${contract.loincSystem}|${code}`).join(",");
     const path =
       `Observation?_lastUpdated=ge${encodeURIComponent(isoMs(since))}` +
       `&code=${encodeURIComponent(codes)}&_sort=_lastUpdated&_count=${this.pageSize}` +
@@ -88,31 +99,58 @@ export class RollupWorker {
     let newest: number | null = null;
     for await (const obs of fhir.search(path)) {
       report.scanned++;
-      const window = this.windowOf(obs);
+      const windows = this.windowsOf(obs);
       const updated = Date.parse(obs.meta?.lastUpdated ?? "");
       if (Number.isFinite(updated) && (newest === null || updated > newest)) {
         newest = updated;
       }
-      if (!window) {
+      if (windows.length === 0) {
         report.ignored++;
         continue;
       }
-      touched.set(windowKey(window), window);
+      for (const window of windows) {
+        touched.set(windowKey(window), window);
+      }
     }
     report.touched = touched.size;
     await store.recordTouched(name, [...touched.values()], newest);
   }
 
-  private windowOf(obs: ObservationLite): Window | null {
+  /** The windows one Observation affects: one day for a quantity, several nights for a sleep stage. */
+  private windowsOf(obs: ObservationLite): Window[] {
     const patientId = patientIdOf(obs.subject?.reference);
+    if (!patientId) {
+      return [];
+    }
+    const sleepStage = this.sleepStageOf(obs);
+    if (sleepStage) {
+      const span = periodMs(obs);
+      if (!span) {
+        return [];
+      }
+      return affectedNights(span.startMs, span.endMs).map((day) => ({
+        patientId, metricId: this.o.contract.sleep!.id, day,
+      }));
+    }
     const instant = effectiveInstant(obs);
     const day = instant ? utcDay(instant) : null;
     const loinc = obs.code?.coding?.find((c) => c.system === this.o.contract.loincSystem && c.code && this.byCode.has(c.code));
     const metric = loinc?.code ? this.byCode.get(loinc.code) : undefined;
-    if (!patientId || !day || !metric) {
+    return day && metric ? [{ patientId, metricId: metric.id, day }] : [];
+  }
+
+  private sleepStageOf(obs: ObservationLite): string | null {
+    const sleep = this.o.contract.sleep;
+    if (!sleep) {
       return null;
     }
-    return { patientId, metricId: metric.id, day };
+    for (const c of obs.code?.coding ?? []) {
+      const stage = c.system === this.o.contract.loincSystem && c.code ? sleep.stageByCode.get(c.code) : undefined;
+      if (stage) {
+        return stage;
+      }
+    }
+    return null;
   }
 
   // 2. recompute every pending window from the server's current data, idempotently
@@ -133,8 +171,38 @@ export class RollupWorker {
     }
   }
 
+  private async recomputeNight(window: Window): Promise<boolean> {
+    const { contract, fhir, store } = this.o;
+    const sleep = contract.sleep!;
+    const { fromMs, toMs } = fetchRange(window.day);
+    const path =
+      `Observation?subject=${encodeURIComponent(`Patient/${window.patientId}`)}` +
+      `&code=${encodeURIComponent([...sleep.stageByCode.keys()].map((c) => `${contract.loincSystem}|${c}`).join(","))}` +
+      `&date=ge${new Date(fromMs).toISOString()}&date=lt${new Date(toMs).toISOString()}` +
+      `&_count=${this.pageSize}&_elements=subject,code,effectiveDateTime,effectivePeriod`;
+    const seen = new Set<string>();
+    const intervals: StageInterval[] = [];
+    for await (const obs of fhir.search(path)) {
+      if (seen.has(obs.id)) {
+        continue;
+      }
+      seen.add(obs.id);
+      const stage = this.sleepStageOf(obs);
+      const span = periodMs(obs);
+      if (!stage || !span || patientIdOf(obs.subject?.reference) !== window.patientId) {
+        continue;
+      }
+      intervals.push({ id: obs.id, stage, startMs: span.startMs, endMs: span.endMs });
+    }
+    const sessions = buildSessions(window.patientId, intervals).filter((s) => s.night === window.day);
+    return store.applyNights(window, sessions);
+  }
+
   private async recompute(window: Window, report: CycleReport): Promise<boolean> {
     const { contract, fhir, store } = this.o;
+    if (contract.sleep && window.metricId === contract.sleep.id) {
+      return this.recomputeNight(window);
+    }
     const metric = contract.quantityMetrics.find((m) => m.id === window.metricId);
     if (!metric) {
       // The contract no longer has this metric: nothing to compute, and the stale mark must not loop forever.

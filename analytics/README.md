@@ -26,7 +26,34 @@ re-reading overlap, changes nothing (a row's `revision` increments only when its
 | `rollup_watermark` | per worker name: newest `meta.lastUpdated` seen (epoch ms) |
 
 The metric list, LOINC codes and units come from `contract/metrics.json` at start-up (`src/contract.ts`); a test
-refuses any code or unit literal in `src/`. Sleep stages are not rolled up here (nightly summaries are M10).
+refuses any code or unit literal in `src/`. Sleep stages are summarized per night (below), not rolled up per day.
+
+## Sleep nights (M10)
+
+Sleep-stage Observations (one duration Observation per stage interval, `effectivePeriod`) are summarized per sleep
+session in `sleep_session` by the same worker, with the same scan, touched-window and idempotent-recompute
+machinery. Pure logic is in `src/sleep.ts`.
+
+**Windows.** A sleep window is (patient, `sleepStage`, night date). One interval can extend a session, bridge two
+sessions into one (one row vanishes, another changes) or start a new one, so a touched interval marks every date
+within 26 h either side; a recompute of a night reads 5 days of intervals, rebuilds the sessions, keeps those whose
+final waking falls on that date, and replaces that night's rows **as a set** (insert, change, delete) in one
+transaction.
+
+**Rules** (decided for M10):
+
+1. *Session*: a run of intervals with no gap over 2 h. A session with no asleep stage produces no row.
+2. *Night date*: the UTC date of the final waking from sleep.
+3. *Naps*: every session is stored; per date the one with the most time asleep is `is_main`, the rest are reported
+   as non-main, never dropped.
+4. *Overlaps*: every instant gets one stage; the interval that starts later wins, ties go to the more specific
+   stage, then the lower id. The overlapped time is stored (`overlap_min`).
+5. *Awakenings*: awake stretches strictly between onset and final waking of at least 5 minutes. Shorter ones add to
+   `awake_min` only. Awake time before onset is `latency_min`; after the final waking `wake_after_end_min`.
+6. *Gaps inside a session* are reported as `unscored_min`, never counted as sleep or wake.
+
+Stored per session: session start/end, onset, last-asleep end (epoch ms); latency, wake-after-end, asleep, core,
+deep, REM, unspecified, awake, unscored, overlap (minutes); awakenings, interval count, `is_main`, `revision`.
 
 ## Run
 
@@ -71,5 +98,15 @@ Node's built-in runner. node-oracledb's types are declared locally (`src/oracled
   system and code is excluded and counted (`wrongUnit`).
 - **A36 No deletes.** No role can delete Observations, so a rollup is never made smaller by a deletion; a window
   whose observations are all gone does delete its row (handled, tested with a fake only).
-- Not done: the analytic API (M10/M11), sleep nights (M10), flagging of artifacts (M16), a container for the worker
-  (it runs on the host for the POC).
+- **A37 Session gap** is 2 hours and **A38 minimum awakening** is 5 minutes: constants in `src/sleep.ts`, a clinical
+  judgment, not standards. They could move into `contract/metrics.json` with the M16 thresholds.
+- **A39 Night date** is the UTC date of the final waking, consistent with A6; a sleeper far from UTC can see a
+  night dated one day away from their local date.
+- **A40 Durations come from the period**, not from the Observation's `valueQuantity` (the contract derives that
+  value from the period, so they agree for data the app produced).
+- **A41 `inBed` never reaches the server** (contract v1: unmapped), so time in bed is not available; session span
+  (start to end) is the closest proxy and is not labelled "in bed".
+- **A42 Session length**: a recompute reads 5 days, so a session longer than about 30 hours would be cut. Not
+  expected from real sleep.
+- Not done: the analytic API (M11), flagging of artifacts (M16), a container for the worker (it runs on the host
+  for the POC).
