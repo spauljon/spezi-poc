@@ -8,6 +8,7 @@
 #   ~/.poc-ca/hapi/server.p12         keystore mounted read-only into the HAPI container
 #   ~/.poc-ca/idp/edge.{key,crt}      the IdP proxy's key and certificate (PEM, for nginx)
 #   ~/.poc-ca/idp/keycloak.{key,crt,p12}  Keycloak's own key and certificate; the p12 is mounted into Keycloak
+#   ~/.poc-ca/analytics/api.{key,crt}     the analytic API's key and certificate (PEM; a host process reads them)
 #
 # Every service gets its OWN key (none is shared); all are signed by the one name-constrained CA.
 #
@@ -31,9 +32,10 @@ IDP_ENV_FILE="${POC_IDP_ENV_FILE:-$ROOT/idp/.env.local}"
 [ -f "$IDP_ENV_FILE" ] || { echo "idp/.env.local is missing; run 'make stack-env' first" >&2; exit 1; }
 
 umask 077
-mkdir -p "$TLS_DIR/hapi" "$TLS_DIR/idp"
+mkdir -p "$TLS_DIR/hapi" "$TLS_DIR/idp" "$TLS_DIR/analytics"
 chmod 700 "$TLS_DIR"
-chmod 755 "$TLS_DIR/hapi" "$TLS_DIR/idp"   # keystore directories must be traversable by the container runtime
+chmod 755 "$TLS_DIR/hapi" "$TLS_DIR/idp"
+chmod 700 "$TLS_DIR/analytics"   # keystore directories must be traversable by the container runtime
 cd "$TLS_DIR"
 
 # --- 0. retire a CA that is not name-constrained -----------------------------------------------
@@ -144,8 +146,23 @@ else
   echo "Wrote idp/keycloak.p12 and KC_HTTPS_KEY_STORE_PASSWORD (value not shown) to idp/.env.local"
 fi
 
+# --- 3c. the analytic API's leaf (M11): its own key, PEM, read by the host process -----------------------
+mkdir -p analytics
+if [ -f analytics/api.key ] && [ -f analytics/api.crt ] && openssl x509 -in analytics/api.crt -noout -checkend $((30*86400)) > /dev/null; then
+  echo "Analytic API certificate is current ($(openssl x509 -in analytics/api.crt -noout -enddate))."
+else
+  echo "Creating the analytic API certificate for ${HOST} ..."
+  printf '[v3_leaf]\nbasicConstraints = critical,CA:FALSE\nkeyUsage = critical,digitalSignature\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:%s\nsubjectKeyIdentifier = hash\nauthorityKeyIdentifier = keyid\n' "$HOST" > analytics/api.cnf
+  openssl ecparam -name prime256v1 -genkey -noout -out analytics/api.key
+  openssl req -new -key analytics/api.key -subj "/CN=${HOST}" -out analytics/api.csr
+  openssl x509 -req -in analytics/api.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+    -days 365 -sha256 -extfile analytics/api.cnf -extensions v3_leaf -out analytics/api.crt > /dev/null 2>&1
+  rm -f analytics/api.cnf analytics/api.csr ca.srl
+  chmod 600 analytics/api.key; chmod 644 analytics/api.crt
+fi
+
 # --- 4. self-test: the chain is valid AND the name constraint is actually enforced ---------------
-for c in server.crt idp/edge.crt idp/keycloak.crt; do
+for c in server.crt idp/edge.crt idp/keycloak.crt analytics/api.crt; do
   openssl verify -CAfile ca.crt "$c" > /dev/null || { echo "self-test FAILED: $c does not verify against ca.crt" >&2; exit 1; }
 done
 t="$(mktemp -d)"; trap 'rm -rf "$t"' EXIT

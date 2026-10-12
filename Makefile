@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run analytics-api test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -38,6 +38,8 @@ analytics-migrate:  ## create the analytic store tables (idempotent)
 	@./analytics/db-migrate.sh
 analytics-run:  ## one worker cycle on the host
 	@./analytics/run.sh once
+analytics-api:  ## the analytic API on https://127.0.0.1:8445 (loopback, TLS, clinician token); Ctrl-C to stop
+	@./analytics/run.sh api
 test-web:
 	@echo "web: no tests yet (added in M12)"
 
