@@ -6,7 +6,9 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cap=$(pick "$idp_env" POC_CAPTURE_USER_PASSWORD)
 [ -n "$cap" ] || { echo "analytics: POC_CAPTURE_USER_PASSWORD missing from idp/.env.local" >&2; exit 1; }
-export POC_CAPTURE_USER_PASSWORD="$cap" POC_ANALYTICS_LIVE=1
-unset cap
+clin=$(pick "$idp_env" POC_CLINICIAN_USER_PASSWORD)
+[ -n "$clin" ] || { echo "analytics: POC_CLINICIAN_USER_PASSWORD missing from idp/.env.local" >&2; exit 1; }
+export POC_CAPTURE_USER_PASSWORD="$cap" POC_CLINICIAN_USER_PASSWORD="$clin" POC_ANALYTICS_LIVE=1
+unset cap clin
 cd "$root/analytics"
 exec node --import tsx --test test/live.test.ts

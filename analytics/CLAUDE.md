@@ -11,5 +11,7 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - Search requests send `Cache-Control: no-cache` (HAPI's 60 s result reuse otherwise serves stale counts).
 - Tests: `make test-analytics` (no stack); `make test-analytics-live` (needs the stack, schema and seeded patient; leaves Observations in HAPI, cleans its own rollup rows).
 - Sleep logic is pure (`src/sleep.ts`); a contract sleep stage that module does not classify must fail the test, not be miscounted.
+- The API is loopback-only, TLS-only, GET-only and authenticates (signature, issuer, audience `poc-analytics`, role `clinician-reader`) before any routing. Widening the listener or the audience is a decision, not a convenience; document it in the root CLAUDE.md first.
+- The API description `api/openapi.json` is a contract: `test/api.test.ts` checks every response against it and the route list. Change both together.
 - Milestones: M9-M11
 - Commit prefix: `analytics:`

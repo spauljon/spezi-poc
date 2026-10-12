@@ -6,6 +6,11 @@ import { HapiClient } from "../src/fhir.ts";
 import { OracleStore } from "../src/oracle-store.ts";
 import type { Window } from "../src/store.ts";
 import { RollupWorker } from "../src/worker.ts";
+import { request } from "node:https";
+import { homedir } from "node:os";
+import { AnalyticApi } from "../src/api.ts";
+import { JwtVerifier } from "../src/jwt.ts";
+import { createApiServer, listen } from "../src/server.ts";
 import { contract, heartRate } from "./support.ts";
 
 const sleepMetric = contract.sleep!;
@@ -15,7 +20,8 @@ const codeOf = (stage: string) => [...sleepMetric.stageByCode].find(([, s]) => s
  * End to end against the live POC stack (HAPI over TLS, Keycloak, Oracle). Skipped unless POC_ANALYTICS_LIVE=1;
  * run it with `make test-analytics-live`, which supplies the credentials from the git-ignored env files.
  *
- * Isolation: every sample falls on days in a random year between 2001 and 2015, so the days are this run's alone;
+ * Isolation: every sample falls on a day (2001 to 2015) that the server confirms has no Observations near it (`freeDay`),
+ * so the rows are this run's alone;
  * the worker gets a unique name and starts from "five minutes ago" so it scans only what this test wrote; and the
  * test removes its rollup rows and watermark afterwards. (The Observations stay in HAPI: no role can delete.)
  */
@@ -52,6 +58,27 @@ async function fhir(token: string, path: string, init: RequestInit = {}): Promis
       ...(init.body ? { "Content-Type": "application/fhir+json" } : {}),
     },
   });
+}
+
+
+/**
+ * A UTC date far in the past (2001 to 2015) with no Observation within 5 days either side of it on the server, so a
+ * test's rows cannot include data left behind by an earlier run (HAPI keeps it: no role can delete). Checked on the
+ * server, not assumed from randomness.
+ */
+async function freeDay(token: string): Promise<string> {
+  const base = Date.UTC(2001, 0, 1);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const offset = randomBytes(2).readUInt16BE(0) % 5400;
+    const start = base + (offset + 10) * 86_400_000;
+    const from = new Date(start - 5 * 86_400_000).toISOString();
+    const to = new Date(start + 5 * 86_400_000).toISOString();
+    const body = (await (await fhir(token, `Observation?date=ge${from}&date=lt${to}&_summary=count`)).json()) as { total?: number };
+    if (body.total === 0) {
+      return new Date(start).toISOString().slice(0, 10);
+    }
+  }
+  throw new Error("no free day found in 50 tries");
 }
 
 async function patientId(token: string): Promise<string> {
@@ -92,8 +119,8 @@ test("live: rollups are idempotent and a late sample changes only its own day", 
   const capture = await captureToken();
   const patient = await patientId(capture);
   const tag = randomBytes(4).toString("hex");
-  const year = 2001 + (randomBytes(1)[0]! % 15);
-  const tue = `${year}-03-10`, wed = `${year}-03-11`;
+  const tue = await freeDay(capture);
+  const wed = new Date(Date.parse(`${tue}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
   const windows: Window[] = [tue, wed].map((day) => ({ patientId: patient, metricId: "heartRate", day }));
 
   const store = await OracleStore.connect({
@@ -189,9 +216,10 @@ test("live: a night across UTC midnight is summarized, stable on rerun, and a la
   const capture = await captureToken();
   const patient = await patientId(capture);
   const tag = randomBytes(4).toString("hex");
-  const year = 2001 + (randomBytes(1)[0]! % 15);
-  const d0 = `${year}-06-20`, d1 = `${year}-06-21`;
-  const nightWindows: Window[] = [`${year}-06-19`, d0, d1, `${year}-06-22`, `${year}-06-23`].map((day) => ({
+  const d0 = await freeDay(capture);
+  const plus = (base: string, n: number) => new Date(Date.parse(`${base}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  const d1 = plus(d0, 1);
+  const nightWindows: Window[] = [plus(d0, -1), d0, d1, plus(d0, 2), plus(d0, 3)].map((day) => ({
     patientId: patient, metricId: sleepMetric.id, day,
   }));
   const store = await OracleStore.connect({
@@ -241,4 +269,93 @@ test("live: a night across UTC midnight is summarized, stable on rerun, and a la
   const third = await mine();
   assert.equal(third.length, 1);
   assert.deepEqual([third[0]!.coreMin, third[0]!.asleepMin, third[0]!.revision], [210, 444, 2]);
+});
+
+async function userToken(user: string, passwordVar: string): Promise<string> {
+  const response = await fetch(`${issuer}/protocol/openid-connect/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "password", client_id: "poc-devtest", username: user, password: required(passwordVar) }),
+  });
+  assert.equal(response.status, 200, `could not get a token for ${user}`);
+  return ((await response.json()) as { access_token: string }).access_token;
+}
+
+/** One HTTPS request to the in-process API on loopback, validating its certificate as macpro16.local. */
+function callApi(port: number, path: string, token?: string): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const req = request({
+      host: "127.0.0.1", port, path, method: "GET", servername: "macpro16.local",
+      headers: { Host: "macpro16.local", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : null });
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+test("live: the API serves what Oracle holds, over TLS, to clinicians only", { skip: !live && "set POC_ANALYTICS_LIVE=1" }, async (t) => {
+  const capture = await captureToken();
+  const patient = await patientId(capture);
+  const tag = randomBytes(4).toString("hex");
+  const d0 = await freeDay(capture);
+  const d1 = new Date(Date.parse(`${d0}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const windows: Window[] = [d0, d1].map((day) => ({ patientId: patient, metricId: "heartRate", day }));
+
+  const store = await OracleStore.connect({
+    user: required("ANALYTICS_DB_USER"), password: required("ANALYTICS_DB_PASSWORD"),
+    connectString: process.env["POC_ANALYTICS_CONNECT"] ?? "127.0.0.1:1522/ANALYTICSPDB",
+  });
+  const name = `live-api-${tag}`;
+  const tlsDir = `${process.env["POC_TLS_DIR"] ?? `${homedir()}/.poc-ca`}/analytics`;
+  const options = { keyPath: `${tlsDir}/api.key`, certPath: `${tlsDir}/api.crt`, host: "127.0.0.1", port: 0 };
+  const api = new AnalyticApi({
+    contract, reader: store, workerName: name, corsOrigin: null,
+    verifier: new JwtVerifier({ issuer, audience: "poc-analytics", role: "clinician-reader" }),
+  });
+  const server = createApiServer(api, options);
+  await listen(server, options);
+  t.after(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await store.purge(name, windows);
+    await store.close();
+  });
+  const port = (server.address() as { port: number }).port;
+
+  await store.recordTouched(name, [], Date.now() - 5 * 60_000);
+  await upload(capture, patient, tag, [
+    { key: "a", at: `${d0}T08:00:00+00:00`, value: 58 },
+    { key: "b", at: `${d0}T09:00:00+00:00`, value: 66 },
+    { key: "c", at: `${d1}T09:00:00+00:00`, value: 71 },
+  ]);
+  const credentials = new ClientCredentials(issuer, "analytics-worker", required("POC_WORKER_CLIENT_SECRET"));
+  const worker = new RollupWorker({ name, contract, store, fhir: new HapiClient(fhirBase, () => credentials.token()) });
+  await worker.runOnce();
+
+  const path = `/v1/patients/${patient}/bands?metric=heartRate&from=${d0}&to=${d1}`;
+  const clinician = await userToken("clinician-user", "POC_CLINICIAN_USER_PASSWORD");
+
+  // the right token: 200, and the body is exactly what Oracle holds (positive control for every refusal below)
+  const ok = await callApi(port, path, clinician);
+  assert.equal(ok.status, 200);
+  const stored = (await store.rollups(patient)).filter((r) => windows.some((w) => w.day === r.day));
+  const served = (ok.body as { bands: { day: string; n: number; min: number; median: number; max: number; revision: number }[] }).bands;
+  assert.deepEqual(served, stored.map((r) => ({ day: r.day, n: r.n, min: r.min, median: r.median, max: r.max, revision: r.revision })));
+  assert.deepEqual(served.map((b) => [b.day, b.n, b.min, b.median, b.max]), [[d0, 2, 58, 62, 66], [d1, 1, 71, 71, 71]]);
+  const completeness = (ok.body as { completeness: { missingDays: string[]; workerWatermark: string | null; pendingWindows: number } }).completeness;
+  assert.deepEqual(completeness.missingDays, []);
+  assert.equal(completeness.pendingWindows, 0);
+  assert.notEqual(completeness.workerWatermark, null);
+
+  // no token: 401; a capture user's token (right audience, wrong role): 403; the worker's token (HAPI's audience): 401
+  assert.equal((await callApi(port, path)).status, 401);
+  assert.equal((await callApi(port, path, await userToken("capture-user", "POC_CAPTURE_USER_PASSWORD"))).status, 403);
+  assert.equal((await callApi(port, path, await credentials.token())).status, 401);
+  assert.equal((await callApi(port, path, `${clinician.slice(0, -3)}AAA`)).status, 401); // signature damaged
 });

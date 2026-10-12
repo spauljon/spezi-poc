@@ -41,7 +41,7 @@ export class ClientCredentials {
     }
     const body = (await response.json()) as { access_token?: unknown; expires_in?: unknown };
     if (typeof body.access_token !== "string" || typeof body.expires_in !== "number") {
-      throw new Error("the token response was not understood");
+      throw new TypeError("the token response was not understood");
     }
     this.cached = { value: body.access_token, expiresAt: this.now() + body.expires_in * 1000 };
     return body.access_token;

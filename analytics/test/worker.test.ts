@@ -15,6 +15,7 @@ function make(fhir = new FakeFhir(), store: Store = new MemoryStore(), overlapMs
 }
 
 const rows = async (store: Store) => (await store.rollups()).map((r) => ({ ...r }));
+const withoutClock = <T extends { updatedAtMs: number }>(r: T | undefined) => { const { updatedAtMs: _ignored, ...rest } = r ?? ({} as T); return rest; };
 
 test("rolls up count, min, median and max per patient, metric and UTC day", async () => {
   const { fhir, store, worker } = make();
@@ -30,7 +31,7 @@ test("rolls up count, min, median and max per patient, metric and UTC day", asyn
   assert.equal(report.changed, 4);
   const byKey = new Map((await store.rollups()).map((r) => [`${r.patientId}|${r.metricId}|${r.day}`, r]));
   assert.deepEqual(
-    { ...byKey.get(`p1|heartRate|${TUE}`) },
+    withoutClock(byKey.get(`p1|heartRate|${TUE}`)),
     { patientId: "p1", metricId: "heartRate", day: TUE, unit: heartRate.ucum, n: 3, min: 60, median: 70, max: 80, revision: 1 },
   );
   assert.equal(byKey.get(`p1|heartRate|${WED}`)?.n, 1);

@@ -6,6 +6,8 @@ export interface QuantityMetric {
   readonly id: string;
   readonly loincCode: string;
   readonly ucum: string;
+  /** LOINC display text, for UIs. */
+  readonly display: string;
 }
 
 /** The sleep-stage metric: one duration Observation per stage interval, code per stage. */
@@ -32,10 +34,41 @@ export const defaultContractPath = fileURLToPath(new URL("../../contract/metrics
 interface RawMetric {
   id?: unknown;
   kind?: unknown;
-  loinc?: { code?: unknown };
+  loinc?: { code?: unknown; display?: unknown };
   unit?: { ucum?: unknown };
   stages?: Record<string, { code?: unknown }>;
   unmapped?: unknown;
+}
+
+/** A string field, or "" when absent or not a string (never "[object Object]"). */
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function parseSleep(metric: RawMetric): SleepMetric {
+  const stageByCode = new Map<string, string>();
+  for (const [stage, coding] of Object.entries(metric.stages ?? {})) {
+    const code = text(coding.code);
+    if (!code) {
+      throw new Error(`contract sleep stage ${stage} lacks a code`);
+    }
+    stageByCode.set(code, stage);
+  }
+  if (stageByCode.size === 0) {
+    throw new Error("contract sleep metric has no stages");
+  }
+  const unmapped = Array.isArray(metric.unmapped) ? metric.unmapped.map(text) : [];
+  return { id: text(metric.id), stageByCode, unmapped };
+}
+
+function parseQuantity(metric: RawMetric): QuantityMetric {
+  const id = text(metric.id);
+  const loincCode = text(metric.loinc?.code);
+  const ucum = text(metric.unit?.ucum);
+  if (!id || !loincCode || !ucum) {
+    throw new Error(`contract metric ${id || "(no id)"} lacks a code or unit`);
+  }
+  return { id, loincCode, ucum, display: text(metric.loinc?.display) || id };
 }
 
 /**
@@ -48,48 +81,21 @@ export function loadContract(path: string = defaultContractPath): Contract {
     systems?: { loinc?: unknown; ucum?: unknown };
     metrics?: RawMetric[];
   };
-  const version = String(raw.contractVersion ?? "");
-  const major = Number(version.split(".")[0]);
-  if (major !== SUPPORTED_MAJOR) {
+  const version = text(raw.contractVersion);
+  if (Number(version.split(".")[0]) !== SUPPORTED_MAJOR) {
     throw new Error(`contract version ${version} is not supported (this worker supports major ${SUPPORTED_MAJOR})`);
   }
-  const loincSystem = String(raw.systems?.loinc ?? "");
-  const ucumSystem = String(raw.systems?.ucum ?? "");
+  const loincSystem = text(raw.systems?.loinc);
+  const ucumSystem = text(raw.systems?.ucum);
   if (!loincSystem || !ucumSystem) {
     throw new Error("contract has no LOINC or UCUM system");
   }
-  const quantityMetrics: QuantityMetric[] = [];
-  let sleep: SleepMetric | null = null;
-  for (const metric of raw.metrics ?? []) {
-    if (metric.kind === "sleepStage") {
-      const stageByCode = new Map<string, string>();
-      for (const [stage, coding] of Object.entries(metric.stages ?? {})) {
-        const code = String(coding.code ?? "");
-        if (!code) {
-          throw new Error(`contract sleep stage ${stage} lacks a code`);
-        }
-        stageByCode.set(code, stage);
-      }
-      if (stageByCode.size === 0) {
-        throw new Error("contract sleep metric has no stages");
-      }
-      const unmapped = Array.isArray(metric.unmapped) ? metric.unmapped.map(String) : [];
-      sleep = { id: String(metric.id ?? ""), stageByCode, unmapped };
-      continue;
-    }
-    if (metric.kind !== "quantity") {
-      continue; // an unknown kind is not rolled up
-    }
-    const id = String(metric.id ?? "");
-    const loincCode = String(metric.loinc?.code ?? "");
-    const ucum = String(metric.unit?.ucum ?? "");
-    if (!id || !loincCode || !ucum) {
-      throw new Error(`contract metric ${id || "(no id)"} lacks a code or unit`);
-    }
-    quantityMetrics.push({ id, loincCode, ucum });
-  }
+  const metrics = raw.metrics ?? [];
+  // an unknown kind is not rolled up
+  const quantityMetrics = metrics.filter((m) => m.kind === "quantity").map(parseQuantity);
+  const sleepMetric = metrics.find((m) => m.kind === "sleepStage");
   if (quantityMetrics.length === 0) {
     throw new Error("contract has no quantity metrics");
   }
-  return { version, loincSystem, ucumSystem, quantityMetrics, sleep };
+  return { version, loincSystem, ucumSystem, quantityMetrics, sleep: sleepMetric ? parseSleep(sleepMetric) : null };
 }

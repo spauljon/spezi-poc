@@ -1,0 +1,148 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "POC analytic API",
+    "version": "1.0.0",
+    "description": "Daily trend bands and sleep nights computed by the aggregation worker (M9, M10) from HAPI. Synthetic data only in the POC. Not a medical device: it returns data and provenance, not interpretations. Every response carries `completeness`: absence of data is never a normal reading."
+  },
+  "servers": [{ "url": "https://macpro16.local:8445", "description": "TLS only; bound to loopback on the POC host (M11 decision)" }],
+  "security": [{ "bearer": [] }],
+  "paths": {
+    "/v1/metrics": {
+      "get": {
+        "operationId": "listMetrics",
+        "summary": "Metrics a band can be requested for (from contract/metrics.json)",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Metrics" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/v1/patients/{patientId}/bands": {
+      "get": {
+        "operationId": "getBands",
+        "summary": "Daily count/min/median/max for one metric over UTC days from..to inclusive",
+        "parameters": [
+          { "name": "patientId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9\\-.]{1,64}$" } },
+          { "name": "metric", "in": "query", "required": true, "schema": { "type": "string" }, "description": "An id from /v1/metrics" },
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" }, "description": "At most 366 days after from" }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Bands" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/v1/patients/{patientId}/sleep": {
+      "get": {
+        "operationId": "getSleep",
+        "summary": "Sleep sessions whose final waking falls on a UTC date from..to inclusive",
+        "parameters": [
+          { "name": "patientId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9\\-.]{1,64}$" } },
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Sleep" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http", "scheme": "bearer", "bearerFormat": "JWT",
+        "description": "A Keycloak access token from realm `poc` with aud `poc-analytics` and role `clinician-reader`. 401: missing or not accepted (signature, issuer, audience, expiry). 403: valid token without the role."
+      }
+    },
+    "responses": {
+      "Unauthorized": { "description": "No token, or not accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "Token lacks the clinician-reader role", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "BadRequest": { "description": "A parameter is missing or invalid", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object", "required": ["error", "detail"],
+        "properties": { "error": { "type": "string" }, "detail": { "type": "string" } }
+      },
+      "MetricInfo": {
+        "type": "object", "required": ["id", "display", "unit"],
+        "properties": { "id": { "type": "string" }, "display": { "type": "string" }, "unit": { "type": "string", "description": "UCUM" } }
+      },
+      "Metrics": {
+        "type": "object", "required": ["contractVersion", "metrics"],
+        "properties": {
+          "contractVersion": { "type": "string" },
+          "metrics": { "type": "array", "items": { "$ref": "#/components/schemas/MetricInfo" } }
+        }
+      },
+      "Completeness": {
+        "type": "object",
+        "required": ["requestedDays", "daysWithData", "missingDays", "pendingWindows", "lastComputedAt", "workerWatermark", "generatedAt"],
+        "properties": {
+          "requestedDays": { "type": "integer" },
+          "daysWithData": { "type": "integer" },
+          "missingDays": { "type": "array", "items": { "type": "string", "format": "date" }, "description": "Days in range with no row. Not delivered yet and no samples are indistinguishable." },
+          "pendingWindows": { "type": "integer", "description": "Windows known to have changed that the worker has not recomputed yet: the rows may be stale." },
+          "lastComputedAt": { "type": ["string", "null"], "format": "date-time", "description": "When a returned row last changed" },
+          "workerWatermark": { "type": ["string", "null"], "format": "date-time", "description": "The newest meta.lastUpdated the worker has read from HAPI" },
+          "generatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Band": {
+        "type": "object", "required": ["day", "n", "min", "median", "max", "revision"],
+        "properties": {
+          "day": { "type": "string", "format": "date" },
+          "n": { "type": "integer" }, "min": { "type": "number" }, "median": { "type": "number" }, "max": { "type": "number" },
+          "revision": { "type": "integer", "description": "Increases only when the values change" }
+        }
+      },
+      "Bands": {
+        "type": "object", "required": ["patientId", "metric", "from", "to", "dayDefinition", "bands", "completeness"],
+        "properties": {
+          "patientId": { "type": "string" },
+          "metric": { "$ref": "#/components/schemas/MetricInfo" },
+          "from": { "type": "string", "format": "date" }, "to": { "type": "string", "format": "date" },
+          "dayDefinition": { "type": "string" },
+          "bands": { "type": "array", "items": { "$ref": "#/components/schemas/Band" } },
+          "completeness": { "$ref": "#/components/schemas/Completeness" }
+        }
+      },
+      "SleepSession": {
+        "type": "object",
+        "required": ["night", "isMain", "start", "end", "onset", "finalWaking", "asleepMin", "coreMin", "deepMin", "remMin", "unspecifiedMin",
+                     "awakeMin", "latencyMin", "wakeAfterEndMin", "unscoredMin", "overlapMin", "awakenings", "intervalCount", "revision"],
+        "properties": {
+          "night": { "type": "string", "format": "date" },
+          "isMain": { "type": "boolean", "description": "The session with the most time asleep on that date; others are naps" },
+          "start": { "type": "string", "format": "date-time" }, "end": { "type": "string", "format": "date-time" },
+          "onset": { "type": "string", "format": "date-time" }, "finalWaking": { "type": "string", "format": "date-time" },
+          "asleepMin": { "type": "number" }, "coreMin": { "type": "number" }, "deepMin": { "type": "number" },
+          "remMin": { "type": "number" }, "unspecifiedMin": { "type": "number" },
+          "awakeMin": { "type": "number", "description": "Awake between onset and final waking" },
+          "latencyMin": { "type": "number" }, "wakeAfterEndMin": { "type": "number" },
+          "unscoredMin": { "type": "number", "description": "Between onset and final waking, covered by no interval" },
+          "overlapMin": { "type": "number", "description": "Covered by more than one interval (resolved: later start wins)" },
+          "awakenings": { "type": "integer" }, "intervalCount": { "type": "integer" }, "revision": { "type": "integer" }
+        }
+      },
+      "Sleep": {
+        "type": "object", "required": ["patientId", "from", "to", "nightDefinition", "sessions", "completeness"],
+        "properties": {
+          "patientId": { "type": "string" },
+          "from": { "type": "string", "format": "date" }, "to": { "type": "string", "format": "date" },
+          "nightDefinition": { "type": "string" },
+          "sessions": { "type": "array", "items": { "$ref": "#/components/schemas/SleepSession" } },
+          "completeness": { "$ref": "#/components/schemas/Completeness" }
+        }
+      }
+    }
+  }
+}

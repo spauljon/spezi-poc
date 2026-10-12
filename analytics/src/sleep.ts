@@ -86,8 +86,8 @@ export function resolve(intervals: readonly StageInterval[]): { segments: Segmen
     }
     covering.sort((x, y) => y.startMs - x.startMs || rank(x.stage) - rank(y.stage) || x.id.localeCompare(y.id));
     const stage = covering[0]!.stage;
-    const last = segments[segments.length - 1];
-    if (last && last.endMs === a && last.stage === stage) {
+    const last = segments.at(-1);
+    if (last?.endMs === a && last.stage === stage) {
       last.endMs = b;
     } else {
       segments.push({ startMs: a, endMs: b, stage });
@@ -108,8 +108,8 @@ export function buildSessions(patientId: string, intervals: readonly StageInterv
   // cluster resolved segments into sessions by gap
   const clusters: Segment[][] = [];
   for (const seg of segments) {
-    const current = clusters[clusters.length - 1];
-    const prev = current?.[current.length - 1];
+    const current = clusters.at(-1);
+    const prev = current?.at(-1);
     if (current && prev && seg.startMs - prev.endMs <= SESSION_GAP_MS) {
       current.push(seg);
     } else {
@@ -124,9 +124,9 @@ export function buildSessions(patientId: string, intervals: readonly StageInterv
       continue;
     }
     const sessionStartMs = cluster[0]!.startMs;
-    const sessionEndMs = cluster[cluster.length - 1]!.endMs;
+    const sessionEndMs = cluster.at(-1)!.endMs;
     const onsetMs = asleep[0]!.startMs;
-    const lastAsleepEndMs = asleep[asleep.length - 1]!.endMs;
+    const lastAsleepEndMs = asleep.at(-1)!.endMs;
     const period = cluster.filter((s) => s.startMs >= onsetMs && s.endMs <= lastAsleepEndMs);
     const total = (stage: string) =>
       period.filter((s) => s.stage === stage).reduce((sum, s) => sum + (s.endMs - s.startMs), 0);

@@ -1,7 +1,7 @@
 import oracledb, { type Connection } from "oracledb";
 import type { SleepSession } from "./sleep.ts";
 import { sameSession } from "./store.ts";
-import type { Rollup, Store, StoredRollup, StoredSleepSession, Window } from "./store.ts";
+import type { Reader, Rollup, Store, StoredRollup, StoredSleepSession, Window } from "./store.ts";
 
 export interface OracleConfig {
   readonly user: string;
@@ -14,7 +14,7 @@ export interface OracleConfig {
  * The analytic store in Oracle, as the application user (DML only; the tables belong to the no-login owner and are
  * reached through synonyms). Each public method is one transaction.
  */
-export class OracleStore implements Store {
+export class OracleStore implements Store, Reader {
   private constructor(private readonly connection: Connection) {}
 
   static async connect(config: OracleConfig): Promise<OracleStore> {
@@ -125,20 +125,52 @@ export class OracleStore implements Store {
   }
 
   async rollups(patientId?: string): Promise<StoredRollup[]> {
+    return this.selectRollups("(:p is null or patient_id = :p)", { p: patientId ?? null });
+  }
+
+  async bands(patientId: string, metricId: string, from: string, to: string): Promise<StoredRollup[]> {
+    return this.selectRollups(
+      "patient_id = :p and metric_id = :m and day >= to_date(:f, 'YYYY-MM-DD') and day <= to_date(:t, 'YYYY-MM-DD')",
+      { p: patientId, m: metricId, f: from, t: to },
+    );
+  }
+
+  async sleepNights(patientId: string, from: string, to: string): Promise<StoredSleepSession[]> {
+    return (await this.nights(patientId)).filter((s) => s.night >= from && s.night <= to);
+  }
+
+  async pendingCount(patientId: string, metricIds: readonly string[], from: string, to: string): Promise<number> {
+    let total = 0;
+    for (const metric of metricIds) {
+      const result = await this.connection.execute<{ N: number }>(
+        `select count(*) as n from rollup_touched
+          where patient_id = :p and metric_id = :m
+            and day >= to_date(:f, 'YYYY-MM-DD') and day <= to_date(:t, 'YYYY-MM-DD')`,
+        { p: patientId, m: metric, f: from, t: to },
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+      total += Number(result.rows?.[0]?.N ?? 0);
+    }
+    return total;
+  }
+
+  private async selectRollups(where: string, binds: Record<string, unknown>): Promise<StoredRollup[]> {
     const result = await this.connection.execute<{
-      P: string; M: string; D: string; U: string; N: number; LO: number; MD: number; HI: number; R: number;
+      P: string; M: string; D: string; U: string; N: number; LO: number; MD: number; HI: number; R: number; UP: number;
     }>(
       `select patient_id as p, metric_id as m, to_char(day, 'YYYY-MM-DD') as d, unit as u, n,
-              min_value as lo, median_value as md, max_value as hi, revision as r
+              min_value as lo, median_value as md, max_value as hi, revision as r,
+              round((cast(sys_extract_utc(updated_at) as date) - date '1970-01-01') * 86400) * 1000 as up
          from daily_rollup
-        where (:p is null or patient_id = :p)
+        where ${where}
         order by patient_id, metric_id, day`,
-      { p: patientId ?? null },
+      binds,
       { outFormat: oracledb.OUT_FORMAT_OBJECT },
     );
     return (result.rows ?? []).map((r) => ({
       patientId: r.P, metricId: r.M, day: r.D, unit: r.U,
       n: Number(r.N), min: Number(r.LO), median: Number(r.MD), max: Number(r.HI), revision: Number(r.R),
+      updatedAtMs: Number(r.UP),
     }));
   }
 
@@ -209,7 +241,8 @@ export class OracleStore implements Store {
     const result = await this.connection.execute<Record<string, number | string>>(
       `select patient_id, to_char(night, 'YYYY-MM-DD') as night, session_start_ms, session_end_ms, onset_ms,
               last_asleep_end_ms, latency_min, wake_after_end_min, asleep_min, core_min, deep_min, rem_min,
-              unspecified_min, awake_min, unscored_min, overlap_min, awakenings, interval_count, is_main, revision
+              unspecified_min, awake_min, unscored_min, overlap_min, awakenings, interval_count, is_main, revision,
+              round((cast(sys_extract_utc(updated_at) as date) - date '1970-01-01') * 86400) * 1000 as updated_at_ms
          from sleep_session
         where (:p is null or patient_id = :p)
         order by patient_id, session_start_ms`,
@@ -225,7 +258,7 @@ export class OracleStore implements Store {
       remMin: Number(r["REM_MIN"]), unspecifiedMin: Number(r["UNSPECIFIED_MIN"]), awakeMin: Number(r["AWAKE_MIN"]),
       unscoredMin: Number(r["UNSCORED_MIN"]), overlapMin: Number(r["OVERLAP_MIN"]),
       awakenings: Number(r["AWAKENINGS"]), intervalCount: Number(r["INTERVAL_COUNT"]),
-      isMain: Number(r["IS_MAIN"]) === 1, revision: Number(r["REVISION"]),
+      isMain: Number(r["IS_MAIN"]) === 1, revision: Number(r["REVISION"]), updatedAtMs: Number(r["UPDATED_AT_MS"]),
     }));
   }
 

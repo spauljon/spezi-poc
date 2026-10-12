@@ -57,6 +57,18 @@ export function periodMs(o: ObservationLite): { startMs: number; endMs: number }
   return Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs ? { startMs, endMs } : null;
 }
 
+/** `subject=Patient/<id>`, escaped. */
+function subjectParam(patientId: string): string {
+  const reference = `Patient/${patientId}`;
+  return `subject=${encodeURIComponent(reference)}`;
+}
+
+/** `code=<system>|<c1>,<system>|<c2>`, escaped (a comma-separated list is OR). */
+function codeParam(system: string, codes: readonly string[]): string {
+  const tokens = codes.map((c) => `${system}|${c}`);
+  return `code=${encodeURIComponent(tokens.join(","))}`;
+}
+
 const isoMs = (ms: number): string => new Date(ms).toISOString();
 
 export class RollupWorker {
@@ -88,11 +100,11 @@ export class RollupWorker {
     const since = Math.max(0, (watermark ?? 0) - this.overlapMs);
     const codes = [
       ...contract.quantityMetrics.map((m) => m.loincCode),
-      ...(contract.sleep ? [...contract.sleep.stageByCode.keys()] : []),
-    ].map((code) => `${contract.loincSystem}|${code}`).join(",");
+      ...(contract.sleep ? contract.sleep.stageByCode.keys() : []),
+    ];
     const path =
       `Observation?_lastUpdated=ge${encodeURIComponent(isoMs(since))}` +
-      `&code=${encodeURIComponent(codes)}&_sort=_lastUpdated&_count=${this.pageSize}` +
+      `&${codeParam(contract.loincSystem, codes)}&_sort=_lastUpdated&_count=${this.pageSize}` +
       `&_elements=meta,subject,code,effectiveDateTime,effectivePeriod`;
 
     const touched = new Map<string, Window>();
@@ -176,8 +188,8 @@ export class RollupWorker {
     const sleep = contract.sleep!;
     const { fromMs, toMs } = fetchRange(window.day);
     const path =
-      `Observation?subject=${encodeURIComponent(`Patient/${window.patientId}`)}` +
-      `&code=${encodeURIComponent([...sleep.stageByCode.keys()].map((c) => `${contract.loincSystem}|${c}`).join(","))}` +
+      `Observation?${subjectParam(window.patientId)}` +
+      `&${codeParam(contract.loincSystem, [...sleep.stageByCode.keys()])}` +
       `&date=ge${new Date(fromMs).toISOString()}&date=lt${new Date(toMs).toISOString()}` +
       `&_count=${this.pageSize}&_elements=subject,code,effectiveDateTime,effectivePeriod`;
     const seen = new Set<string>();
@@ -200,7 +212,7 @@ export class RollupWorker {
 
   private async recompute(window: Window, report: CycleReport): Promise<boolean> {
     const { contract, fhir, store } = this.o;
-    if (contract.sleep && window.metricId === contract.sleep.id) {
+    if (window.metricId === contract.sleep?.id) {
       return this.recomputeNight(window);
     }
     const metric = contract.quantityMetrics.find((m) => m.id === window.metricId);
@@ -209,8 +221,8 @@ export class RollupWorker {
       return store.applyRollup(window, null);
     }
     const path =
-      `Observation?subject=${encodeURIComponent(`Patient/${window.patientId}`)}` +
-      `&code=${encodeURIComponent(`${contract.loincSystem}|${metric.loincCode}`)}` +
+      `Observation?${subjectParam(window.patientId)}` +
+      `&${codeParam(contract.loincSystem, [metric.loincCode])}` +
       `&date=ge${window.day}T00:00:00Z&date=lt${nextDay(window.day)}T00:00:00Z` +
       `&_count=${this.pageSize}&_elements=subject,code,effectiveDateTime,effectivePeriod,valueQuantity`;
 

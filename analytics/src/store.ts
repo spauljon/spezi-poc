@@ -19,6 +19,8 @@ export interface Rollup extends Window {
 export interface StoredRollup extends Rollup {
   /** Starts at 1; incremented only when the stored values actually change. */
   readonly revision: number;
+  /** When the stored values last changed (epoch ms; Oracle keeps whole seconds). */
+  readonly updatedAtMs: number;
 }
 
 export const windowKey = (w: Window): string => `${w.patientId}|${w.metricId}|${w.day}`;
@@ -61,6 +63,16 @@ export interface Store {
 
 export interface StoredSleepSession extends SleepSession {
   readonly revision: number;
+  readonly updatedAtMs: number;
+}
+
+/** What the analytic API reads (never writes). Implemented by Oracle and by the in-memory store. */
+export interface Reader {
+  bands(patientId: string, metricId: string, from: string, to: string): Promise<StoredRollup[]>;
+  sleepNights(patientId: string, from: string, to: string): Promise<StoredSleepSession[]>;
+  /** Touched windows not yet recomputed (stale risk) in the range, for the patient and metrics. */
+  pendingCount(patientId: string, metricIds: readonly string[], from: string, to: string): Promise<number>;
+  getWatermark(worker: string): Promise<number | null>;
 }
 
 /** Equality of everything but the revision. */
@@ -70,7 +82,9 @@ export function sameSession(a: SleepSession, b: SleepSession): boolean {
   return keys.every((k) => a[k] === b[k]);
 }
 
-export class MemoryStore implements Store {
+export class MemoryStore implements Store, Reader {
+  constructor(private readonly clock: () => number = Date.now) {}
+
   private readonly watermarks = new Map<string, number>();
   private readonly touched = new Map<string, Window>();
   private readonly stored = new Map<string, StoredRollup>();
@@ -102,11 +116,11 @@ export class MemoryStore implements Store {
     if (rollup === null) {
       return this.stored.delete(key);
     }
-    if (existing && existing.unit === rollup.unit && existing.n === rollup.n && existing.min === rollup.min &&
+    if (existing?.unit === rollup.unit && existing.n === rollup.n && existing.min === rollup.min &&
         existing.median === rollup.median && existing.max === rollup.max) {
       return false;
     }
-    this.stored.set(key, { ...rollup, revision: (existing?.revision ?? 0) + 1 });
+    this.stored.set(key, { ...rollup, revision: (existing?.revision ?? 0) + 1, updatedAtMs: this.clock() });
     return true;
   }
 
@@ -121,10 +135,10 @@ export class MemoryStore implements Store {
       if (existing && sameSession(existing, s)) {
         continue;
       }
-      this.sessions.set(key, { ...s, revision: (existing?.revision ?? 0) + 1 });
+      this.sessions.set(key, { ...s, revision: (existing?.revision ?? 0) + 1, updatedAtMs: this.clock() });
       changed = true;
     }
-    for (const [key, s] of [...this.sessions]) {
+    for (const [key, s] of this.sessions) {
       if (s.patientId === window.patientId && s.night === window.day && !keep.has(key)) {
         this.sessions.delete(key);
         changed = true;
@@ -137,6 +151,23 @@ export class MemoryStore implements Store {
     return [...this.sessions.values()]
       .filter((s) => patientId === undefined || s.patientId === patientId)
       .sort((a, b) => a.patientId.localeCompare(b.patientId) || a.sessionStartMs - b.sessionStartMs);
+  }
+
+  async bands(patientId: string, metricId: string, from: string, to: string): Promise<StoredRollup[]> {
+    return [...this.stored.values()]
+      .filter((r) => r.patientId === patientId && r.metricId === metricId && r.day >= from && r.day <= to)
+      .sort((a, b) => a.day.localeCompare(b.day));
+  }
+
+  async sleepNights(patientId: string, from: string, to: string): Promise<StoredSleepSession[]> {
+    return [...this.sessions.values()]
+      .filter((s) => s.patientId === patientId && s.night >= from && s.night <= to)
+      .sort((a, b) => a.sessionStartMs - b.sessionStartMs);
+  }
+
+  async pendingCount(patientId: string, metricIds: readonly string[], from: string, to: string): Promise<number> {
+    return [...this.touched.values()].filter(
+      (w) => w.patientId === patientId && metricIds.includes(w.metricId) && w.day >= from && w.day <= to).length;
   }
 
   async rollups(patientId?: string): Promise<StoredRollup[]> {

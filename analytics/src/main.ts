@@ -2,7 +2,11 @@ import { ClientCredentials } from "./auth.ts";
 import { loadContract } from "./contract.ts";
 import { HapiClient } from "./fhir.ts";
 import { OracleStore } from "./oracle-store.ts";
+import { AnalyticApi } from "./api.ts";
+import { JwtVerifier } from "./jwt.ts";
+import { createApiServer, listen } from "./server.ts";
 import { RollupWorker } from "./worker.ts";
+import { homedir } from "node:os";
 
 /**
  * `node --import tsx src/main.ts [once|loop|status]` (normally via `analytics/run.sh`, which supplies the
@@ -18,8 +22,8 @@ function env(name: string, fallback?: string): string {
 
 async function main(): Promise<number> {
   const command = process.argv[2] ?? "once";
-  if (!["once", "loop", "status"].includes(command)) {
-    console.error("usage: main.ts [once|loop|status]");
+  if (!["once", "loop", "status", "api"].includes(command)) {
+    console.error("usage: main.ts [once|loop|status|api]");
     return 2;
   }
   const contract = loadContract();
@@ -30,6 +34,33 @@ async function main(): Promise<number> {
   });
   const name = env("POC_WORKER_NAME", "rollup-worker");
   try {
+    if (command === "api") {
+      const issuer = env("POC_ISSUER_URL", "https://macpro16.local:8444/realms/poc");
+      const caDir = process.env["POC_TLS_DIR"] ?? `${homedir()}/.poc-ca`;
+      const tlsDir = env("POC_API_TLS_DIR", `${caDir}/analytics`);
+      const options = {
+        keyPath: `${tlsDir}/api.key`,
+        certPath: `${tlsDir}/api.crt`,
+        host: "127.0.0.1", // loopback only (M11 decision); not configurable by an environment variable on purpose
+        port: Number(env("POC_API_PORT", "8445")),
+      };
+      const api = new AnalyticApi({
+        contract,
+        reader: store,
+        verifier: new JwtVerifier({ issuer, audience: "poc-analytics", role: "clinician-reader" }),
+        workerName: name,
+        corsOrigin: process.env["POC_API_CORS_ORIGIN"] ?? "https://macpro16.local:3000",
+      });
+      const server = createApiServer(api, options);
+      await listen(server, options);
+      console.log(JSON.stringify({ api: "listening", url: `https://${options.host}:${options.port}`, contract: contract.version }));
+      await new Promise<void>((resolve) => {
+        const stop = () => server.close(() => resolve());
+        process.once("SIGINT", stop);
+        process.once("SIGTERM", stop);
+      });
+      return 0;
+    }
     if (command === "status") {
       const rows = await store.rollups();
       const sleep = await store.nights();

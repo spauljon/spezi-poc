@@ -395,6 +395,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Verify:** `curl` with a clinician token returns bands; without a token returns 401; response matches Oracle contents.
 
+**Status (2026-10-12):** built and verified; **awaiting your review** (not committed). Decisions taken with you: separate audience `poc-analytics` (realm change; Keycloak realm re-imported) and a loopback-only TLS listener at `127.0.0.1:8445`. No new packages. Three endpoints (`/v1/metrics`, bands, sleep) with a `completeness` block, JWT verification in Node's `crypto` mirroring HAPI's checks, its own leaf certificate (`make tls`), and an API description (`analytics/api/openapi.json`) that responses are tested against. 77 unit/contract tests plus 4 live tests pass; `idp/oidc.py check` passes with the new audience checks. Against the real process on the host: no token 401, clinician 200, capture user 403, worker token 401, oversized range 400, listener on 127.0.0.1 only. Five mutations (audience check, role check, algorithm allowlist, auth-before-routing, range limit) each fail tests. Decisions A43 to A47 in [analytics/README.md](../analytics/README.md). Contract unchanged.
+
 ---
 
 ### Milestone 12: Clinician web scaffold and patient banner [web/]

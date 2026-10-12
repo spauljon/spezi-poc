@@ -55,6 +55,54 @@ transaction.
 Stored per session: session start/end, onset, last-asleep end (epoch ms); latency, wake-after-end, asleep, core,
 deep, REM, unspecified, awake, unscored, overlap (minutes); awakenings, interval count, `is_main`, `revision`.
 
+## Analytic API (M11)
+
+A read-only HTTP API over what the worker computed (`src/api.ts`, `src/jwt.ts`, `src/server.ts`; described in
+[api/openapi.json](api/openapi.json)). No new packages: Node's `https` and `crypto`.
+
+| Request | Returns |
+|---|---|
+| `GET /v1/metrics` | the metrics a band exists for (id, display, UCUM unit) from the contract |
+| `GET /v1/patients/{id}/bands?metric=&from=&to=` | per UTC day: n, min, median, max, revision |
+| `GET /v1/patients/{id}/sleep?from=&to=` | sleep sessions whose final waking is on a date in the range, naps flagged |
+
+Every response has a `completeness` block: `requestedDays`, `daysWithData`, `missingDays`, `pendingWindows` (changed
+but not yet recomputed: the rows may be stale), `lastComputedAt`, `workerWatermark`, `generatedAt`. Absence of data
+is never presented as a normal reading.
+
+**Authentication** (same strictness as HAPI's, M4): a Keycloak access token, signature checked against the realm's
+published keys (RS256 only; `none`, HMAC and other algorithms refused before any key is used), then issuer, audience
+`poc-analytics`, expiry (30 s leeway), then the realm role `clinician-reader`. 401: no token or not accepted (a
+token minted for HAPI, wrong signature, expired). 403: valid token, missing role. 503: the signing keys cannot be
+fetched and none are cached. Authentication runs before routing and parameter checks, so an anonymous caller learns
+nothing about the API. A forged `kid` cannot make the API fetch keys more than once per 30 s.
+
+**Exposure.** TLS only, GET only, bound to **loopback `127.0.0.1:8445`** (decided at M11). The certificate is the
+analytic API's own leaf from the POC CA (`~/.poc-ca/analytics/api.{key,crt}`, issued by `make tls`). Because the
+name `macpro16.local` resolves to the LAN address and the listener is on loopback, callers on this Mac map the name
+to loopback (curl `--resolve macpro16.local:8445:127.0.0.1`; the M12 dev server will need the same or a proxy).
+CORS allows exactly one origin (default `https://macpro16.local:3000`, the clinician web app's registered origin;
+`POC_API_CORS_ORIGIN` overrides), answers preflight without a token, and never uses credentials or wildcards.
+
+```bash
+make analytics-api          # foreground; Ctrl-C stops
+```
+
+**Decisions and assumptions (M11):**
+
+- **A43 Audience `poc-analytics`** is minted only for `clinician-web` (and the dev-only `poc-devtest` client the
+  scripts use). `ios-capture` and `analytics-worker` tokens carry only `hapi-fhir`. `idp/oidc.py check` asserts the
+  clinician token has it, the worker token does not, and (statically, from the realm file) which clients have the
+  mapper. A capture user's token obtained through `poc-devtest` does carry the audience; the role check refuses it
+  (403), which the live test shows.
+- **A44 Any clinician may read any patient.** No per-patient scoping: patient-clinician linking and consent are out
+  of scope for the POC (UX brief section 12). The route shape (`/patients/{id}`) leaves room for it.
+- **A45 One connection.** The API shares one Oracle connection per process (queries queue); fine for a POC, a pool
+  is the first thing to change under load.
+- **A46 Limits.** At most 366 days per request; patient ids `[A-Za-z0-9.-]{1,64}`; no request body is read.
+- **A47 `missingDays` cannot distinguish** "no samples were taken" from "not delivered yet"; `pendingWindows` and
+  `workerWatermark` are what let a reader judge freshness. Days are UTC (A6), so a clinic's local day is not a row.
+
 ## Run
 
 ```bash
@@ -72,7 +120,7 @@ line. Oracle is reached on loopback `127.0.0.1:1522` (thin mode: no Instant Clie
 
 ## Packages (approved for M9, pinned exactly)
 
-`typescript` 7.0.2, `tsx` 4.23.15, `@types/node` 25.9.9 (dev) and `oracledb` 26.0.0 (runtime, thin). Tests use
+`typescript` 7.0.2, `tsx` 4.23.15, `@types/node` 25.9.9 (dev) and `oracledb` 26.0.0 (runtime, thin). M11 added no packages. Tests use
 Node's built-in runner. node-oracledb's types are declared locally (`src/oracledb.d.ts`) instead of adding
 `@types/oracledb`. npm's install scripts are not needed (thin mode, no native build) and are not run.
 
