@@ -1,5 +1,9 @@
 ## To generate a keycloak jwt (10-minute duration)
 
+In a browser, go to `https://macpro16.local:8444/ping`
+
+Then in the console, execute this fragment:
+
 ```javascript
 const r = await fetch('/realms/poc/protocol/openid-connect/token', {
   method: 'POST',
