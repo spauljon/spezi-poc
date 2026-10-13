@@ -69,3 +69,57 @@ select, input[type="date"] { font: inherit; color: inherit; background: var(--pa
 .in-error td, .in-error th { text-decoration: line-through; color: var(--muted); }
 .pager { display: flex; gap: 1rem; align-items: center; margin: 0.75rem 0; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Trends (M14). Chart colours are the validated categorical palette (dataviz skill; slots 1 to 3 pass the
+   all-pairs checks in both modes). A metric always wears its contract position's slot, never one by rank. --- */
+:root {
+  --viz-surface: #fcfcfb;
+  --viz-ink: #0b0b0b;
+  --viz-muted: #6c6a65;
+  --viz-grid: #e1e0d9;
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-6: #008300;
+  --viz-7: #4a3aa7;
+  --viz-8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --viz-surface: #1a1a19;
+    --viz-ink: #ffffff;
+    --viz-muted: #a8a69d;
+    --viz-grid: #2c2c2a;
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
+    --viz-5: #d55181;
+    --viz-6: #008300;
+    --viz-7: #9085e9;
+    --viz-8: #e66767;
+  }
+}
+.views { display: flex; gap: 0.25rem; margin: 1rem 0 0.5rem; border-bottom: 1px solid var(--line); }
+.views a { padding: 0.45rem 0.9rem; text-decoration: none; color: var(--muted); border-bottom: 3px solid transparent; }
+.views a[aria-current="page"] { color: var(--fg); font-weight: 600; border-bottom-color: var(--accent); }
+.views a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.trend-filters button.pressed { background: var(--accent); color: var(--bg); }
+.trend-card { background: var(--viz-surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.75rem 1rem 0.5rem; margin: 1rem 0; transition: opacity 0.15s; }
+.trend-card h3 { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.25rem; }
+.trend-busy { opacity: 0.55; }
+.trend-key { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
+.trend-key.slot-1 { background: var(--viz-1); } .trend-key.slot-2 { background: var(--viz-2); }
+.trend-key.slot-3 { background: var(--viz-3); } .trend-key.slot-4 { background: var(--viz-4); }
+.trend-key.slot-5 { background: var(--viz-5); } .trend-key.slot-6 { background: var(--viz-6); }
+.trend-key.slot-7 { background: var(--viz-7); } .trend-key.slot-8 { background: var(--viz-8); }
+.trend-summary { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
+.trend-plot { min-height: 190px; border-radius: 6px; }
+.trend-plot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.trend-readout { min-height: 1.4em; margin: 0.4rem 0; font-variant-numeric: tabular-nums; }
+.trend-table summary { cursor: pointer; padding: 0.35rem 0; color: var(--accent); }
+.trend-table table { margin-top: 0.4rem; }
+.uplot, .u-wrap { max-width: 100%; }
+.u-legend { display: none; }

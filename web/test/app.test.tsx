@@ -127,7 +127,7 @@ describe("banner states", () => {
   it("a patient with nothing received yet is 'No data received', and each metric says 'No data'", async () => {
     renderApp(signedIn());
     expect(await screen.findByText(/No data received yet/)).toBeTruthy();
-    expect(screen.getAllByText("No data")).toHaveLength(contract.quantityMetrics.length);
+    expect(within(screen.getByRole("region", { name: "Patient banner" })).getAllByText("No data")).toHaveLength(contract.quantityMetrics.length);
   });
 
   it("patient not found has its own state", async () => {

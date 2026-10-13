@@ -61,6 +61,62 @@ export function sleepObs(code: string, lastUpdated: string): Observation {
   };
 }
 
+/** One day of a metric as the analytic API serves it. */
+export interface BandRow { day: string; n: number; min: number; median: number; max: number; revision?: number }
+
+const DAYMS = 86_400_000;
+const eachDay = (from: string, to: string): string[] => {
+  const out: string[] = [];
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += DAYMS) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+};
+
+/**
+ * A stand-in for the analytic API that evaluates what the app sends (`/analytics/v1/metrics` and
+ * `/analytics/v1/patients/{id}/bands?metric&from&to`) and answers in the documented shape: only the days in range, a
+ * completeness block that lists the missing days, and the contract's units.
+ */
+export function analyticsAnswer(
+  url: string,
+  data: Record<string, BandRow[]> = {},
+  over: { pendingWindows?: number; metrics?: Array<{ id: string; display: string; unit: string }> } = {},
+): Response {
+  const u = new URL(url, "https://web.test");
+  if (u.pathname.endsWith("/v1/metrics")) {
+    return json(200, {
+      contractVersion: contract.version,
+      metrics: over.metrics ?? contract.quantityMetrics.map((m) => ({ id: m.id, display: m.display, unit: m.unit })),
+    });
+  }
+  const m = /\/v1\/patients\/([^/]+)\/bands$/.exec(u.pathname);
+  if (!m) return json(404, { error: "not_found", detail: "no such path" });
+  const id = u.searchParams.get("metric") ?? "";
+  const from = u.searchParams.get("from") ?? "";
+  const to = u.searchParams.get("to") ?? "";
+  const info = contract.quantityMetrics.find((x) => x.id === id);
+  if (!info) return json(400, { error: "bad_request", detail: "unknown metric" });
+  const days = eachDay(from, to);
+  const rows = (data[id] ?? []).filter((r) => r.day >= from && r.day <= to);
+  const have = new Set(rows.map((r) => r.day));
+  return json(200, {
+    patientId: m[1],
+    metric: { id, display: info.display, unit: over.metrics?.find((x) => x.id === id)?.unit ?? info.unit },
+    from,
+    to,
+    dayDefinition: "UTC calendar day of the sample's instant",
+    bands: rows.map((r) => ({ revision: 1, ...r })),
+    completeness: {
+      requestedDays: days.length,
+      daysWithData: rows.length,
+      missingDays: days.filter((d) => !have.has(d)),
+      pendingWindows: over.pendingWindows ?? 0,
+      lastComputedAt: rows.length ? "2026-10-12T11:59:00.000Z" : null,
+      workerWatermark: "2026-10-12T11:59:30.000Z",
+      generatedAt: "2026-10-12T12:00:00.000Z",
+    },
+  });
+}
+
 export const bundle = (resources: unknown[]) => ({
   resourceType: "Bundle",
   type: "searchset",
@@ -84,6 +140,10 @@ export function fakeHapi(
     failNetwork?: () => boolean;
     /** Resolve a response later (to test that a stale answer is discarded). */
     delay?: (url: string) => Promise<void>;
+    /** What the analytic API stand-in serves, per metric id (default: no days at all). */
+    analytics?: Record<string, BandRow[]>;
+    analyticsStatus?: number;
+    analyticsOver?: Parameters<typeof analyticsAnswer>[2];
   } = {},
 ) {
   const urls: string[] = [];
@@ -104,6 +164,10 @@ export function fakeHapi(
     urls.push(url);
     if (opts.delay) await opts.delay(url);
     if (opts.failNetwork?.()) throw new TypeError("Failed to fetch");
+    if (url.startsWith("/analytics/")) {
+      if (opts.analyticsStatus && opts.analyticsStatus !== 200) return json(opts.analyticsStatus, { error: "x", detail: "x" });
+      return analyticsAnswer(url, opts.analytics, opts.analyticsOver);
+    }
     if (opts.status && opts.status !== 200) return json(opts.status, {});
     if (url.includes("Patient?")) return json(200, bundle(opts.patients ?? [patient]));
 

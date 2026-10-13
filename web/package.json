@@ -12,7 +12,8 @@
   "dependencies": {
     "oidc-client-ts": "3.5.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "uplot": "1.6.32"
   },
   "devDependencies": {
     "@testing-library/dom": "10.4.2",

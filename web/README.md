@@ -1,7 +1,7 @@
 # Clinician web app
 
 React and TypeScript, built with Vite. M12 built the scaffold, sign-in and the patient banner; the flowsheet, trend,
-intraday and sleep views follow (M13 to M16). Planned in [docs/implementation-plan.md](../docs/implementation-plan.md).
+intraday and sleep views follow (M13 to M16; M14 trends is built). Planned in [docs/implementation-plan.md](../docs/implementation-plan.md).
 
 ## What M12 shows
 
@@ -49,10 +49,71 @@ Below the banner, a table of the patient's Observations across metrics (quantiti
 - **F5 HAPI writes `meta.source` as `<uri>#<request id>`.** Source detection compares the URI part. (This was a
   bug in M12's banner, invisible to its unit tests because they used the bare URI; fixed here and covered by a
   unit test and by the live test.)
-- **F6 Dates are UTC days** (as everywhere else, A6); the filter is applied to the sample's instant.
+- **F6 Dates are UTC days** (as everywhere else, A6). For an instant the filter applies to that instant. For a **period** (resting heart rate: one per local day; sleep stages) HAPI matches any period that *overlaps* the range, so a period that straddles a UTC midnight appears under both days. (Found by the live test once the simulator produced Los Angeles-day resting-heart-rate periods: the previous wording, "applied to the sample's instant", was wrong for periods. Overlap is kept: a sleep stage running through midnight belongs to both days a clinician might filter on.)
 - **F7 State is not in the URL**: a reload resets filters (and signs in again, W2). Linkable views are a later
   refinement.
 - **F8 The Observation status list is the R4 value set**, a FHIR constant, not part of the contract.
+
+## What M14 adds: trends
+
+A **Trends** view (the default; **Flowsheet** is the other tab, and the banner stays above both): daily min, median and
+max per metric, read from the analytic API (`GET /v1/patients/{id}/bands`) through the `/analytics` relay.
+
+- **One filter row** above the charts: 7, 14, 30 or 90 days ending today (UTC), or a custom range (at most 366 days,
+  the API's limit); *Refresh* re-reads. Every chart uses the same range.
+- **Three stacked charts** (heart rate, resting heart rate, HRV), each a median line over a min-to-max wash. Resting
+  heart rate has one value a day, so it is drawn as points only.
+- **Gaps are gaps.** A day with no row is `null` in what the chart is given, the line and the wash break there, a day
+  between two gaps gets a marker so it cannot vanish, and nothing is interpolated. The summary, the table and the
+  readout each say "no data" in words; the API's `completeness` block is the source of the missing days.
+- **Every value is available without a pointer:** a text summary above each chart (also its accessible description), a
+  readout under it that follows the pointer or the arrow keys (Home and End jump), and a *Table view* with one row per
+  day, "No data" for gaps and an *Intraday* link per day with data.
+- **While loading** the previous charts stay, dimmed (`aria-busy`); an answer that was superseded is discarded; errors
+  are explained in words with a retry where one can help (503 "analytic store not available", 401, 403, network).
+- **The metric list is checked** against `contract/metrics.json` once per visit; a disagreement (a unit, a missing or an
+  unknown metric) is shown, never silently corrected. The analytic answer itself is validated, not cast: a response
+  that is not the documented shape is an error, not a chart.
+- **Drill:** *Intraday* leads to `#/day/<date>?metric=<id>`, a placeholder that says the dense view arrives in M15.
+
+### Charting library: uPlot 1.6.32 (approved)
+
+Chosen over hand-rolled SVG because M15's dense intraday view needs a canvas library anyway, so M14 would otherwise
+have meant two chart stacks. Checked before adding: MIT, no dependencies, bundled types, and what it does against our
+CSP (`style-src 'self'`): it injects no `<style>`, never sets a `style` attribute as text and has no `eval`; it only
+assigns CSSOM properties. It is loaded on demand (its own 51 kB chunk, 22 kB gzipped), so the sign-in page does not
+carry it. Costs accepted: the API is imperative and canvas-based, so accessibility is entirely ours (the table twin,
+the summary and the keyboard readout above), and it needs a canvas, so unit tests run against a recording stand-in
+(`test/uplot-fake.ts`) and assert on what the app asks the chart to draw.
+
+Time axes are computed by us (ticks at UTC midnights), not by uPlot's time scale, which uses the browser's zone.
+
+### Colour
+
+Each metric always wears one categorical slot, its position in the contract (never its rank in a filtered list). Slots
+1 to 3 (blue, orange, aqua) were run through the `dataviz` skill's validator in both modes, all pairs: every check
+passes. One warning stays: aqua is 2.74:1 against the light surface (below 3:1), which the method allows only with
+visible labels and a table view, both of which exist.
+
+### Assumptions made in M14 (review these)
+
+- **T1 Days are UTC calendar days** (A6), shown in words from the API's own `dayDefinition`.
+- **T2 The default range ends today (UTC), not on the newest day with data.** Data older than the range is simply not
+  shown (all gaps); use *Custom* or a longer preset.
+- **T3 "Points only" is decided by the data**, not by a metric id: when every day with data holds one sample.
+- **T4 "No data" and "not delivered yet" are indistinguishable** (the API says so). `pendingWindows > 0` is shown as
+  "values may be out of date"; it is not a missing day.
+- **T5 Metric display names are the contract's LOINC displays** ("Heart rate --resting"); they are not prettified.
+- **T6 The intraday link is a stub** until M15.
+- **T7 Verified in a real browser once, by hand** (a throwaway harness rendering the real `TrendChart` with live
+  analytic data under the app's exact CSP, in dark and light): the gap breaks the line and wash, markers, hover
+  crosshair and readout, table twin. That is not automated: the unit tests assert what is *passed* to the chart, and
+  the canvas itself is not asserted on.
+- **T8 Screen readers were not run** (no VoiceOver pass): the structure (heading, summary text, labelled group,
+  live readout, table with scoped headers) is asserted in tests, not listened to.
+- **T9 The live test now writes two synthetic fixtures** (a `preliminary` and an `entered-in-error` Observation, by
+  conditional create as the capture user) because the flowsheet's status controls need non-final rows and a fresh
+  stack has none. They are idempotent.
 
 ## Deployed vs development (M13a)
 

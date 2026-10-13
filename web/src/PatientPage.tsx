@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { IntradayStub } from "./trends/IntradayStub.tsx";
+import { TrendsPage } from "./trends/TrendsPage.tsx";
+import { flowsheetHref, parseHash, trendsHref } from "./route.ts";
 import { useAuth } from "./auth/AuthProvider.tsx";
 import { BannerPage } from "./banner/BannerPage.tsx";
 import type { WebConfig } from "./config.ts";
@@ -17,6 +20,12 @@ type State =
 /** Resolves the patient once, then shows the banner and the flowsheet for them. */
 export function PatientPage({ config, contract }: { config: WebConfig; contract: WebContract }) {
   const auth = useAuth();
+  const [route, setRoute] = useState(() => parseHash(window.location.hash));
+  useEffect(() => {
+    const onChange = () => setRoute(parseHash(window.location.hash));
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
   const [state, setState] = useState<State>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -47,7 +56,13 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
   return (
     <>
       <BannerPage config={config} contract={contract} patient={state.patient} />
-      <Flowsheet config={config} contract={contract} patientId={state.patient.id} />
+      <nav aria-label="Views" className="views">
+        <a href={trendsHref} aria-current={route.view === "flowsheet" ? undefined : "page"}>Trends</a>
+        <a href={flowsheetHref} aria-current={route.view === "flowsheet" ? "page" : undefined}>Flowsheet</a>
+      </nav>
+      {route.view === "flowsheet" && <Flowsheet config={config} contract={contract} patientId={state.patient.id} />}
+      {route.view === "trends" && <TrendsPage config={config} contract={contract} patientId={state.patient.id} />}
+      {route.view === "day" && <IntradayStub day={route.day} metric={route.metric} contract={contract} />}
     </>
   );
 }
