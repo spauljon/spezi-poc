@@ -54,6 +54,18 @@ Below the banner, a table of the patient's Observations across metrics (quantiti
   refinement.
 - **F8 The Observation status list is the R4 value set**, a FHIR constant, not part of the contract.
 
+## Deployed vs development (M13a)
+
+`make stack-up` also deploys the web app: `web/Dockerfile` builds the app (`vite build`, Node 24 by digest) and
+serves it with the already-local pinned nginx image at `https://macpro16.local:3000` (TLS, all interfaces). The
+nginx (`web/nginx/nginx.conf`) relays GET/HEAD `/fhir` to HAPI and `/analytics` to the analytic API **inside the
+compose network with certificate verification**, sets a Content-Security-Policy (scripts from its own origin only;
+connections to itself and to Keycloak), serves hashed assets as immutable and `index.html` uncached, and answers
+the SPA fallback for `/callback`. It runs as the invoking user, read-only, with no capabilities.
+
+`make web-dev` (Vite's dev server, hot reload) is for development and uses the same port: it refuses to start
+while the deployed service owns it (`docker stop spezi-poc-web` first).
+
 ## Run
 
 ```bash
