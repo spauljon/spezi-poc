@@ -7,7 +7,7 @@ set -euo pipefail
 
 run_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-"${run_dir}/scripts/compose.sh" --profile initialize down
+"${run_dir}/scripts/compose.sh" down
 echo "✅ Docker project 'spezi-poc' containers removed."
 
 read -rp "This will erase the POC Oracle database (FHIR and analytics PDBs). Continue? [y/N]: " confirm
@@ -21,9 +21,8 @@ if [[ ${confirm_lc} == "y" ]]; then
     echo "✅ Docker volume is not present."
   fi
   set -e
-  rm -vf "${run_dir}/db/.initialized"
 else
-  echo "Oracle volume kept; the .initialized marker is unchanged."
+  echo "Oracle volume kept."
 fi
 
 # Keycloak keeps its data in KEYCLOAKPDB inside the Oracle volume (M3c), so erasing Oracle erases it too. A leftover

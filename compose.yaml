@@ -8,11 +8,10 @@
 # the web app (3000) on all interfaces, TLS only, with a verified token required for any data. Never publish a
 # plain-HTTP or unauthenticated service on all interfaces (see root CLAUDE.md, Isolation).
 #
-# oracle-init runs exactly once, during first-time setup (profile "initialize"). scripts/bootstrap.sh
-# activates that profile only while db/.initialized is absent, waits for the init to succeed, removes
-# the exited init container, then writes the marker. Later runs are a plain `up -d` with no init
-# service in sight. Startup order on a first run: oracle (healthy) -> oracle-init (completed
-# successfully) -> hapi; the hapi dependency is optional so it is ignored when the profile is inactive.
+# Database initialization (PDBs, users, HAPI schema) is part of the oracle service itself: db/init.sh runs
+# inside the container on every start as an Oracle image startup hook (db/startup/10-poc-init.sh), and
+# the healthcheck reports healthy only once it has succeeded. There is no separate init service, profile or
+# marker; everything that depends on oracle being healthy depends on an initialized database.
 # Deploy through scripts/compose.sh (explicit project), e.g. `make stack-up`.
 name: spezi-poc
 
@@ -29,33 +28,23 @@ services:
       ORACLE_CHARACTERSET: AL32UTF8
     volumes:
       - oracle_data:/opt/oracle/oradata
+      # Startup hook (a directory of its own: the image runs every *.sql and sources every *.sh in it).
+      - ./db/startup:/opt/oracle/scripts/startup:ro
+      - ./db:/opt/poc/db:ro
+      - ./hapi/schema:/opt/poc/hapi-schema:ro
     healthcheck:
+      # Healthy = the CDB answers AND this start's db/init.sh run succeeded (db/init-status.sh).
       test:
         [
           'CMD-SHELL',
-          'echo "select ''CDB_IS_READY'' from dual;" | sqlplus -s -L "sys/$${ORACLE_PWD}@localhost:1521/FREE as sysdba" | grep -q CDB_IS_READY'
+          'echo "select ''CDB_IS_READY'' from dual;" | sqlplus -s -L "sys/$${ORACLE_PWD}@localhost:1521/FREE as sysdba" | grep -q CDB_IS_READY && [ "$$(bash /opt/poc/db/init-status.sh)" = ok ]'
         ]
       interval: 20s
       timeout: 10s
       retries: 20
-      start_period: 120s
-
-  oracle-init:
-    container_name: spezi-poc-oracle-init
-    image: container-registry.oracle.com/database/free:23.26.0.0-arm64
-    platform: linux/arm64
-    profiles:
-      - initialize
-    depends_on:
-      oracle:
-        condition: service_healthy
-    env_file:
-      - ./db/.env.local
-    volumes:
-      - ./db:/opt/poc/db:ro
-      - ./hapi/schema:/opt/poc/hapi-schema:ro
-    command: bash /opt/poc/db/init.sh
-    restart: 'no'
+      # A first start creates the database AND three PDBs before it can be healthy; failures inside this window
+      # do not count, and the first success ends it. bootstrap.sh watches for a failed init sooner.
+      start_period: 1200s
 
   hapi:
     container_name: spezi-poc-hapi
@@ -81,10 +70,6 @@ services:
     depends_on:
       oracle:
         condition: service_healthy
-      # Only enforced while the initialize profile is active (first run); ignored afterwards.
-      oracle-init:
-        condition: service_completed_successfully
-        required: false
     healthcheck:
       test: ['CMD-SHELL', 'wget -q --spider -O /dev/null http://127.0.0.1:8081/actuator/health || exit 1']
       interval: 15s

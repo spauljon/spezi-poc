@@ -12,28 +12,25 @@ The POC's own Oracle Database Free container (`container-registry.oracle.com/dat
 
 The usual enterprise split: a **schema owner** (`NO AUTHENTICATION`, so it cannot log in) holds every table, temporary table and sequence, and all DDL runs as SYS through `current_schema = owner`. The **application user** that HAPI connects as has `CREATE SESSION` only, `SELECT/INSERT/UPDATE/DELETE` on the owner's tables, `SELECT` on its sequences, and a private synonym for each object so HAPI's unqualified names resolve. It owns nothing, so it cannot `DROP`, `ALTER` or `TRUNCATE`, and needs no tablespace quota.
 
-`db/sql/25-grants-and-synonyms.sql` is idempotent and runs on every init. After a HAPI upgrade (or any change to the owner's objects), rerun the init: remove `db/.initialized` and `make stack-up`. Regenerate `hapi/schema/oracle-temp-tables.sql` too, since Hibernate no longer creates the `HTE_*` tables at startup.
+`db/sql/25-grants-and-synonyms.sql` is idempotent and runs on every init, which is every `oracle` container start. After a HAPI upgrade (or any change to the owner's objects), rerun the init with `docker exec spezi-poc-oracle bash /opt/poc/db/init.sh`; `docker restart spezi-poc-oracle` does the same through the startup hook. Regenerate `hapi/schema/oracle-temp-tables.sql` too, since Hibernate no longer creates the `HTE_*` tables at startup.
 
 Planned in [docs/implementation-plan.md](../docs/implementation-plan.md), Milestone 1. Compose file: [compose.yaml](../compose.yaml) (project `spezi-poc`). Oracle is published on loopback only (`127.0.0.1:1522`); HAPI's 8443 is network-reachable since M4 (TLS, bearer token required).
 
 ## Bring-up order
 
 ```bash
-make stack-up         # first run: the *initialize* profile is active once, then never again
+make stack-up         # the same path every time; the database initializes itself
 make stack-verify     # M1 checks
 ```
 
-What `make stack-up` (`scripts/bootstrap.sh`) does:
+What `make stack-up` (`scripts/bootstrap.sh`) does, first run or not:
 
-| Run                          | Behavior                                                                                                                                                                                                                                 |
-|------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| First (no `db/.initialized`) | Generates credentials if absent, brings the stack up with `--profile initialize` (oracle healthy -> `oracle-init` completes -> hapi), fails fast if the init exits non-zero, removes the exited init container, writes `db/.initialized` |
-| Later                        | Plain `up -d`; the init service is not in play, so no inactive container shows up                                                                                                                                                        |
+1. Generates credentials and TLS material if absent (never overwrites).
+2. Starts `oracle` and waits until it is **healthy**. The image runs `db/init.sh` as a startup hook (`db/startup/10-poc-init.sh`) on every start: it creates the PDBs, users and HAPI schema if absent and refreshes grants. Healthy means the database answers *and* this start's init succeeded (`db/init-status.sh`). A first run takes several minutes; a failed init is reported immediately with the log.
+3. Loads Keycloak's schema (`idp/db-migrate.sh`) and the analytics schema (`analytics/db-migrate.sh`); both are idempotent.
+4. Starts everything else and waits for every service to be healthy.
 
-To repeat the init without losing data (it is idempotent), delete `db/.initialized` and rerun. For anything else, `scripts/compose.sh` is the project-scoped escape hatch, e.g. `scripts/compose.sh --profile initialize run --rm oracle-init`.
-
-```bash
-```
+There is no init service, profile or marker file. The container stays up if the init fails (the image ignores a hook's exit status), but it never reports healthy, so nothing that depends on it starts. For anything else, `scripts/compose.sh` is the project-scoped escape hatch.
 
 The Docker daemon must be running. The Oracle image may already be present from the governance stack; if not, `make stack-up` pulls it (the registry can require accepting a license or logging in).
 
@@ -47,7 +44,7 @@ Everything in this stack is synthetic, so resets are cheap:
 
 - **Both PDBs and HAPI data:** `make stack-reset` (asks before deleting the volume), then `make stack-up`.
 - **One PDB only** (container running), as SYSDBA in the container root:
-  `alter pluggable database FHIRPDB close immediate; drop pluggable database FHIRPDB including datafiles;` then remove `db/.initialized` and run `make stack-up`; the init recreates it.
+  `alter pluggable database FHIRPDB close immediate; drop pluggable database FHIRPDB including datafiles;` then `docker exec spezi-poc-oracle bash /opt/poc/db/init.sh` (or `docker restart spezi-poc-oracle`); the init recreates it.
 
 Never run these against the governance project (its compose project is `dgp`; this stack's is `spezi-poc`).
 
@@ -69,7 +66,9 @@ CPU, memory, and user-data caps apply to the **whole instance across both PDBs**
 | File | Role |
 |---|---|
 | `make-env.sh` | Generates random credentials into gitignored `.env.local` files |
-| `init.sh` | Creates PDBs and users, loads the HAPI schema (runs in the init container) |
+| `init.sh` | Creates PDBs and users, loads the HAPI schema (runs inside the `oracle` container on every start) |
+| `startup/10-poc-init.sh` | The image startup hook: sources into the image's startup, runs `init.sh`, records the outcome |
+| `init-status.sh` | Prints `ok`, `failed` or `pending` for this container start (healthcheck and bootstrap) |
 | `sql/10-create-pdb.sql` | Creates and opens a PDB (discovers the seed directory) |
 | `sql/20-fhir-user.sql` | FHIR tablespace, `hapi_owner` and `hapi` users, HAPI schema and temp-table load |
 | `sql/25-grants-and-synonyms.sql` | Grants and synonyms for an application user (idempotent, reusable) |

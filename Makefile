@@ -10,9 +10,9 @@ test-contract:  ## offline contract checks: structure, LOINC check digits, bundl
 	@python3 contract/check.py
 # Static checks only: no containers are started.
 test-db:
-	@bash -n db/init.sh db/make-env.sh db/verify.sh scripts/make-tls.sh idp/make-env.sh scripts/isolation.sh scripts/compose.sh scripts/bootstrap.sh scripts/reset.sh && echo "db: shell syntax ok"
+	@bash -n db/init.sh db/init-status.sh db/startup/10-poc-init.sh db/make-env.sh db/verify.sh scripts/make-tls.sh idp/make-env.sh scripts/isolation.sh scripts/compose.sh scripts/bootstrap.sh scripts/reset.sh && echo "db: shell syntax ok"
 	@if [ -f db/.env.local ] && [ -f hapi/.env.local ]; then \
-	   ./scripts/compose.sh --profile initialize config -q && echo "db: compose config ok"; \
+	   ./scripts/compose.sh config -q && echo "db: compose config ok"; \
 	 else echo "db: compose config skipped (run make stack-env first)"; fi
 test-idp:
 	@bash -n idp/make-env.sh idp/verify-allowlist.sh idp/test-config.sh idp/db-migrate.sh && echo "idp: shell syntax ok"
@@ -65,13 +65,13 @@ stack-env:      ## generate gitignored local credentials (never overwrites)
 	@./analytics/make-env.sh
 tls: stack-env  ## create the local CA and the HAPI, proxy and Keycloak certificates (idempotent)
 	@./scripts/make-tls.sh
-stack-up:       ## first run: init profile once, then marker; later runs: plain up -d
+stack-up:       ## bring the whole stack up; the database initializes itself (idempotent, same path every time)
 	@./scripts/bootstrap.sh
 stack-down:     ## stop the POC stack including the IdP (keeps the data volumes)
-	@./scripts/compose.sh --profile initialize down
+	@./scripts/compose.sh down
 stack-ps:
 	@./scripts/compose.sh ps
-stack-reset:    ## remove containers and (after confirmation) the Oracle volume and marker
+stack-reset:    ## remove containers and (after confirmation) the Oracle volume
 	@./scripts/reset.sh
 stack-verify:   ## M1 checks against the running stack
 	@./db/verify.sh

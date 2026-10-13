@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Creates the FHIR, analytics and Keycloak PDBs, their users, and (once) the HAPI schema.
-# Runs inside the oracle-init service (see compose.yaml). Idempotent: existing PDBs and
-# users are skipped. (Ran cleanly on 2026-10-08; the owner/app split, grants and synonyms are newer and unverified on a fresh DB.)
+# Runs INSIDE the oracle container on every start, as a startup hook (db/startup/10-poc-init.sh; compose.yaml
+# mounts it), and can be rerun by hand: docker exec spezi-poc-oracle bash /opt/poc/db/init.sh
+# Idempotent: existing PDBs and users are skipped, grants and synonyms are refreshed.
 set -euo pipefail
 
 : "${ORACLE_PWD:?ORACLE_PWD is not set (run make stack-env)}"
@@ -9,7 +10,7 @@ set -euo pipefail
 : "${ANALYTICS_DB_USER:?}" "${ANALYTICS_DB_PASSWORD:?}"
 : "${KEYCLOAK_DB_USER:?}" "${KEYCLOAK_DB_PASSWORD:?}"
 
-host=oracle
+host=localhost   # runs inside the oracle container
 sql_dir=/opt/poc/db/sql
 schema_ddl=/opt/poc/hapi-schema/oracle.sql
 temp_ddl=/opt/poc/hapi-schema/oracle-temp-tables.sql
@@ -74,8 +75,7 @@ else
   echo "Creating owner ${keycloak_owner} and application user ${KEYCLOAK_DB_USER} in ${keycloak_pdb} ..."
   sqlplus -S "$(pdb_conn "$keycloak_pdb")" @"${sql_dir}/40-keycloak-user.sql" "${keycloak_owner}" "${KEYCLOAK_DB_USER}" "${KEYCLOAK_DB_PASSWORD}"
 fi
-# The owner has no objects until idp/db-migrate.sh loads Keycloak's schema; rerun this script's grants then
-# (it is idempotent) with: scripts/compose.sh --profile initialize run --rm oracle-init (see idp/db-migrate.sh).
+# The owner has no objects until idp/db-migrate.sh loads Keycloak's schema (which also applies these grants itself).
 sqlplus -S "$(pdb_conn "$keycloak_pdb")" @"${sql_dir}/25-grants-and-synonyms.sql" "${keycloak_owner}" "${KEYCLOAK_DB_USER}"
 
 echo "Initialization complete."

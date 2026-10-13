@@ -25,7 +25,7 @@ Known platform limits:
 
 ```bash
 make hooks        # once per clone: enable the pre-commit data-leak guard
-make stack-up     # credentials, local CA and certificates, Oracle, HAPI, Keycloak + its proxy (first run initializes and pulls the pinned Keycloak image)
+make stack-up     # credentials, local CA and certificates, Oracle, HAPI, Keycloak + its proxy (the database initializes itself on first run; the first run also pulls the pinned Keycloak image)
 make stack-verify # checks; any FAIL exits non-zero, SKIP lines mean a check did not run
 ```
 
