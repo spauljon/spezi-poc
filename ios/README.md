@@ -78,7 +78,7 @@ path, and the live runner is that function over a moving window.
 | `Ingest/KeyedRandom.swift` | Stateless SplitMix64 over (seed, stream, index); reference vectors from an independent Python implementation |
 | `Ingest/SyntheticConfig.swift` | The controls (cadence, jitter, gaps, late delivery, batching, duplicates, artifacts) and seven presets |
 | `Ingest/SyntheticGenerator.swift` | `emissions(deliveredIn:)`: heart rate, HRV, resting heart rate, sleep nights, with the faults applied |
-| `Ingest/SyntheticIngestSource.swift` | The live runner: virtual time at `speed` times real time, from a start up to 14 days ago; injectable clock |
+| `Ingest/SyntheticIngestSource.swift` | The live runner: virtual time at `speed` times real time, from a start up to 30 days ago, ending at the present when it starts in the past (`ceiling`); injectable clock |
 | `Simulator/SimulatorModel.swift`, `SimulatorView.swift` | Controls, run/stop, counters by metric and by injected anomaly, the latest samples; shown only for the synthetic source |
 
 Guarantees (each tested, several by mutation): the same config and seed give the same samples; a window generated in

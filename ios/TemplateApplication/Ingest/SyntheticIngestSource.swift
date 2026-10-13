@@ -26,10 +26,15 @@ struct RunnerClock: Sendable {
 /// Virtual time advances `speed` times faster than the wall clock, starting at `virtualStart` (default: now). At speed
 /// 1 it behaves like a real device; at speed 3600 an hour of data arrives each second, which is how the later
 /// clinician views get weeks of history without waiting for it.
+///
+/// With a `ceiling`, virtual time never passes it: the stream delivers everything up to the ceiling and then finishes.
+/// That is how a replay that starts in the past ("30 days ago") ends at the present instead of running on into
+/// the future. Without one the runner behaves as before (a device simulated from now, at any speed).
 struct SyntheticIngestSource: IngestSource {
     var config: SyntheticConfig
     var virtualStart: Date?
     var speed = 1.0
+    var ceiling: Date?
     /// How often (wall-clock seconds) the runner asks the generator for what became deliverable.
     var tick: TimeInterval = 0.5
     var clock = RunnerClock.system
@@ -55,14 +60,20 @@ struct SyntheticIngestSource: IngestSource {
                     } catch {
                         break
                     }
-                    let virtualNow = virtualOrigin.addingTimeInterval(clock.now().timeIntervalSince(realStart) * speed)
-                    guard virtualNow > cursor else {
-                        continue
+                    var virtualNow = virtualOrigin.addingTimeInterval(clock.now().timeIntervalSince(realStart) * speed)
+                    let reachedCeiling = ceiling.map { virtualNow >= $0 } ?? false
+                    if let ceiling {
+                        virtualNow = min(virtualNow, ceiling)
                     }
-                    for emission in generator.emissions(deliveredIn: cursor..<virtualNow) {
-                        continuation.yield(IngestedSample(sample: emission.sample, injected: emission.injected))
+                    if virtualNow > cursor {
+                        for emission in generator.emissions(deliveredIn: cursor..<virtualNow) {
+                            continuation.yield(IngestedSample(sample: emission.sample, injected: emission.injected))
+                        }
+                        cursor = virtualNow
                     }
-                    cursor = virtualNow
+                    if reachedCeiling {
+                        break
+                    }
                 }
                 continuation.finish()
             }

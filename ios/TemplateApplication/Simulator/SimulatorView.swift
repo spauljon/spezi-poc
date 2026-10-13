@@ -16,7 +16,7 @@ struct SimulatorView: View {
     
     private static let batchChoices: [(String, TimeInterval)] = [("Immediately", 0), ("Every 5 min", 300), ("Every 15 min", 900), ("Every 30 min", 1800), ("Every hour", 3600)]
     private static let speedChoices: [(String, Double)] = [("Real time", 1), ("60x", 60), ("600x", 600), ("3600x", 3600)]
-    private static let startChoices: [(String, Int)] = [("Now", 0), ("1 day ago", 1), ("7 days ago", 7), ("14 days ago", 14)]
+    private static let startChoices: [(String, Int)] = [("Now", 0), ("1 day ago", 1), ("7 days ago", 7), ("14 days ago", 14), ("30 days ago", 30)]
     
     var body: some View {
         @Bindable var model = model

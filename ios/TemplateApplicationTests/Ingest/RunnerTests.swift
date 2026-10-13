@@ -72,6 +72,42 @@ struct IngestSourceTests {
         #expect(seen == 2_000)
     }
     
+    @Test("a ceiling ends the stream at the present: everything up to it, nothing after")
+    func ceiling() async {
+        var config = SyntheticPreset.everything.applied(to: SyntheticConfig())
+        config.metrics = [.heartRate, .hrv]
+        let start = origin.addingTimeInterval(-86_400)
+        let fake = FakeClock(origin)
+        let source = SyntheticIngestSource(config: config, virtualStart: start, speed: 3_500, ceiling: origin, tick: 1, clock: fake.clock) // 3,500 does not divide a day: the last tick overshoots
+        
+        let expected = SyntheticGenerator(config: config).emissions(deliveredIn: start..<origin)
+        #expect(expected.count > 1_000)
+        
+        var got: [IngestedSample] = []
+        for await item in source.stream() { // returns only if the stream finished at the ceiling
+            got.append(item)
+        }
+        #expect(got.map(\.sample) == expected.map(\.sample))
+        #expect(got.allSatisfy { $0.sample.issued <= origin }, "nothing is delivered after the ceiling")
+    }
+    
+    @Test("without a ceiling the same replay runs past the present (the control for the test above)")
+    func noCeilingRunsOn() async {
+        var config = SyntheticConfig(metrics: [.heartRate])
+        config.heartRateCadence = 60
+        let start = origin.addingTimeInterval(-3_600)
+        let fake = FakeClock(origin)
+        let source = SyntheticIngestSource(config: config, virtualStart: start, speed: 3_600, tick: 1, clock: fake.clock)
+        var latest = Date.distantPast
+        var seen = 0
+        for await item in source.stream() {
+            latest = max(latest, item.sample.issued)
+            seen += 1
+            if seen == 200 { break }
+        }
+        #expect(latest > origin, "uncapped, virtual time passes the present")
+    }
+    
     @Test("cancelling the consumer ends the stream")
     func cancellation() async {
         let fake = FakeClock(origin)
@@ -151,6 +187,23 @@ struct SimulatorModelTests {
         model.stop()
         #expect(model.counts.total >= 300)
         #expect(model.counts.late + model.counts.batched + model.counts.duplicates + model.counts.artifacts == 0)
+    }
+    
+    @Test("a replay from the past ends by itself at the present and stops reporting as running")
+    func replayEnds() async {
+        let fake = FakeClock(origin)
+        let model = SimulatorModel(clock: fake.clock, now: { origin })
+        var config = SyntheticPreset.cleanDay.applied(to: SyntheticConfig(metrics: [.heartRate]))
+        config.heartRateCadence = 60
+        model.config = config
+        model.speed = 3_500 // does not divide a day, so the last tick overshoots the present
+        model.startDaysAgo = 1
+        model.start()
+        await runUntil(model) { !model.isRunning }
+        #expect(!model.isRunning, "the runner finished at the ceiling")
+        #expect(model.counts.total >= 1_400, "a day of one-minute heart rate")
+        #expect(model.counts.total <= 1_500)
+        #expect(model.lastDelivery.map { $0 <= origin } ?? false, "nothing was delivered after the present")
     }
     
     @Test("starting twice does not start a second runner, and stopping is idempotent")

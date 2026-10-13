@@ -81,8 +81,11 @@ final class SimulatorModel {
             return
         }
         isRunning = true
-        let origin = nowProvider().addingTimeInterval(-Double(startDaysAgo) * 86_400)
-        let source = SyntheticIngestSource(config: config, virtualStart: origin, speed: speed, clock: clock)
+        let now = nowProvider()
+        let origin = now.addingTimeInterval(-Double(startDaysAgo) * 86_400)
+        // A replay of history ends at the present (no future-dated samples); "Now" runs like a device, at any speed.
+        let source = SyntheticIngestSource(config: config, virtualStart: origin, speed: speed,
+                                           ceiling: startDaysAgo > 0 ? now : nil, clock: clock)
         let formatter = Self.formatter(for: config.timeZone)
         let device = source.device
         task = Task { [weak self] in
@@ -90,6 +93,10 @@ final class SimulatorModel {
                 guard let self else { return }
                 self.record(ingested, formatter: formatter)
                 self.onEmit?(ingested, device)
+            }
+            // The stream ends by itself only at a replay's ceiling; a stop() cancels the task and clears the flag.
+            if !Task.isCancelled {
+                self?.isRunning = false
             }
         }
     }
