@@ -191,4 +191,18 @@ describe("navigation between the views", () => {
     expect(await screen.findByRole("heading", { name: /Flowsheet|Observations/i })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Flowsheet" }).getAttribute("aria-current")).toBe("page");
   });
+
+  it("shows the sleep tab at its own address, and a night's address opens that night", async () => {
+    vi.stubGlobal("fetch", hapi([]));
+    window.location.hash = "#/sleep";
+    renderApp(signedIn());
+    expect(await screen.findByRole("heading", { name: "Sleep" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sleep" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Trends" }).getAttribute("aria-current")).toBeNull();
+    cleanup();
+
+    window.location.hash = "#/sleep/2026-09-28";
+    renderApp(signedIn());
+    expect(await screen.findByRole("heading", { name: /Night of 2026-09-28/ })).toBeTruthy();
+  });
 });

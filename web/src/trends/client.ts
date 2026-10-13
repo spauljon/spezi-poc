@@ -1,3 +1,4 @@
+import { parseSleep, SleepShapeError, type SleepResponse } from "../sleep/api.ts";
 import { parseBands, TrendShapeError, type BandsResponse, type MetricInfo } from "./model.ts";
 
 export type AnalyticsErrorKind = "unauthorized" | "forbidden" | "unavailable" | "network" | "server" | "request" | "shape";
@@ -44,6 +45,19 @@ export class AnalyticsClient {
       return parseBands(body);
     } catch (error) {
       if (error instanceof TrendShapeError) {
+        throw new AnalyticsError("shape", `The analytic service's answer was not understood (${error.message})`);
+      }
+      throw error;
+    }
+  }
+
+  async sleep(patientId: string, from: string, to: string): Promise<SleepResponse> {
+    const q = new URLSearchParams({ from, to });
+    const body = await this.get(`v1/patients/${encodeURIComponent(patientId)}/sleep?${q.toString()}`);
+    try {
+      return parseSleep(body);
+    } catch (error) {
+      if (error instanceof SleepShapeError) {
         throw new AnalyticsError("shape", `The analytic service's answer was not understood (${error.message})`);
       }
       throw error;

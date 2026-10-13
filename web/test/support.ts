@@ -76,12 +76,36 @@ const eachDay = (from: string, to: string): string[] => {
  * `/analytics/v1/patients/{id}/bands?metric&from&to`) and answers in the documented shape: only the days in range, a
  * completeness block that lists the missing days, and the contract's units.
  */
+export interface SleepRow {
+  night: string; isMain: boolean; start: string; end: string; onset: string; finalWaking: string;
+  asleepMin: number; coreMin: number; deepMin: number; remMin: number; unspecifiedMin: number; awakeMin: number;
+  latencyMin: number; wakeAfterEndMin: number; unscoredMin: number; overlapMin: number; awakenings: number;
+  intervalCount: number; revision?: number;
+}
+
 export function analyticsAnswer(
   url: string,
   data: Record<string, BandRow[]> = {},
-  over: { pendingWindows?: number; metrics?: Array<{ id: string; display: string; unit: string }> } = {},
+  over: { pendingWindows?: number; metrics?: Array<{ id: string; display: string; unit: string }>; sleep?: SleepRow[] } = {},
 ): Response {
   const u = new URL(url, "https://web.test");
+  const sl = /\/v1\/patients\/([^/]+)\/sleep$/.exec(u.pathname);
+  if (sl) {
+    const from = u.searchParams.get("from") ?? "";
+    const to = u.searchParams.get("to") ?? "";
+    const days = eachDay(from, to);
+    const rows = (over.sleep ?? []).filter((r) => r.night >= from && r.night <= to);
+    const have = new Set(rows.map((r) => r.night));
+    return json(200, {
+      patientId: sl[1], from, to,
+      nightDefinition: "UTC date of the final waking from sleep; sessions are separated by gaps over 2 hours",
+      sessions: rows.map((r) => ({ revision: 1, ...r })),
+      completeness: {
+        requestedDays: days.length, daysWithData: have.size, missingDays: days.filter((d) => !have.has(d)),
+        pendingWindows: over.pendingWindows ?? 0, lastComputedAt: null, workerWatermark: null, generatedAt: "2026-10-12T12:00:00.000Z",
+      },
+    });
+  }
   if (u.pathname.endsWith("/v1/metrics")) {
     return json(200, {
       contractVersion: contract.version,

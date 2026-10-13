@@ -202,6 +202,72 @@ refetch small amounts and were left alone.
 - **I9 A window with one or two samples** auto-scales the y axis tightly (HRV in a 15-minute window), which is honest
   but can look dramatic; there is no "no samples in this window" hint.
 
+## What M16 adds: sleep
+
+A **Sleep** tab (`#/sleep`, and `#/sleep/<night>[?s=<session start, epoch seconds>]`): the last 14, 30 or 90 nights from
+the analytic API, and one night's hypnogram from the stage Observations in HAPI.
+
+- **Nights:** a stacked bar per night (deep, light, REM, unspecified, then awake time inside the night), the main
+  sleep only; a night without sleep is an empty slot and is said to be (the API's `completeness` lists them, nothing
+  is estimated). A table twin gives asleep time, stage shares, awake time, awakenings, time to fall asleep and naps,
+  with an *Open* link per night. A date with a nap offers both sessions.
+- **One night:** stage lanes (Awake, REM, Light, Deep; "Asleep (unspecified)" only when present), one bar per stretch
+  of the resolved timeline. A stretch with no recorded interval is hatched and said to be unscored; where intervals
+  overlapped, a mark shows that the later start was drawn. Arrow keys read it a stretch at a time; a table lists every
+  stretch with its minutes and a note. A written summary gives the totals, awakenings, latency and the data-quality
+  facts (unscored and overlapped minutes).
+- **Checked against the summary:** the hypnogram's statistics are computed from the intervals and compared with the
+  API's for the same session; if they differ, the page says which figure and by how much instead of choosing.
+
+### Where the timeline comes from (option A)
+
+The web reads the session's stage Observations from HAPI (the data-model brief's design, about 20 for a night) and
+applies the worker's overlap rule itself (`src/sleep/model.ts`): every instant gets one stage; the interval that
+starts later wins; ties go to the more specific stage, then the lower id. That rule therefore exists in two languages.
+Three guards: an in-page comparison with the API (above), a live test that compares the two for **every** session the
+API holds (16 on the verification stack), and a third, deliberately naive per-minute reading in the fixture tool that
+the API and the web must both equal.
+
+### Times as recorded, and clock changes
+
+Each sample carries the offset of the device's own zone, so a night is drawn and labelled in the device's clock
+(`23:00 UTC-07:00`), never converted to the browser's zone. When the offset changes within a night (a DST change) the
+page says so, gives the real length against the clock length ("7 h 00 min of real time, 8 h 00 min on the clock"), and
+labels no tick inside the interval that spans the change with a clock time (the data does not say when inside it the
+clock changed): such a tick is shown in UTC. The minutes are always real elapsed minutes.
+
+### Colour
+
+The four stages use slots 4 to 7 of the validated categorical palette (Awake yellow, REM magenta, Light green, Deep
+violet), checked with the `dataviz` validator as a set in both modes: all checks pass; the one warning (yellow and
+magenta under 3:1 on the light surface) is relieved by labelled lanes and the tables. A first attempt with a blue
+ramp failed the dark-mode lightness band and was dropped. Stage identity is the lane, never colour alone.
+
+### Verification data
+
+`make web-seed-sleep-nights` writes three known nights idempotently (30 Observations): **2026-09-28** (an overlap, an
+unscored gap, a 3-minute awake that is not an awakening, a 10-minute one that is), **2026-09-30** (a night and a nap
+on the same date) and **2026-03-08** (across the Los Angeles spring-forward, one interval spanning the change). Each
+is described once, with what it must come to read minute by minute. The analytic API's summaries equal that reading
+on every field for all three, and the live test holds the web to it too.
+
+### Assumptions made in M16 (review these)
+
+- **S1 Light sleep is HealthKit's "core" sleep.** That mapping is the contract's clinical judgment (A4); the page says so.
+- **S2 A night is dated by the UTC date of the final waking** (A6). For a patient far east of UTC that can be the day
+  before the calendar day they woke on; the page says so rather than hiding it.
+- **S3 The chart shows only the main sleep of a date;** naps are in the table and selectable, not stacked.
+- **S4 Awake time inside the night is the top segment;** latency and wake-after-end are in the table and the
+  summary, not drawn in the bars.
+- **S5 No interpretation:** no scoring, norms or targets. The view states what was recorded.
+- **S6 Tick labels inside an interval that spans a clock change are in UTC** (see above); I do not guess the instant
+  the clock changed.
+- **S7 The loader reads at most 2,000 intervals per session** (10 pages of 200) and stops without special notice.
+- **S8 Not tried:** a screen reader, touch gestures, or a session with an unusually large number of intervals.
+- **S9 Nothing polls.** *Refresh* re-reads; a night in progress is not updated.
+- **S10 The page lists what HAPI returned for the session's window,** excluding an interval that merely touches it
+  (HAPI matches overlapping periods, so such an interval is returned and discarded here; there is a test).
+
 ## Deployed vs development (M13a)
 
 `make stack-up` also deploys the web app: `web/Dockerfile` builds the app (`vite build`, Node 24 by digest) and

@@ -131,3 +131,34 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .key-gap { display: inline-block; width: 14px; height: 10px; background: color-mix(in srgb, var(--viz-muted) 30%, transparent); border: 1px solid var(--viz-muted); vertical-align: -1px; }
 .key-flag { font-size: 1rem; line-height: 1; color: var(--viz-ink); }
 .trend-table ul { margin: 0.4rem 0 0.4rem 1.2rem; padding: 0; }
+
+/* --- Sleep (M16). Stage colours are slots 4 to 7 of the validated categorical palette (both modes pass the adjacent
+   checks; the yellow and magenta are under 3:1 on light, relieved by labelled lanes and a table). --- */
+.stage-awake { fill: var(--viz-4); } .stage-asleepREM { fill: var(--viz-5); }
+.stage-asleepCore { fill: var(--viz-6); } .stage-asleepDeep { fill: var(--viz-7); }
+.stage-asleepUnspecified { fill: var(--viz-muted); }
+.swatch { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; }
+.swatch.stage-awake { background: var(--viz-4); } .swatch.stage-asleepREM { background: var(--viz-5); }
+.swatch.stage-asleepCore { background: var(--viz-6); } .swatch.stage-asleepDeep { background: var(--viz-7); }
+.swatch.stage-asleepUnspecified { background: var(--viz-muted); }
+.unscored-swatch { background: repeating-linear-gradient(135deg, var(--viz-muted) 0 2px, transparent 2px 5px); border: 1px solid var(--viz-muted); }
+.overlap-swatch { background: var(--viz-ink); height: 3px; }
+.stage-key { display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; list-style: none; margin: 0.5rem 0; padding: 0; }
+.hypnogram { margin: 0.5rem 0 0; }
+.hypno-focus { border-radius: 6px; }
+.hypno-focus:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.lane-bg { fill: color-mix(in srgb, var(--viz-grid) 45%, transparent); }
+.lane-label, .axis-label { fill: var(--viz-muted); font: 12px system-ui, sans-serif; }
+.selected-label { fill: var(--viz-ink); font-weight: 700; }
+.stage-bar { stroke: var(--viz-surface); stroke-width: 1; }
+.stage-bar.active { stroke: var(--viz-ink); stroke-width: 2.5; }
+.unscored { stroke: var(--viz-muted); stroke-width: 1; }
+.hatch-line { stroke: var(--viz-muted); stroke-width: 2; }
+.unscored.active { stroke: var(--viz-ink); stroke-width: 2.5; }
+.overlap-mark { fill: var(--viz-ink); }
+.connector, .axis-tick, .grid { stroke: var(--viz-grid); stroke-width: 1; }
+.sleep-summary a .hit { fill: transparent; }
+.sleep-summary a:hover .hit { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
+.sleep-summary a:focus-visible { outline: 3px solid var(--accent); }
+.bar-selected .stage-bar { stroke: var(--viz-ink); stroke-width: 2; }
+.session-choice { margin-right: 1rem; }

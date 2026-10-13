@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { IntradayPage } from "./intraday/IntradayPage.tsx";
 import { TrendsPage } from "./trends/TrendsPage.tsx";
-import { flowsheetHref, parseHash, trendsHref } from "./route.ts";
+import { SleepPage } from "./sleep/SleepPage.tsx";
+import { flowsheetHref, parseHash, sleepHref, trendsHref } from "./route.ts";
 import { useAuth } from "./auth/AuthProvider.tsx";
 import { BannerPage } from "./banner/BannerPage.tsx";
 import type { WebConfig } from "./config.ts";
@@ -57,10 +58,14 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
     <>
       <BannerPage config={config} contract={contract} patient={state.patient} />
       <nav aria-label="Views" className="views">
-        <a href={trendsHref()} aria-current={route.view === "flowsheet" ? undefined : "page"}>Trends</a>
+        <a href={trendsHref()} aria-current={route.view === "trends" || route.view === "day" ? "page" : undefined}>Trends</a>
+        <a href={sleepHref()} aria-current={route.view === "sleep" ? "page" : undefined}>Sleep</a>
         <a href={flowsheetHref} aria-current={route.view === "flowsheet" ? "page" : undefined}>Flowsheet</a>
       </nav>
       {route.view === "flowsheet" && <Flowsheet config={config} contract={contract} patientId={state.patient.id} />}
+      {route.view === "sleep" && (
+        <SleepPage config={config} contract={contract} patientId={state.patient.id} night={route.night} start={route.start} />
+      )}
       {route.view === "trends" && <TrendsPage config={config} contract={contract} patientId={state.patient.id} initialRange={route.range} />}
       {route.view === "day" && (
         <IntradayPage config={config} contract={contract} patientId={state.patient.id} day={route.day} metric={route.metric} range={route.range} />

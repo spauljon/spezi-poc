@@ -11,6 +11,7 @@ export interface DateRange {
 export type Route =
   | { readonly view: "trends"; readonly range: DateRange | null }
   | { readonly view: "flowsheet" }
+  | { readonly view: "sleep"; readonly night: string | null; readonly start: number | null }
   | { readonly view: "day"; readonly day: string; readonly metric: string | null; readonly range: DateRange | null };
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -27,6 +28,12 @@ export function parseHash(hash: string): Route {
   const [path = "", query = ""] = h.split("?", 2);
   const q = new URLSearchParams(query);
   if (path === "/flowsheet") return { view: "flowsheet" };
+  if (path === "/sleep") return { view: "sleep", night: null, start: null };
+  const sl = /^\/sleep\/([^/]+)$/.exec(path);
+  if (sl && isDay(sl[1])) {
+    const s = Number(q.get("s"));
+    return { view: "sleep", night: sl[1], start: Number.isInteger(s) && s > 0 ? s : null };
+  }
   const m = /^\/day\/([^/]+)$/.exec(path);
   if (m && isDay(m[1])) {
     const metric = q.get("metric");
@@ -39,6 +46,8 @@ const rangeQuery = (range: DateRange | null | undefined): string =>
   range ? `from=${range.from}&to=${range.to}` : "";
 
 export const flowsheetHref = "#/flowsheet";
+export const sleepHref = (night?: string | null, startSeconds?: number | null): string =>
+  night ? `#/sleep/${night}${startSeconds ? `?s=${startSeconds}` : ""}` : "#/sleep";
 export const trendsHref = (range?: DateRange | null): string => (range ? `#/trends?${rangeQuery(range)}` : "#/trends");
 export const dayHref = (day: string, metric: string, range?: DateRange | null): string => {
   const parts = [`metric=${encodeURIComponent(metric)}`, rangeQuery(range)].filter(Boolean);

@@ -8,9 +8,11 @@ import { loadPatient } from "../src/patient.ts";
 import { SORT_COLUMNS, buildSearch, defaultQuery, flowMetrics, type FlowQuery, type SortColumn } from "../src/flowsheet/query.ts";
 import { FhirClient } from "../src/fhir/client.ts";
 import { AnalyticsClient, AnalyticsError } from "../src/trends/client.ts";
-import { buildChartData, compareMetrics, daysBetween, presetRange, todayUtc } from "../src/trends/model.ts";
+import { addDays, buildChartData, compareMetrics, daysBetween, presetRange, todayUtc } from "../src/trends/model.ts";
 import { loadDay } from "../src/intraday/load.ts";
 import { dayStart } from "../src/intraday/model.ts";
+import { disagreement, loadNight } from "../src/sleep/load.ts";
+import { clockNote, nightSummary, offsetsIn } from "../src/sleep/model.ts";
 import type { Observation } from "../src/fhir/types.ts";
 import rawContract from "../../contract/metrics.json";
 import { config, contract } from "./support.ts";
@@ -400,5 +402,97 @@ describe.skipIf(!live)("intraday against the live HAPI (the dense synthetic day)
     const hrvModel = await loadDay(fhir, patient.id, hrv, contract, PLAN.day, { now: new Date("2030-01-01T00:00:00Z") });
     expect(hrvModel.n).toBe(48);
     expect(hrvModel.gaps).toHaveLength(0);
+  }, 300_000);
+});
+
+
+describe.skipIf(!live)("sleep against the live stack (the known nights, and every night the API has)", () => {
+  type Expected = {
+    sessionStartMs: number; night: string; isMain: boolean; asleepMin: number; coreMin: number; deepMin: number; remMin: number;
+    unspecifiedMin: number; awakeMin: number; unscoredMin: number; overlapMin: number; awakenings: number; latencyMin: number;
+    wakeAfterEndMin: number; intervalCount: number;
+  };
+  type Night = { id: string; night: string; label: string; intervals: unknown[] };
+  const FIELDS = [
+    "asleepMin", "coreMin", "deepMin", "remMin", "unspecifiedMin", "awakeMin", "unscoredMin", "overlapMin", "awakenings",
+    "latencyMin", "wakeAfterEndMin", "intervalCount",
+  ] as const;
+
+  it("the API, the web's own timeline and an independent per-minute reading agree on every seeded night", async () => {
+    process.env["POC_CAPTURE_USER_PASSWORD"] ??= "unused-here";
+    const fixtures = (await import(new URL("../tools/seed-sleep-nights.mjs", import.meta.url).href)) as {
+      NIGHTS: Night[]; expectedSessions: (i: unknown[]) => Expected[];
+    };
+    const token = await clinicianToken();
+    const fhir = new FhirClient(fhirBase, async () => token);
+    const patient = await loadPatient(fhir, { ...config, patientIdentifier: process.env["POC_PATIENT_IDENTIFIER"] ?? "poc-0001" }, contract);
+    const api = new AnalyticsClient("https://macpro16.local", async () => token, apiFetch);
+
+    for (const n of fixtures.NIGHTS) {
+      // the worker scans every 30 s: wait for it to have caught up before comparing
+      let response = await api.sleep(patient.id, n.night, n.night);
+      for (let i = 0; i < 12 && (response.sessions.length === 0 || response.completeness.pendingWindows > 0); i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        response = await api.sleep(patient.id, n.night, n.night);
+      }
+      const want = fixtures.expectedSessions(n.intervals);
+      expect(response.sessions, `${n.id}: sessions on ${n.night} (run \`make web-seed-sleep-nights\`)`).toHaveLength(want.length);
+
+      for (const e of want) {
+        const session = response.sessions.find((s) => Date.parse(s.start) === e.sessionStartMs);
+        expect(session, `${n.id}: the session starting ${new Date(e.sessionStartMs).toISOString()}`).toBeDefined();
+        // 1. the analytic API against the independent reading
+        for (const f of FIELDS) expect(session![f], `${n.id} ${f} (API vs expected)`).toBeCloseTo(e[f], 6);
+        expect(session!.isMain, `${n.id} isMain`).toBe(e.isMain);
+        expect(session!.night).toBe(e.night);
+
+        // 2. the web's resolved timeline against the API (and so against the reading)
+        const model = await loadNight(fhir, patient.id, contract, session!);
+        expect(model.stats, `${n.id}: a timeline was built`).not.toBeNull();
+        expect(disagreement(model.stats!, session!), `${n.id}: hypnogram vs API`).toBeNull();
+        expect(model.intervals).toHaveLength(e.intervalCount);
+      }
+    }
+  }, 300_000);
+
+  it("the clock change is noticed on the DST night and only there", async () => {
+    process.env["POC_CAPTURE_USER_PASSWORD"] ??= "unused-here";
+    const { NIGHTS } = (await import(new URL("../tools/seed-sleep-nights.mjs", import.meta.url).href)) as { NIGHTS: Night[] };
+    const token = await clinicianToken();
+    const fhir = new FhirClient(fhirBase, async () => token);
+    const patient = await loadPatient(fhir, { ...config, patientIdentifier: process.env["POC_PATIENT_IDENTIFIER"] ?? "poc-0001" }, contract);
+    const api = new AnalyticsClient("https://macpro16.local", async () => token, apiFetch);
+    const noteFor = async (night: string) => {
+      const s = (await api.sleep(patient.id, night, night)).sessions.find((x) => x.isMain)!;
+      const model = await loadNight(fhir, patient.id, contract, s);
+      return { model, offsets: offsetsIn([...model.intervals]), text: nightSummary(model.stats!, [...model.intervals], true), s };
+    };
+    const dst = await noteFor(NIGHTS.find((n) => n.id === "dst")!.night);
+    expect(dst.offsets).toEqual(["-08:00", "-07:00"]);
+    expect(dst.text).toMatch(/offset changed during this night \(UTC-08:00 then UTC-07:00\)/);
+    const note = clockNote([...dst.model.intervals], dst.model.stats!.startMs, dst.model.stats!.endMs);
+    expect(Math.round(note.clockMinusElapsedMin)).toBe(60); // the clock reads an hour more than elapsed
+
+    const plain = await noteFor(NIGHTS.find((n) => n.id === "known")!.night);
+    expect(plain.offsets).toEqual(["-07:00"]);
+    expect(plain.text).not.toMatch(/offset changed/);
+  }, 120_000);
+
+  it("every night the API has matches the intervals in HAPI (the summary equals what the stage Observations say)", async () => {
+    const token = await clinicianToken();
+    const fhir = new FhirClient(fhirBase, async () => token);
+    const patient = await loadPatient(fhir, { ...config, patientIdentifier: process.env["POC_PATIENT_IDENTIFIER"] ?? "poc-0001" }, contract);
+    const api = new AnalyticsClient("https://macpro16.local", async () => token, apiFetch);
+    const to = todayUtc(new Date());
+    const all = await api.sleep(patient.id, addDays(to, -365), to);
+    expect(all.sessions.length, "the stack holds sleep data").toBeGreaterThan(5);
+    let checked = 0;
+    for (const s of all.sessions) {
+      const model = await loadNight(fhir, patient.id, contract, s);
+      const bad = model.stats ? disagreement(model.stats, s) : { field: "no timeline", web: 0, api: 0 };
+      expect(bad, `night ${s.night} session ${s.start}`).toBeNull();
+      checked++;
+    }
+    console.log(`sleep: ${checked} sessions cross-checked, intervals vs summary`);
   }, 300_000);
 });

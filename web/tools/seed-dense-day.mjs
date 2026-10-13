@@ -6,24 +6,13 @@
 // The day (UTC) holds heart rate every 4 s (21,600 slots) with three pauses, a short pause below the gap threshold, six
 // samples that carry a stored `artifact-suspected` flag, and two implausible values that carry NO flag; plus HRV every
 // 30 min. Everything the view must get right has a case here and a control next to it (see web/test/live.test.ts).
-import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { contract, captureToken, findPatientId, metric, postConditional, syntheticSystem as system } from "./common.mjs";
 
-const here = fileURLToPath(new URL(".", import.meta.url));
-const contract = JSON.parse(readFileSync(`${here}../../contract/metrics.json`, "utf8"));
-const issuer = process.env.POC_ISSUER_URL ?? "https://macpro16.local:8444/realms/poc";
-const fhir = process.env.POC_FHIR_URL ?? "https://macpro16.local:8443/fhir";
-const patientIdentifier = process.env.POC_PATIENT_IDENTIFIER ?? "poc-0001";
 const DAY = process.env.POC_DENSE_DAY ?? "2026-09-25";
-const password = process.env.POC_CAPTURE_USER_PASSWORD;
-if (!password) throw new Error("POC_CAPTURE_USER_PASSWORD is not set (run through `make web-seed-dense-day`)");
 if (!/^\d{4}-\d{2}-\d{2}$/.test(DAY)) throw new Error("POC_DENSE_DAY must be YYYY-MM-DD");
 
-const metric = (id) => contract.metrics.find((m) => m.id === id);
 const hr = metric("heartRate");
 const hrv = metric("hrvSdnn");
-const system = contract.systems.identifier.synthetic;
 const flag = { system: contract.systems.dataQualityFlag, code: contract.dataQualityFlags.artifactSuspected };
 
 // the plan the live test checks against: minute-of-day ranges with no samples, and the stored/unstored oddities
@@ -86,55 +75,17 @@ export function buildObservations(patientId) {
   return out;
 }
 
-async function token() {
-  const r = await fetch(`${issuer}/protocol/openid-connect/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "password", client_id: "poc-devtest", username: "capture-user", password }),
-  });
-  if (r.status !== 200) throw new Error(`token request failed (HTTP ${r.status}); is the stack up?`);
-  return (await r.json()).access_token;
-}
-
 async function main() {
-  const tok = await token();
-  const headers = { Authorization: `Bearer ${tok}`, "Content-Type": "application/fhir+json", Accept: "application/fhir+json" };
-  const q = encodeURIComponent(`${contract.systems.identifier.patient}|${patientIdentifier}`);
-  const found = await (await fetch(`${fhir}/Patient?identifier=${q}`, { headers })).json();
-  const patientId = found.entry?.[0]?.resource?.id;
-  if (!patientId) throw new Error("the synthetic patient was not found (python3 hapi/auth.py seed)");
-
+  const tok = await captureToken();
+  const patientId = await findPatientId(tok);
   const all = buildObservations(patientId);
-  const SIZE = 250;
-  const bundles = [];
-  for (let i = 0; i < all.length; i += SIZE) bundles.push(all.slice(i, i + SIZE));
-  let created = 0, existing = 0, failed = 0, done = 0;
   const started = Date.now();
-  const worker = async (queue) => {
-    for (let b = queue.shift(); b; b = queue.shift()) {
-      const body = {
-        resourceType: "Bundle", type: "transaction",
-        entry: b.map((o) => ({
-          // required by request validation when an entry holds a relative reference (Patient/<id>)
-          fullUrl: `urn:uuid:${randomUUID()}`,
-          resource: o.resource,
-          request: { method: "POST", url: "Observation", ifNoneExist: `identifier=${encodeURIComponent(`${system}|${o.identifier}`)}` },
-        })),
-      };
-      const r = await fetch(fhir, { method: "POST", headers, body: JSON.stringify(body) });
-      if (r.status !== 200) { failed += b.length; console.error(`bundle failed: HTTP ${r.status}`); continue; }
-      for (const e of (await r.json()).entry ?? []) {
-        if (String(e.response?.status).startsWith("201")) created++; else existing++;
-      }
-      done++;
-      if (done % 10 === 0) process.stdout.write(`\r${done}/${bundles.length} bundles`);
-    }
-  };
-  const queue = [...bundles];
-  await Promise.all([worker(queue), worker(queue), worker(queue), worker(queue)]);
+  const r = await postConditional(tok, all, {
+    onProgress: (done, total) => { if (done % 10 === 0) process.stdout.write(`\r${done}/${total} bundles`); },
+  });
   process.stdout.write("\n");
-  console.log(`dense day ${DAY}: ${all.length} Observations planned; ${created} created, ${existing} already there, ${failed} failed (${((Date.now() - started) / 1000).toFixed(0)} s)`);
-  if (failed > 0) process.exit(1);
+  console.log(`dense day ${DAY}: ${all.length} Observations planned; ${r.created} created, ${r.existing} already there, ${r.failed} failed (${((Date.now() - started) / 1000).toFixed(0)} s)`);
+  if (r.failed > 0) process.exit(1);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) await main();

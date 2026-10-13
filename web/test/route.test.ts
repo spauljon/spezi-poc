@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayHref, flowsheetHref, parseHash, trendsHref } from "../src/route.ts";
+import { dayHref, flowsheetHref, parseHash, sleepHref, trendsHref } from "../src/route.ts";
 
 describe("route", () => {
   it("defaults to the trends and knows the flowsheet", () => {
@@ -33,5 +33,18 @@ describe("route", () => {
     expect(parseHash("#/day/2026-09-25?metric=heartRate&from=2026-10-12&to=2026-09-13")).toMatchObject({ range: null });
     expect(parseHash("#/day/2026-09-25?metric=heartRate&from=x&to=y")).toMatchObject({ range: null });
     expect(parseHash("#/day/2026-09-25?metric=<script>")).toMatchObject({ metric: null });
+  });
+
+  it("knows the sleep view, a night and which of its sessions", () => {
+    expect(parseHash(sleepHref())).toEqual({ view: "sleep", night: null, start: null });
+    expect(parseHash(sleepHref("2026-09-28"))).toEqual({ view: "sleep", night: "2026-09-28", start: null });
+    expect(parseHash(sleepHref("2026-09-28", 1790573400))).toEqual({ view: "sleep", night: "2026-09-28", start: 1790573400 });
+    expect(sleepHref("2026-09-28", 1790573400)).toBe("#/sleep/2026-09-28?s=1790573400");
+  });
+
+  it("ignores a bad night and a bad session start", () => {
+    expect(parseHash("#/sleep/2026-13-45").view).toBe("trends");
+    expect(parseHash("#/sleep/2026-09-28?s=abc")).toEqual({ view: "sleep", night: "2026-09-28", start: null });
+    expect(parseHash("#/sleep/2026-09-28?s=-5")).toEqual({ view: "sleep", night: "2026-09-28", start: null });
   });
 });
