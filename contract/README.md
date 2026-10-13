@@ -6,7 +6,7 @@ may hand-copy a LOINC code, UCUM unit or category: it reads `metrics.json` (or i
 
 | File | Role |
 |---|---|
-| `metrics.json` | The contract (`contractVersion` 1.0.0): metrics -> LOINC, UCUM unit, category, `effective[x]` rule, sleep-stage mapping, identifier and `meta.source` systems, device-key rule, and the terminology verification evidence |
+| `metrics.json` | The contract (`contractVersion` 1.2.0, see Versions below): metrics -> LOINC, UCUM unit, category, `effective[x]` rule, sleep-stage mapping, identifier and `meta.source` systems, device-key rule, and the terminology verification evidence |
 | `golden/generate.py` | An **independent** Python implementation of the rules (own time-zone database, decimals, SHA-256). Writes the fixtures; `--check` fails if they are stale |
 | `golden/*.json` | 34 fixtures: expected JSON for 14 quantity cases, 10 sleep cases, 5 refusals and 5 devices, including DST and half-hour offsets |
 | `check.py` | Offline checks (`make test-contract`): structure, LOINC check digits, bundled copy identical, fixtures current |
@@ -53,3 +53,8 @@ Added to the spec's A1-A13 (full text in `metrics.json` `assumptions`):
 
 `meta.tag` data-quality flags (A8), the `entered-in-error` path for deleted HealthKit samples (A11), batching into a
 transaction Bundle (M8), and any claim of `meta.profile`.
+
+## Versions
+
+- **1.2.0** (additive): `systems.dataQualityFlag` and `dataQualityFlags` (the `meta.tag` flag codes of FHIR data model A8), assumption A30. Consumers check only the major version. Added with the web app's intraday view (M15); no ingest writes a flag yet.
+- **1.1.0**: see `description` and `assumptions` in `metrics.json`.

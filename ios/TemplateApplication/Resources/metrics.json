@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.1.0",
+  "contractVersion": "1.2.0",
   "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
   "fhirVersion": "4.0.1",
   "verification": {
@@ -23,7 +23,13 @@
     "metaSource": {
       "synthetic": "http://blueysoft.com/fhir/capture-app/synthetic",
       "healthKit": "http://blueysoft.com/fhir/capture-app/healthkit"
-    }
+    },
+    "dataQualityFlag": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag"
+  },
+  "dataQualityFlags": {
+    "artifactSuspected": "artifact-suspected",
+    "duplicateResolved": "duplicate-resolved",
+    "lateArrival": "late-arrival"
   },
   "categories": {
     "vital-signs": { "code": "vital-signs", "display": "Vital Signs" },
@@ -109,6 +115,7 @@
     "A14": "Fraction rule (3 digits when non-zero) and the half-up 2-decimal sleep duration are choices of this contract, not of FHIR.",
     "A15": "Device.version entries carry only value and type.text ('hardware' or 'software'); no code system is invented for version types.",
     "A16": "HealthKit sample UUIDs are lowercased for identifier.value so that identity does not depend on which API produced the string.",
-    "A17": "Zero is rejected for every metric; no plausibility ranges are applied in v1 (artifact flagging is a later milestone)."
+    "A17": "Zero is rejected for every metric; no plausibility ranges are applied in v1 (artifact flagging is a later milestone).",
+    "A30": "Data-quality flags are Coding entries in Observation.meta.tag (FHIR data model A8) in the project-defined system systems.dataQualityFlag; the codes are dataQualityFlags. The system is this project's own, so there is no external terminology to verify it against. v1 ingest writes none of them; a reader displays a flag when it is present and never infers one (M15)."
   }
 }
