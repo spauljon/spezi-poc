@@ -103,6 +103,34 @@ make analytics-api          # foreground; Ctrl-C stops
 - **A47 `missingDays` cannot distinguish** "no samples were taken" from "not delivered yet"; `pendingWindows` and
   `workerWatermark` are what let a reader judge freshness. Days are UTC (A6), so a clinic's local day is not a row.
 
+## Deployment and schedule (M13a)
+
+`make stack-up` deploys and supervises the worker and the API; nothing is started by hand.
+
+| Compose service | Command | Ports | Schedule / supervision |
+|---|---|---|---|
+| `analytics-worker` | `main.ts loop` | none | a scan every `POC_WORKER_INTERVAL_SECONDS` (30); `restart: unless-stopped`; healthcheck on its heartbeat |
+| `analytics-api` | `main.ts api` | `127.0.0.1:8445` (loopback publish) | `restart: unless-stopped`; healthcheck expects a 401 from `/v1/metrics` over verified TLS |
+
+- **The loop never dies of an ordinary failure.** A failed cycle (HAPI or Oracle down, a token error) is logged
+  (`{"level":"error",...}`), retried after 30 s, 60 s, 120 s ... capped at 5 minutes, and resets on success. The
+  database connection is re-opened after any failure. SIGTERM finishes the current cycle and exits.
+- **Backlog on first start:** the first cycle reads from the beginning (an empty watermark) and may take a while
+  over a large history; later cycles are a handful of searches.
+- **Heartbeat:** written after every attempt, successful or not, so the container is "healthy" while the loop is
+  alive; whether scans succeed is in the logs (`docker logs spezi-poc-analytics-worker`) and in `status`.
+- **Credentials:** `analytics/make-env.sh` writes `analytics/.env.local` (database account + worker client secret)
+  and `analytics/.env.api.local` (database account only) from the other projects' generated files, so a container
+  never sees the Oracle SYS password or another service's secret.
+- **Image:** `analytics/Dockerfile` on `node:24-slim` pinned by digest, `npm ci` of the locked packages, no
+  credential or key copied in (the repository root's `.dockerignore` is an allowlist). Containers run as the
+  invoking user's uid so the 0600 TLS key on its bind mount stays 0600.
+- **Schema:** `analytics/db-migrate.sh` runs inside `make stack-up` before the services start (idempotent).
+- **Reaching HAPI and the IdP:** `macpro16.local` is mapped to the host gateway in these two containers, so
+  tokens' issuer name and the certificates' name both match and TLS is verified end to end.
+- **Dev on the host** still works (`make analytics-run`, `analytics/run.sh loop`); `make analytics-api` refuses
+  while the deployed API owns port 8445.
+
 ## Run
 
 ```bash

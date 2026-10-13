@@ -9,6 +9,7 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - Every write path is idempotent and every state change that must be atomic is one transaction. A negative test needs a positive control.
 - Credentials are environment variables sourced from the git-ignored env files by `env.sh`; never print them, never put them on a command line, never include them in an error message.
 - Search requests send `Cache-Control: no-cache` (HAPI's 60 s result reuse otherwise serves stale counts).
+- Deployment (M13a): the worker (`loop`) and the API run as compose services started by `make stack-up`; the worker's loop must never end on an ordinary failure (`src/loop.ts`, tested). Containers get only the credentials they need (`make-env.sh`); the image is built from the repository-root allowlist `.dockerignore`.
 - Tests: `make test-analytics` (no stack); `make test-analytics-live` (needs the stack, schema and seeded patient; leaves Observations in HAPI, cleans its own rollup rows).
 - Sleep logic is pure (`src/sleep.ts`); a contract sleep stage that module does not classify must fail the test, not be miscounted.
 - The API is loopback-only, TLS-only, GET-only and authenticates (signature, issuer, audience `poc-analytics`, role `clinician-reader`) before any routing. Widening the listener or the audience is a decision, not a convenience; document it in the root CLAUDE.md first.
