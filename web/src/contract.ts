@@ -16,6 +16,8 @@ export interface WebContract {
   readonly loincSystem: string;
   readonly patientIdentifierSystem: string;
   readonly metaSource: { readonly synthetic: string; readonly healthKit: string };
+  /** The project's data-quality flag system (an Observation.meta.tag coding system) and its codes. */
+  readonly dataQualityFlag: { readonly system: string; readonly artifactSuspected: string; readonly duplicateResolved: string; readonly lateArrival: string };
   readonly quantityMetrics: readonly QuantityMetric[];
   /** Sleep stage codes (used for "last data received"). */
   readonly sleepStageCodes: readonly string[];
@@ -47,11 +49,17 @@ export function parseContract(file: unknown): WebContract {
       loinc: string;
       identifier: { patient: string };
       metaSource: { synthetic: string; healthKit: string };
+      dataQualityFlag?: string;
     };
+    dataQualityFlags?: { artifactSuspected?: string; duplicateResolved?: string; lateArrival?: string };
     metrics: RawMetric[];
   };
   if (Number(c.contractVersion.split(".")[0]) !== SUPPORTED_MAJOR) {
     throw new Error(`contract version ${c.contractVersion} is not supported (supported major: ${SUPPORTED_MAJOR})`);
+  }
+  const flags = c.dataQualityFlags;
+  if (!c.systems.dataQualityFlag || !flags?.artifactSuspected || !flags.duplicateResolved || !flags.lateArrival) {
+    throw new Error("the contract has no data-quality flag system and codes (contract 1.2.0 or later is required)");
   }
   const quantityMetrics = c.metrics
     .filter((m) => m.kind === "quantity" && m.loinc)
@@ -66,6 +74,12 @@ export function parseContract(file: unknown): WebContract {
     loincSystem: c.systems.loinc,
     patientIdentifierSystem: c.systems.identifier.patient,
     metaSource: c.systems.metaSource,
+    dataQualityFlag: {
+      system: c.systems.dataQualityFlag,
+      artifactSuspected: flags.artifactSuspected,
+      duplicateResolved: flags.duplicateResolved,
+      lateArrival: flags.lateArrival,
+    },
     quantityMetrics,
     sleepStageCodes,
     sleepStages,

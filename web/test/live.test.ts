@@ -9,6 +9,8 @@ import { SORT_COLUMNS, buildSearch, defaultQuery, flowMetrics, type FlowQuery, t
 import { FhirClient } from "../src/fhir/client.ts";
 import { AnalyticsClient, AnalyticsError } from "../src/trends/client.ts";
 import { buildChartData, compareMetrics, daysBetween, presetRange, todayUtc } from "../src/trends/model.ts";
+import { loadDay } from "../src/intraday/load.ts";
+import { dayStart } from "../src/intraday/model.ts";
 import type { Observation } from "../src/fhir/types.ts";
 import rawContract from "../../contract/metrics.json";
 import { config, contract } from "./support.ts";
@@ -181,7 +183,9 @@ describe.skipIf(!live)("banner against the live HAPI", () => {
         (q.status === "any" || o.status === q.status));
     };
 
-    const base: FlowQuery = { ...defaultQuery, pageSize: 100 };
+    // 500 a page (the sweep is about filters, order and offsets, not the UI's page size): with ~39k rows 100 a page is
+    // ~400 requests per combination
+    const base: FlowQuery = { ...defaultQuery, pageSize: 500 as FlowQuery["pageSize"] };
     const combos: [string, FlowQuery][] = [
       ["default", base],
       ["heart rate only", { ...base, metrics: ["heartRate"] }],
@@ -202,7 +206,8 @@ describe.skipIf(!live)("banner against the live HAPI", () => {
       const want = expected(q);
       const got: Observation[] = [];
       let total = -1;
-      for (let page = 0; page < 200; page++) {
+      const pageCap = Math.ceil(want.length / q.pageSize) + 3; // enough for every row, never unbounded
+      for (let page = 0; page < pageCap; page++) {
         const bundle = await client.search<Observation>(buildSearch({ ...q, page }, patient.id, contract));
         total = bundle.total ?? -1;
         const rows = (bundle.entry ?? []).flatMap((e) => (e.resource ? [e.resource] : []));
@@ -313,4 +318,87 @@ describe.skipIf(!live)("trends against the live analytic API", () => {
     await expect(without.metrics()).rejects.toMatchObject({ kind: "unauthorized" });
     await expect(without.metrics()).rejects.toBeInstanceOf(AnalyticsError);
   });
+});
+
+
+describe.skipIf(!live)("intraday against the live HAPI (the dense synthetic day)", () => {
+  type Plan = {
+    day: string; cadenceSeconds: number; gaps: Array<[number, number]>; shortPause: [number, number];
+    flagged: Array<[number, number, number]>; unflaggedImplausible: Array<[number, number, number]>;
+  };
+
+  it("the day the view loads equals an independent read of the raw Observations; gaps, stored flags and unflagged oddities are as seeded", async () => {
+    // the seeded plan is the single description of what the day holds (web/tools/seed-dense-day.mjs)
+    process.env["POC_CAPTURE_USER_PASSWORD"] ??= "unused-here";
+    const { PLAN } = (await import(new URL("../tools/seed-dense-day.mjs", import.meta.url).href)) as { PLAN: Plan };
+    const token = await clinicianToken();
+    const fhir = new FhirClient(fhirBase, async () => token);
+    const patient = await loadPatient(fhir, { ...config, patientIdentifier: process.env["POC_PATIENT_IDENTIFIER"] ?? "poc-0001" }, contract);
+    const heart = contract.quantityMetrics.find((m) => m.id === "heartRate")!;
+
+    const t0 = performance.now();
+    const model = await loadDay(fhir, patient.id, heart, contract, PLAN.day, { now: new Date("2030-01-01T00:00:00Z") });
+    const loadMs = performance.now() - t0;
+    console.log(`intraday: ${model.n} heart-rate samples loaded and modelled in ${loadMs.toFixed(0)} ms`);
+    expect(model.n, "the dense day is missing: run `make web-seed-dense-day`").toBeGreaterThan(17_000); // "a 17k-sample day"
+    expect(loadMs).toBeLessThan(30_000);
+
+    // independent model: every heart-rate Observation of the day, read unsorted in big pages and bucketed here
+    const code = encodeURIComponent(`${contract.loincSystem}|${heart.loincCode}`);
+    const patientRef = encodeURIComponent(`Patient/${patient.id}`);
+    const day0 = dayStart(PLAN.day);
+    const raw: Array<{ t: number; v: number; flagged: boolean }> = [];
+    let url: string | null = `${fhirBase}/Observation?patient=${patientRef}&code=${code}&date=ge${PLAN.day}T00:00:00Z&date=lt${new Date(day0 + 86_400_000).toISOString().slice(0, 10)}T00:00:00Z&_count=2000&_elements=effectiveDateTime,valueQuantity,meta,status`;
+    for (let page = 0; url && page < 100; page++) {
+      const r: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } });
+      const body = (await r.json()) as { entry?: { resource: Observation }[]; link?: { relation: string; url: string }[] };
+      for (const e of body.entry ?? []) {
+        const o = e.resource;
+        if (o.status === "entered-in-error" || !o.effectiveDateTime || o.valueQuantity?.value === undefined) continue;
+        raw.push({
+          t: Date.parse(o.effectiveDateTime), v: o.valueQuantity.value,
+          flagged: (o.meta?.tag ?? []).some((c) => c.system === contract.dataQualityFlag.system && c.code === contract.dataQualityFlag.artifactSuspected),
+        });
+      }
+      url = body.link?.find((l) => l.relation === "next")?.url ?? null;
+    }
+    raw.sort((a, b) => a.t - b.t);
+    expect(model.n).toBe(raw.length);
+    expect(model.t).toEqual(raw.map((x) => x.t));
+    expect(model.v).toEqual(raw.map((x) => x.v));
+    expect(model.min).toBe(Math.min(...raw.map((x) => x.v)));
+    expect(model.max).toBe(Math.max(...raw.map((x) => x.v)));
+    expect(model.flagged).toEqual(raw.flatMap((x, i) => (x.flagged ? [i] : [])));
+
+    // the seeded oddities, each with its control
+    const at = (minute: number, second: number) => day0 + (minute * 60 + second) * 1000;
+    const between = model.gaps.filter((g) => g.edge === null);
+    expect(between).toHaveLength(PLAN.gaps.length);
+    PLAN.gaps.forEach(([from, to], i) => {
+      expect(between[i]!.start).toBe(at(from - 1, 60 - PLAN.cadenceSeconds)); // the last sample before the pause
+      expect(between[i]!.end).toBe(at(to, 0)); // the first one after it
+    });
+    const [pauseFrom, pauseTo] = PLAN.shortPause;
+    expect(between.some((g) => g.start < at(pauseTo, 0) && g.end > at(pauseFrom, 0)), "a 4-minute pause is not a gap").toBe(false);
+    expect(model.gaps.filter((g) => g.edge !== null), "the day has samples at both ends").toHaveLength(0);
+
+    const flaggedAt = new Set(model.flagged.map((i) => model.t[i]));
+    for (const [minute, second, value] of PLAN.flagged) {
+      const i = model.t.indexOf(at(minute, second));
+      expect(model.v[i], `flagged sample at ${minute}:${second}`).toBe(value);
+      expect(flaggedAt.has(at(minute, second))).toBe(true);
+    }
+    for (const [minute, second, value] of PLAN.unflaggedImplausible) {
+      const i = model.t.indexOf(at(minute, second));
+      expect(model.v[i], `unflagged oddity at ${minute}:${second}`).toBe(value);
+      expect(model.flagged.includes(i), "an implausible value nobody flagged is NOT marked").toBe(false);
+    }
+    expect(model.flagged).toHaveLength(PLAN.flagged.length);
+
+    // HRV (sparse): 48 half-hourly samples, no gap at that cadence
+    const hrv = contract.quantityMetrics.find((m) => m.id === "hrvSdnn")!;
+    const hrvModel = await loadDay(fhir, patient.id, hrv, contract, PLAN.day, { now: new Date("2030-01-01T00:00:00Z") });
+    expect(hrvModel.n).toBe(48);
+    expect(hrvModel.gaps).toHaveLength(0);
+  }, 300_000);
 });

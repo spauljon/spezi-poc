@@ -162,3 +162,33 @@ describe("banner states", () => {
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeTruthy();
   });
 });
+
+
+describe("navigation between the views", () => {
+  const signedIn = () => fakeClient({ getUser: vi.fn(async () => clinician) });
+  afterEach(() => { window.location.hash = ""; });
+
+  it("opens on the trends, and a drill address opens the intraday day with a way back that keeps the range", async () => {
+    vi.stubGlobal("fetch", hapi([]));
+    window.location.hash = "";
+    renderApp(signedIn());
+    expect(await screen.findByRole("heading", { name: "Trends" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Trends" }).getAttribute("aria-current")).toBe("page");
+    cleanup();
+
+    window.location.hash = "#/day/2026-09-25?metric=heartRate&from=2026-09-13&to=2026-10-12";
+    renderApp(signedIn());
+    expect(await screen.findByRole("heading", { name: /Intraday: 2026-09-25 \(UTC\)/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Back to trends/ }).getAttribute("href")).toBe("#/trends?from=2026-09-13&to=2026-10-12");
+    // the banner stays above every view
+    expect(await screen.findByRole("region", { name: "Patient banner" })).toBeTruthy();
+  });
+
+  it("shows the flowsheet at its own address", async () => {
+    vi.stubGlobal("fetch", hapi([]));
+    window.location.hash = "#/flowsheet";
+    renderApp(signedIn());
+    expect(await screen.findByRole("heading", { name: /Flowsheet|Observations/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Flowsheet" }).getAttribute("aria-current")).toBe("page");
+  });
+});

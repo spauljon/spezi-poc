@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run analytics-api web-dev test-web-live test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run analytics-api web-dev web-seed-dense-day test-web-live test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -45,6 +45,8 @@ test-web:  ## clinician web app: typecheck + unit and component tests (Node; no 
 	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
 test-web-live:  ## read-only banner data path against the live stack (HAPI + Keycloak)
 	@./web/live-test.sh
+web-seed-dense-day:  ## seed one dense synthetic day (heart rate every 4 s) for the intraday view; idempotent
+	@./web/seed-dense-day.sh
 web-dev:  ## DEV: Vite's dev server on :3000 (hot reload); the deployed stack already serves the built app, so stop that first
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^spezi-poc-web$$'; then echo "web-dev: the deployed web app owns port 3000 (spezi-poc-web), already running at https://macpro16.local:3000; to use the dev server instead: docker stop spezi-poc-web"; exit 1; fi
 	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm run dev

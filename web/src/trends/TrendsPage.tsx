@@ -3,7 +3,7 @@ import { useAuth } from "../auth/AuthProvider.tsx";
 import type { WebConfig } from "../config.ts";
 import type { WebContract } from "../contract.ts";
 import { explainError, type Explained } from "../explain.ts";
-import { dayHref } from "../route.ts";
+import { dayHref, type DateRange } from "../route.ts";
 import { AnalyticsClient } from "./client.ts";
 import {
   PRESETS, buildChartData, compareMetrics, presetRange, todayUtc, validateRange,
@@ -23,14 +23,23 @@ export interface TrendsPageProps {
   readonly patientId: string;
   /** Injectable for tests; "today" is the UTC day the view ends on. */
   readonly now?: () => Date;
+  /** The range to open on (a return from a drill); null for the default 30 days. */
+  readonly initialRange?: DateRange | null;
 }
 
 /** Daily min/median/max bands per metric from the analytic API: one filter row, stacked charts that share it. */
-export function TrendsPage({ config, contract, patientId, now = () => new Date() }: TrendsPageProps) {
-  const auth = useAuth();
+export function TrendsPage({ config, contract, patientId, now = () => new Date(), initialRange = null }: TrendsPageProps) {
+  const { accessToken } = useAuth();
   const [today, setToday] = useState(() => todayUtc(now()));
-  const [choice, setChoice] = useState<Choice>(30);
-  const initial = presetRange(30, today);
+  const [choice, setChoice] = useState<Choice>(() => {
+    if (!initialRange) return 30;
+    const preset = PRESETS.find((d) => {
+      const r = presetRange(d, todayUtc(now()));
+      return r.from === initialRange.from && r.to === initialRange.to;
+    });
+    return preset ?? "custom";
+  });
+  const initial = initialRange ?? presetRange(30, today);
   const [customFrom, setCustomFrom] = useState(initial.from);
   const [customTo, setCustomTo] = useState(initial.to);
   const [load, setLoad] = useState<Load>({ kind: "loading", previous: null });
@@ -41,8 +50,8 @@ export function TrendsPage({ config, contract, patientId, now = () => new Date()
   const range = choice === "custom" ? { from: customFrom, to: customTo } : presetRange(choice, today);
   const problem = choice === "custom" ? validateRange(range.from, range.to) : null;
   const client = useMemo(
-    () => new AnalyticsClient(config.analyticsBase, () => auth.accessToken()),
-    [config.analyticsBase, auth],
+    () => new AnalyticsClient(config.analyticsBase, () => accessToken()),
+    [config.analyticsBase, accessToken],
   );
   const metrics = contract.quantityMetrics;
 
@@ -67,6 +76,13 @@ export function TrendsPage({ config, contract, patientId, now = () => new Date()
       (error: unknown) => { if (ticket === latest.current) setLoad({ kind: "error", error: explainError(error) }); },
     );
   }, [client, metrics, patientId, range.from, range.to, problem, reloads]);
+
+  // keep the address in step with the range, so a drill and "back" (or a reload) return to the same view
+  useEffect(() => {
+    if (problem === null && typeof window !== "undefined") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/trends?from=${range.from}&to=${range.to}`);
+    }
+  }, [range.from, range.to, problem]);
 
   const refresh = useCallback(() => {
     setToday(todayUtc(now()));
@@ -144,7 +160,7 @@ export function TrendsPage({ config, contract, patientId, now = () => new Date()
             from={chart.response.from}
             to={chart.response.to}
             slot={i + 1}
-            drillHref={(day) => dayHref(day, m.id)}
+            drillHref={(day) => dayHref(day, m.id, { from: range.from, to: range.to })}
             busy={busy}
           />
         );

@@ -9,7 +9,7 @@ export interface Observation {
   resourceType: "Observation";
   id?: string;
   status?: string;
-  meta?: { lastUpdated?: string; source?: string };
+  meta?: { lastUpdated?: string; source?: string; tag?: Array<{ system?: string; code?: string; display?: string }> };
   code?: { coding?: Coding[] };
   subject?: { reference?: string };
   effectiveDateTime?: string;

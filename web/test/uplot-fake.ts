@@ -7,7 +7,13 @@ export interface FakeOptions {
   height: number;
   series: Array<{ label?: string; stroke?: unknown; width?: number; spanGaps?: boolean; points?: { show?: boolean; filter?: number[] | null; size?: number } }>;
   bands?: Array<{ series: [number, number]; fill?: string }>;
-  hooks?: { setCursor?: Array<(u: FakeUPlot) => void> };
+  hooks?: {
+    setCursor?: Array<(u: FakeUPlot) => void>;
+    setScale?: Array<(u: FakeUPlot, key: string) => void>;
+    drawAxes?: Array<(u: FakeUPlot) => void>;
+    draw?: Array<(u: FakeUPlot) => void>;
+  };
+  cursor?: { sync?: { key: string }; drag?: { x?: boolean; setScale?: boolean } };
   axes?: Array<{ label?: string; splits?: unknown; values?: unknown }>;
   scales?: Record<string, { time?: boolean; range?: unknown }>;
 }
@@ -16,6 +22,7 @@ export class FakeUPlot {
   static instances: FakeUPlot[] = [];
   static reset() { FakeUPlot.instances = []; }
   cursor: { idx: number | null; left: number; top: number } = { idx: null, left: -10, top: -10 };
+  scales: Record<string, { min: number | null; max: number | null }> = { x: { min: null, max: null } };
   destroyed = false;
   constructor(readonly opts: FakeOptions, readonly data: Array<ArrayLike<number | null>>, readonly host: HTMLElement) {
     FakeUPlot.instances.push(this);
@@ -24,6 +31,11 @@ export class FakeUPlot {
     host.appendChild(canvas);
   }
   setSize(): void { /* no layout in jsdom */ }
+  /** Sets the x window the way the library does, and reports it to the app's hook. */
+  setScale(key: string, range: { min: number; max: number }): void {
+    this.scales[key] = { min: range.min, max: range.max };
+    for (const h of this.opts.hooks?.setScale ?? []) h(this, key);
+  }
   valToPos(v: number): number { return v; }
   setCursor(c: { left: number; top: number }): void {
     this.cursor.left = c.left;

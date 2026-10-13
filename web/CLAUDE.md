@@ -11,6 +11,7 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - Staleness and missing data are always stated in words (and never by colour alone); times are shown with an explicit zone.
 - Tests: `make test-web` (no stack); `make test-web-live` (needs the stack and the CA; it reads, except for two idempotent synthetic status fixtures).
 - Charts (M14+): uPlot, loaded on demand through `src/trends/library.ts` (tests inject `test/uplot-fake.ts`). One categorical slot per metric by its contract position; run `dataviz`'s validator for any new colour. A missing day is `null`, never a filled value; every chart has a text summary, an arrow-key readout and a table twin. Time ticks are ours, at UTC midnights.
+- Intraday (M15): a gap, a flag and an excluded Observation are defined once in `src/intraday/model.ts`. A flag is only a stored `meta.tag` in the contract's flag system: never infer one from a value. Never give the uPlot x scale a `range` array or a `range` function that ignores its inputs (it undoes every zoom). Depend on `useAuth().accessToken`, not the whole context object, in anything that downloads a dense day. Verify any chart change on a real canvas: the jsdom stand-in cannot see a zoom, a gap or a marker.
 - Milestones: M12-M16
 - Contract: codes, units and categories come from `contract/metrics.json` (added in M6), never hand-copied.
 - Commit prefix: `web:`

@@ -115,6 +115,93 @@ visible labels and a table view, both of which exist.
   conditional create as the capture user) because the flowsheet's status controls need non-final rows and a fresh
   stack has none. They are idempotent.
 
+## What M15 adds: the intraday view
+
+A day's raw samples for heart rate and HRV, reached from the trends (each day with data has an *Intraday* link) or at
+`#/day/<date>?metric=<id>`: two stacked charts on one shared, zoomable UTC time axis.
+
+- **Where the samples come from:** HAPI directly (the system of record), through the existing `/fhir` relay, paged by
+  `_offset` with `_count=1000`, sorted by `date` then `_id` so equal instants cannot reorder between pages. A failure on
+  any page fails the load; a partial day is never shown as the day. Progress is shown while a dense day loads.
+- **Zoom and pan without a pointer:** buttons for the full day, 6 hours and 1 hour, and earlier/later; drag across
+  a chart to zoom (both charts follow); arrow keys step one sample, Page Up/Down an hour's worth (60), Home/End the
+  first and last, scrolling the window to keep the sample visible. Raw points appear by themselves once zoomed in.
+- **Gaps** are shaded behind the line, the line is broken across each, and they are listed in words (and in a
+  *Gaps* list). **Stored data-quality flags** are drawn as an outlined diamond (a shape, not a colour), named in the
+  readout and listed in *Flagged samples*. The summary says whether the highest and lowest values are flagged.
+- **Text equivalent:** the summary above each chart, an *Hourly table* (24 rows: samples, min, median, max, flagged)
+  and the lists. A table of 19k rows is not an equivalent, so there is none.
+- **Back to trends** returns to the range the drill came from (carried in the URL fragment); previous/next day move
+  along the same route.
+
+### Three rules decided in one place (`src/intraday/model.ts`)
+
+1. **A gap** is an interval between consecutive samples longer than max(10 minutes, 10 x the day's median interval).
+   The day's edges count: a day that starts or ends with no samples has a gap there, except that an unfinished day
+   ends at "now" and has no trailing gap.
+2. **A flag is only what is stored** (`meta.tag` in the contract's `dataQualityFlag` system). Nothing is inferred from
+   a value: an implausible value that nobody flagged is drawn as it is, unmarked, and the summary says "not flagged".
+3. **A retracted Observation (`entered-in-error`) is not drawn**, and neither is one with another unit, no value or no
+   time; each is counted and stated ("Left out: ...").
+
+### Contract 1.2.0 (additive)
+
+The flag system and codes now live in `contract/metrics.json` (`systems.dataQualityFlag`, `dataQualityFlags`, and
+assumption A30), the iOS bundled copy and the golden fixtures were regenerated, and iOS, analytics and web were
+re-tested. v1 ingest writes **no** flags; nothing in the project produces them yet except the verification tool
+below, so on real or simulated data the view will correctly say "No sample carries a stored data-quality flag".
+
+### Verification data
+
+`make web-seed-dense-day` writes one synthetic day (default 2026-09-25 UTC) idempotently as the capture user:
+heart rate every 4 s (19,830 samples), three pauses of 37, 15 and 62 minutes, a 4-minute pause that must *not* be a
+gap, six samples with a stored `artifact-suspected` flag, two implausible values with **no** flag, and 48 HRV samples.
+The live test recomputes the day independently from the raw Observations and checks each of those.
+
+### Measured (not estimated)
+
+| What | Result |
+|---|---|
+| 19,830 samples fetched (20 pages) and modelled, over the LAN | about 2.7 s |
+| The same day as JSON | 9.8 MB raw (HAPI gzips it on the wire) |
+| Real browser, CPU cost to build and issue a first draw | 8.5 ms |
+| Real browser, CPU cost of a zoom or pan (42 operations) | median 3.2 ms, p95 3.6 ms, max 4.5 ms |
+
+The browser figures were taken in a page that the app reported as hidden, so they are the cost of building and
+issuing the draw, not of rasterising it; the result was then looked at in a real browser, dark and light (T7 in M14).
+
+### Found in a real browser (and why a unit test could not)
+
+The first version looked right in tests and ignored every zoom. uPlot passes a requested zoom through the scale's
+`range`; an **array** `range` is returned for every request, and a **function** that ignores its inputs does the same, so
+both silently undo the zoom. The test stand-in for uPlot cannot model that. The fix is an ordinary automatic x scale plus
+two value-less anchor points at the window edges (so "full day" is the whole day), and the initial window is applied in
+uPlot's `ready` hook. There is a test that the x scale has no `range`, but that guards the cause, not the symptom: the
+symptom was only visible on the canvas.
+
+A second defect found on the way: the load effect depended on the whole sign-in context object, so any change of
+sign-in state re-downloaded the entire dense day and rebuilt the chart. It now depends only on the (stable) token
+function, with a regression test. The banner, flowsheet and patient page still depend on the whole object; they
+refetch small amounts and were left alone.
+
+### Assumptions made in M15 (review these)
+
+- **I1 The gap threshold** (10 minutes, or 10 x the median interval) is my judgment, not a clinical standard. Real
+  HealthKit heart rate is irregular, so one fixed number will be wrong for some patterns.
+- **I2 No artifact is detected here.** A value that nobody flagged is not marked however implausible. If you want
+  a plausibility rule, it is a separate, labelled "viewer rule" (needs your clinical thresholds), or the ingest/worker
+  must write the flag (M19).
+- **I3 The day is a UTC day** (A6), so for a patient in Los Angeles a night's sleep, and a workout, can straddle two
+  days. Times are shown as UTC everywhere.
+- **I4 Only heart rate and HRV have an intraday view.** Resting heart rate is one value a day; sleep is M16.
+- **I5 A day in progress** ends at the time the page loaded; it does not refresh itself (use *Refresh*).
+- **I6 Zoom resets on Refresh and on a change of day.**
+- **I7 The hourly table is the table twin.** There is no per-sample table; the keyboard steps through samples.
+- **I8 Not tried:** a screen reader, touch gestures (pinch, two-finger pan), very small screens, or a day with many
+  more than 20k samples (the loader stops at 200 pages, i.e. 200,000 samples, and says nothing special).
+- **I9 A window with one or two samples** auto-scales the y axis tightly (HRV in a 15-minute window), which is honest
+  but can look dramatic; there is no "no samples in this window" hint.
+
 ## Deployed vs development (M13a)
 
 `make stack-up` also deploys the web app: `web/Dockerfile` builds the app (`vite build`, Node 24 by digest) and

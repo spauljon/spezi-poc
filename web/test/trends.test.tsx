@@ -125,7 +125,7 @@ describe("trends", () => {
     const card = chartFor("Heart rate");
     await waitFor(() => expect(within(card).getAllByRole("link", { hidden: true }).length).toBeGreaterThan(0));
     const links = within(card).getAllByRole("link", { hidden: true }) as HTMLAnchorElement[];
-    expect(links.map((l) => l.getAttribute("href"))).toContain("#/day/2026-10-12?metric=heartRate");
+    expect(links.map((l) => l.getAttribute("href"))).toContain("#/day/2026-10-12?metric=heartRate&from=2026-09-13&to=2026-10-12");
     expect(links.map((l) => l.getAttribute("href")).join(" ")).not.toContain("2026-10-09");
   });
 });

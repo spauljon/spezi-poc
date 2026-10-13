@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { IntradayStub } from "./trends/IntradayStub.tsx";
+import { IntradayPage } from "./intraday/IntradayPage.tsx";
 import { TrendsPage } from "./trends/TrendsPage.tsx";
 import { flowsheetHref, parseHash, trendsHref } from "./route.ts";
 import { useAuth } from "./auth/AuthProvider.tsx";
@@ -57,12 +57,14 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
     <>
       <BannerPage config={config} contract={contract} patient={state.patient} />
       <nav aria-label="Views" className="views">
-        <a href={trendsHref} aria-current={route.view === "flowsheet" ? undefined : "page"}>Trends</a>
+        <a href={trendsHref()} aria-current={route.view === "flowsheet" ? undefined : "page"}>Trends</a>
         <a href={flowsheetHref} aria-current={route.view === "flowsheet" ? "page" : undefined}>Flowsheet</a>
       </nav>
       {route.view === "flowsheet" && <Flowsheet config={config} contract={contract} patientId={state.patient.id} />}
-      {route.view === "trends" && <TrendsPage config={config} contract={contract} patientId={state.patient.id} />}
-      {route.view === "day" && <IntradayStub day={route.day} metric={route.metric} contract={contract} />}
+      {route.view === "trends" && <TrendsPage config={config} contract={contract} patientId={state.patient.id} initialRange={route.range} />}
+      {route.view === "day" && (
+        <IntradayPage config={config} contract={contract} patientId={state.patient.id} day={route.day} metric={route.metric} range={route.range} />
+      )}
     </>
   );
 }
