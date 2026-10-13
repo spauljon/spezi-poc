@@ -66,7 +66,10 @@ a_auth=$(scalar ANALYTICSPDB "select authentication_type from dba_users where us
 [ "$a_auth" = "NONE" ] && ok "analytics owner cannot log in" || bad "analytics owner authentication_type is '$a_auth'"
 
 echo "== HAPI startup log"
-hapilog=$(dc logs --no-color --no-log-prefix hapi 2>&1)
+# Scoped to the container's latest start: logs persist across daemon restarts, and a restart that retried until
+# Oracle was up leaves connection errors from BEFORE this start that say nothing about the running server.
+hapi_since=$(docker inspect -f '{{.State.StartedAt}}' spezi-poc-hapi 2>/dev/null || echo "")
+hapilog=$(dc logs --no-color --no-log-prefix ${hapi_since:+--since "$hapi_since"} hapi 2>&1)
 # Positive control: the log must be readable and contain the server's startup line, or "no errors" proves nothing.
 if [[ "$hapilog" == *'Started Application'* ]]; then  # not `echo | grep -q`: under pipefail a SIGPIPE makes that false
   ok "positive control: the HAPI log is readable and shows the server started"
@@ -411,7 +414,8 @@ fi
 sess=$(scalar KEYCLOAKPDB "select count(*) from v\$session where username = '$kc_app';")
 [ "${sess:-0}" -ge 1 ] 2>/dev/null && ok "Keycloak is connected as $kc_app ($sess sessions)" || bad "no sessions for $kc_app"
 if docker ps --format '{{.Names}}' | grep -q '^spezi-poc-keycloak$'; then
-  kclog=$(docker logs spezi-poc-keycloak 2>&1)
+  kc_since=$(docker inspect -f '{{.State.StartedAt}}' spezi-poc-keycloak 2>/dev/null || echo "")
+  kclog=$(docker logs ${kc_since:+--since "$kc_since"} spezi-poc-keycloak 2>&1)
   n=$(echo "$kclog" | grep -c 'ORA-[0-9]')
   [ "$n" = "0" ] && ok "no ORA- errors in the Keycloak log" || bad "Keycloak log has $n ORA- lines"
   # Keycloak's own startup index check. One name is expected: IDX_OFFLINE_CSS_BY_CLIENT is an exact duplicate (same

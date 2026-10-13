@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the FHIR, analytics and Keycloak PDBs, their users, and (once) the HAPI schema.
+# Creates the FHIR, analytics and Keycloak PDBs, their users, the HAPI schema (once) and the analytics schema.
 # Runs INSIDE the oracle container on every start, as a startup hook (db/startup/10-poc-init.sh; compose.yaml
 # mounts it), and can be rerun by hand: docker exec spezi-poc-oracle bash /opt/poc/db/init.sh
 # Idempotent: existing PDBs and users are skipped, grants and synonyms are refreshed.
@@ -13,6 +13,7 @@ set -euo pipefail
 host=localhost   # runs inside the oracle container
 sql_dir=/opt/poc/db/sql
 schema_ddl=/opt/poc/hapi-schema/oracle.sql
+analytics_ddl=/opt/poc/analytics-sql/10-schema.sql
 temp_ddl=/opt/poc/hapi-schema/oracle-temp-tables.sql
 fhir_pdb=FHIRPDB
 analytics_pdb=ANALYTICSPDB
@@ -67,6 +68,9 @@ else
   echo "Creating owner ${analytics_owner} and application user ${ANALYTICS_DB_USER} in ${analytics_pdb} ..."
   sqlplus -S "$(pdb_conn "$analytics_pdb")" @"${sql_dir}/30-analytics-user.sql" "${analytics_owner}" "${ANALYTICS_DB_USER}" "${ANALYTICS_DB_PASSWORD}"
 fi
+# The analytic store's tables (M9), as the owner via SYS; idempotent (ORA-00955 per object is tolerated). Applied
+# here, not by a bootstrap step, so "oracle is healthy" implies the schema exists. Must precede the grants below.
+sqlplus -S "$(pdb_conn "$analytics_pdb")" @"${analytics_ddl}" "${analytics_owner}"
 sqlplus -S "$(pdb_conn "$analytics_pdb")" @"${sql_dir}/25-grants-and-synonyms.sql" "${analytics_owner}" "${ANALYTICS_DB_USER}"
 
 if user_exists "$keycloak_pdb" "$keycloak_owner"; then

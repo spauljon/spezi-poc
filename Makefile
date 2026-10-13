@@ -34,8 +34,8 @@ test-analytics:  ## worker unit and contract tests (Node); `make test-analytics-
 	@./scripts/check-node.sh && cd analytics && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
 test-analytics-live:  ## rollups against the live stack: HAPI + Keycloak + Oracle (synthetic data)
 	@./analytics/live-test.sh
-analytics-migrate:  ## create the analytic store tables (idempotent)
-	@./analytics/db-migrate.sh
+analytics-migrate:  ## (re)apply the analytic store schema: reruns the database init in the oracle container (idempotent)
+	@docker exec spezi-poc-oracle bash /opt/poc/db/init.sh
 analytics-run:  ## one worker cycle on the host (the deployed worker already scans every 30 s; this is for ad hoc runs)
 	@./analytics/run.sh once
 analytics-api:  ## DEV: the analytic API on the host (port 8445); the deployed stack already serves it, so stop that first

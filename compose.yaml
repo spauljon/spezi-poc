@@ -12,6 +12,10 @@
 # inside the container on every start as an Oracle image startup hook (db/startup/10-poc-init.sh), and
 # the healthcheck reports healthy only once it has succeeded. There is no separate init service, profile or
 # marker; everything that depends on oracle being healthy depends on an initialized database.
+# Restart policy: every service is `unless-stopped`, so a daemon restart (reboot, Docker Desktop) brings the whole
+# stack back, while `docker stop` / `make stack-down` stay stopped. The daemon ignores depends_on and starts
+# everything at once; services that start early retry until their dependencies are up (HAPI and Keycloak exit on
+# a database they cannot reach and are restarted by the policy). oracle never exits on a failed init, so no loop.
 # Deploy through scripts/compose.sh (explicit project), e.g. `make stack-up`.
 name: spezi-poc
 
@@ -26,12 +30,14 @@ services:
       - ./db/.env.local
     environment:
       ORACLE_CHARACTERSET: AL32UTF8
+    restart: unless-stopped
     volumes:
       - oracle_data:/opt/oracle/oradata
       # Startup hook (a directory of its own: the image runs every *.sql and sources every *.sh in it).
       - ./db/startup:/opt/oracle/scripts/startup:ro
       - ./db:/opt/poc/db:ro
       - ./hapi/schema:/opt/poc/hapi-schema:ro
+      - ./analytics/sql:/opt/poc/analytics-sql:ro
     healthcheck:
       # Healthy = the CDB answers AND this start's db/init.sh run succeeded (db/init-status.sh).
       test:
@@ -67,6 +73,7 @@ services:
     configs:
       - source: hapi_config
         target: /app/config/application.yaml
+    restart: unless-stopped
     depends_on:
       oracle:
         condition: service_healthy
@@ -109,6 +116,7 @@ services:
       - --spi-connections-jpa--quarkus--initialize-empty=false
     env_file:
       - ./idp/.env.local           # bootstrap admin, KC_DB_USERNAME/KC_DB_PASSWORD, key store password (gitignored)
+    restart: unless-stopped
     depends_on:
       oracle:
         condition: service_healthy
@@ -145,14 +153,21 @@ services:
       default:
         aliases:
           - macpro16.local   # so HAPI reaches the proxy under the issuer's public name (certificate name matches)
+    restart: unless-stopped
     depends_on:
       keycloak:
-        condition: service_started   # the proxy tolerates Keycloak being down (502); /ping works regardless
+        condition: service_healthy
     healthcheck:
-      test: ['CMD-SHELL', 'nc -z 127.0.0.1 8444 || exit 1']
+      # Healthy = the IdP answers THROUGH the proxy (realm discovery document, public and allowlisted), not merely
+      # that nginx listens: dependents (worker, API) wait on this, and a port check passes while Keycloak is down.
+      # The Host header is required (the proxy refuses any other with 421). /ping stays up regardless of Keycloak.
+      test:
+        - CMD-SHELL
+        - "wget -q --no-check-certificate --header='Host: macpro16.local' -O /dev/null https://127.0.0.1:8444/realms/poc/.well-known/openid-configuration || exit 1"
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 6
+      start_period: 30s
 
   # --- Analytics worker, analytic API and web app (M13a): deployed, supervised, started by `make stack-up`.
   # The analytics image is built once and shared by the worker and the API. All three run as the invoking user's
@@ -271,6 +286,8 @@ services:
     depends_on:
       analytics-api:
         condition: service_healthy
+      hapi:
+        condition: service_healthy   # the app relays /fhir (nginx re-resolves upstreams per request, so this is ordering, not a start-up requirement)
     healthcheck:
       test: ['CMD-SHELL', 'wget -q --no-check-certificate --spider https://127.0.0.1:3000/ || exit 1']
       interval: 30s

@@ -6,12 +6,11 @@
 # One path, first run or not (the database initializes itself; see db/startup/10-poc-init.sh):
 #   1. Ensures credentials and TLS material exist (db/make-env.sh etc., never overwrites)
 #   2. Starts oracle and waits until it is healthy. Healthy means the database is up AND db/init.sh succeeded
-#      (PDBs, users, HAPI schema); on a first run that takes several minutes. A failed init is reported at once.
+#      (PDBs, users, HAPI and analytics schemas); on a first run that takes several minutes. A failed init is reported at once.
 #   3. Loads Keycloak's schema into KEYCLOAKPDB (idp/db-migrate.sh): Keycloak must not start before it exists
-#   4. Creates the analytics schema (analytics/db-migrate.sh): the worker needs its tables before it starts
-#   5. Starts the rest of the stack (HAPI, Keycloak and proxy, analytics worker and API, web) and WAITS until every
+#   4. Starts the rest of the stack (HAPI, Keycloak and proxy, analytics worker and API, web) and WAITS until every
 #      service reports healthy, then ensures the synthetic patient exists
-# Steps 3 and 4 are idempotent, so rerunning is always safe. To start from nothing: scripts/reset.sh.
+# Step 3 is idempotent, so rerunning is always safe. To start from nothing: scripts/reset.sh.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -63,12 +62,6 @@ migrate_keycloak_schema() {
   "${RUN_DIR}/idp/db-migrate.sh"
 }
 
-# The analytics tables are created as their no-login owner, idempotently, before the worker and API start.
-migrate_analytics_schema() {
-  log "Analytics schema ..."
-  "${RUN_DIR}/analytics/db-migrate.sh"
-}
-
 # Starts everything and returns only when every service is healthy (or fails loudly with what is not).
 start_all() {
   ${COMPOSE_CMD} up -d --build --wait --wait-timeout 900 || {
@@ -106,7 +99,6 @@ assert_docker_running
 
 start_oracle
 migrate_keycloak_schema
-migrate_analytics_schema
 start_all
 
 ensure_patient

@@ -26,11 +26,11 @@ make stack-verify     # M1 checks
 What `make stack-up` (`scripts/bootstrap.sh`) does, first run or not:
 
 1. Generates credentials and TLS material if absent (never overwrites).
-2. Starts `oracle` and waits until it is **healthy**. The image runs `db/init.sh` as a startup hook (`db/startup/10-poc-init.sh`) on every start: it creates the PDBs, users and HAPI schema if absent and refreshes grants. Healthy means the database answers *and* this start's init succeeded (`db/init-status.sh`). A first run takes several minutes; a failed init is reported immediately with the log.
-3. Loads Keycloak's schema (`idp/db-migrate.sh`) and the analytics schema (`analytics/db-migrate.sh`); both are idempotent.
+2. Starts `oracle` and waits until it is **healthy**. The image runs `db/init.sh` as a startup hook (`db/startup/10-poc-init.sh`) on every start: it creates the PDBs, users, the HAPI schema and the analytics schema if absent and refreshes grants. Healthy means the database answers *and* this start's init succeeded (`db/init-status.sh`). A first run takes several minutes; a failed init is reported immediately with the log.
+3. Loads Keycloak's schema (`idp/db-migrate.sh`, idempotent). It cannot be part of the hook: Keycloak generates it by running the Keycloak image.
 4. Starts everything else and waits for every service to be healthy.
 
-There is no init service, profile or marker file. The container stays up if the init fails (the image ignores a hook's exit status), but it never reports healthy, so nothing that depends on it starts. For anything else, `scripts/compose.sh` is the project-scoped escape hatch.
+Every service restarts itself (`unless-stopped`) after a daemon restart; `make stack-down` and `docker stop` stay stopped. There is no init service, profile or marker file. The container stays up if the init fails (the image ignores a hook's exit status), but it never reports healthy, so nothing that depends on it starts. For anything else, `scripts/compose.sh` is the project-scoped escape hatch.
 
 The Docker daemon must be running. The Oracle image may already be present from the governance stack; if not, `make stack-up` pulls it (the registry can require accepting a license or logging in).
 

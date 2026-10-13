@@ -125,7 +125,7 @@ make analytics-api          # foreground; Ctrl-C stops
 - **Image:** `analytics/Dockerfile` on `node:24-slim` pinned by digest, `npm ci` of the locked packages, no
   credential or key copied in (the repository root's `.dockerignore` is an allowlist). Containers run as the
   invoking user's uid so the 0600 TLS key on its bind mount stays 0600.
-- **Schema:** `analytics/db-migrate.sh` runs inside `make stack-up` before the services start (idempotent).
+- **Schema:** `db/init.sh` applies `analytics/sql/10-schema.sql` as the owner whenever the `oracle` container starts (idempotent), so `oracle` healthy implies the tables exist.
 - **Reaching HAPI and the IdP:** `macpro16.local` is mapped to the host gateway in these two containers, so
   tokens' issuer name and the certificates' name both match and TLS is verified end to end.
 - **Dev on the host** still works (`make analytics-run`, `analytics/run.sh loop`); `make analytics-api` refuses
@@ -134,7 +134,7 @@ make analytics-api          # foreground; Ctrl-C stops
 ## Run
 
 ```bash
-make analytics-migrate      # create the tables (idempotent; SYS in the container, worker has no DDL rights)
+make analytics-migrate      # reapply the schema (reruns db/init.sh in the oracle container; the worker has no DDL rights)
 make analytics-run          # one cycle on the host
 analytics/run.sh status     # watermark, row count, pending windows (counts only)
 analytics/run.sh loop       # every POC_WORKER_INTERVAL_SECONDS (default 30)

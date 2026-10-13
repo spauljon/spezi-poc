@@ -1,4 +1,4 @@
--- Analytic store schema (M9), applied by analytics/db-migrate.sh as SYS into the no-login owner account.
+-- Analytic store schema (M9), applied by db/init.sh (in the oracle container, on every start) as SYS into the no-login owner account.
 -- Idempotent: ORA-00955 (name already used) is the only error tolerated, per object.
 -- Usage: @10-schema.sql <owner>
 set verify off feedback on serveroutput on
