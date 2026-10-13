@@ -4,8 +4,9 @@
 # container_name is set explicitly with the same prefix; container names are unique across the whole
 # Docker host, so keep the "spezi-poc-" prefix to avoid colliding with other stacks.
 # HAPI serves HTTPS only (scripts/make-tls.sh makes the certs).
-# Published ports are bound to loopback only. Never publish a plain-HTTP or unauthenticated
-# service on all interfaces (see root CLAUDE.md, Isolation).
+# Published ports: Oracle (1522) and the analytic API (8445) on loopback only; HAPI (8443), the IdP proxy (8444) and
+# the web app (3000) on all interfaces, TLS only, with a verified token required for any data. Never publish a
+# plain-HTTP or unauthenticated service on all interfaces (see root CLAUDE.md, Isolation).
 #
 # oracle-init runs exactly once, during first-time setup (profile "initialize"). scripts/bootstrap.sh
 # activates that profile only while db/.initialized is absent, waits for the init to succeed, removes
@@ -167,6 +168,131 @@ services:
       interval: 10s
       timeout: 3s
       retries: 6
+
+  # --- Analytics worker, analytic API and web app (M13a): deployed, supervised, started by `make stack-up`.
+  # The analytics image is built once and shared by the worker and the API. All three run as the invoking user's
+  # uid (scripts/compose.sh exports POC_UID/POC_GID), read-only, with no capabilities, and restart on failure.
+  # macpro16.local is mapped to the host gateway for the worker and the API: the published HAPI (8443) and IdP (8444)
+  # ports are what their certificates (issued for that name) are verified against, and the issuer URL in tokens is
+  # that name. The web app's nginx reaches HAPI and the API inside the compose network with verified TLS.
+  analytics-worker:
+    container_name: spezi-poc-analytics-worker
+    build: &analytics-build
+      context: .
+      dockerfile: analytics/Dockerfile
+    image: spezi-poc-analytics:local
+    command: [node, --import, tsx, src/main.ts, loop]
+    user: "${POC_UID:-1000}:${POC_GID:-1000}"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    env_file:
+      - ./analytics/.env.local   # ANALYTICS_DB_USER/PASSWORD and the worker's client secret, nothing else
+    environment:
+      POC_ANALYTICS_CONNECT: oracle:1521/ANALYTICSPDB
+      POC_ISSUER_URL: https://macpro16.local:8444/realms/poc
+      POC_FHIR_BASE_URL: https://macpro16.local:8443/fhir
+      POC_WORKER_INTERVAL_SECONDS: '30'
+      POC_HEARTBEAT_FILE: /tmp/heartbeat
+      NODE_EXTRA_CA_CERTS: /tls/ca.crt
+    extra_hosts:
+      - 'macpro16.local:host-gateway'
+    volumes:
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/ca.crt:/tls/ca.crt:ro
+    depends_on:
+      oracle:
+        condition: service_healthy
+      hapi:
+        condition: service_healthy
+      idp-edge:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, healthcheck.mjs, worker]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging: &log-limit
+      driver: json-file
+      options: { max-size: 5m, max-file: '3' }
+
+  analytics-api:
+    container_name: spezi-poc-analytics-api
+    build: *analytics-build
+    image: spezi-poc-analytics:local
+    command: [node, --import, tsx, src/main.ts, api]
+    user: "${POC_UID:-1000}:${POC_GID:-1000}"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    ports:
+      # Loopback only (M11 decision): reachable from this host for curl and tests, not from the network. The web
+      # app's nginx reaches it inside the compose network.
+      - '127.0.0.1:8445:8445'
+    env_file:
+      - ./analytics/.env.api.local   # database account only: the API never holds the worker's client secret
+    environment:
+      POC_ANALYTICS_CONNECT: oracle:1521/ANALYTICSPDB
+      POC_ISSUER_URL: https://macpro16.local:8444/realms/poc
+      POC_API_LISTEN: 0.0.0.0        # inside the container; the host publish above is loopback only
+      POC_API_PORT: '8445'
+      POC_API_TLS_DIR: /tls/analytics
+      NODE_EXTRA_CA_CERTS: /tls/ca.crt
+    extra_hosts:
+      - 'macpro16.local:host-gateway'
+    volumes:
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/ca.crt:/tls/ca.crt:ro
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/analytics:/tls/analytics:ro
+    depends_on:
+      oracle:
+        condition: service_healthy
+      idp-edge:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, healthcheck.mjs, api]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *log-limit
+
+  web:
+    container_name: spezi-poc-web
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    image: spezi-poc-web:local
+    user: "${POC_UID:-1000}:${POC_GID:-1000}"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    ports:
+      # TLS only, all interfaces (decision recorded in the root CLAUDE.md): the static bundle and a GET-only relay to
+      # token-protected services; it holds no data and no credentials.
+      - '3000:3000'
+    volumes:
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/web/web.crt:/etc/nginx/tls/web.crt:ro
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/web/web.key:/etc/nginx/tls/web.key:ro
+      - ${POC_TLS_DIR:-${HOME}/.poc-ca}/ca.crt:/etc/nginx/tls/ca.crt:ro
+    depends_on:
+      analytics-api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --no-check-certificate --spider https://127.0.0.1:3000/ || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging: *log-limit
 
 configs:
   hapi_config:

@@ -135,11 +135,45 @@ cax=$(openssl x509 -in "$tls_dir/ca.crt" -noout -text)
 echo "$cax" | grep -q "X509v3 Name Constraints: critical" && ok "the POC CA carries a critical Name Constraints extension" || bad "the POC CA is NOT name-constrained (rerun make tls)"
 echo "$cax" | grep -A3 "Name Constraints" | grep -q "DNS:$host" && ok "the CA permits only DNS:$host" || bad "the CA's permitted name is not $host"
 
+# "Without the POC CA" must not depend on what this machine's system trust store holds. A developer who has trusted
+# the POC CA in their keychain (the web app needs that) makes curl, LibreSSL's s_client and even Python's ssl accept
+# the server with NO CA given (Apple's libcrypto always consults the keychain), which turned the old check into a
+# false failure. Node's TLS trusts exactly the CA it is handed, so it is the probe: the POC CA must verify (positive
+# control) and a DIFFERENT, throwaway CA must fail for the stated reason (the chain's issuer is not trusted).
+tls_probe() { # tls_probe <port> <cafile>: prints ok | verify-error:<node error code> | error:<other>
+  node -e '
+    const tls = require("node:tls"), fs = require("node:fs");
+    const [port, ca] = process.argv.slice(1);
+    const s = tls.connect({ host: "127.0.0.1", port: Number(port), servername: "macpro16.local", ca: fs.readFileSync(ca) },
+      () => { console.log("ok"); s.end(); });
+    s.setTimeout(10000, () => { console.log("error:timeout"); s.destroy(); });
+    s.on("error", (e) => console.log(/CERT|VERIFY|SELF_SIGNED/.test(e.code || "") ? "verify-error:" + e.code : "error:" + (e.code || e.message)));
+  ' "$1" "$2" 2>/dev/null
+}
+untrusted() { # the codes Node reports when the presented chain does not lead to the trust anchor it was given
+  case "$1" in
+    verify-error:UNABLE_TO_GET_ISSUER_CERT_LOCALLY|verify-error:UNABLE_TO_VERIFY_LEAF_SIGNATURE|verify-error:SELF_SIGNED_CERT_IN_CHAIN|verify-error:DEPTH_ZERO_SELF_SIGNED_CERT) return 0;;
+    *) return 1;;
+  esac
+}
+have_node=true
+command -v node >/dev/null 2>&1 || have_node=false
+foreign_dir=$(mktemp -d)
+trap 'rm -rf "$foreign_dir"' EXIT
+openssl ecparam -name prime256v1 -genkey -noout -out "$foreign_dir/ca.key" >/dev/null 2>&1
+openssl req -x509 -new -key "$foreign_dir/ca.key" -subj "/CN=Unrelated Throwaway CA" -days 1 -out "$foreign_dir/ca.crt" >/dev/null 2>&1
+[ -s "$foreign_dir/ca.crt" ] || { bad "could not create the throwaway CA for the negative TLS checks"; }
+
 # Negative checks mean something only if the positive control above passed (otherwise "refused" could just
 # mean "HAPI is down"), and each must fail for the STATED reason: curl exit 60 = certificate not accepted.
 if [ "$tls_up" = true ]; then
-  curl -s -o /dev/null --resolve "$host:8443:127.0.0.1" "$base/metadata"; rc=$?
-  [ "$rc" = "60" ] && ok "HTTPS fails without the POC CA (curl exit 60: certificate not trusted)" || bad "without the POC CA expected curl exit 60 (certificate rejected), got $rc"
+  if [ "$have_node" = true ]; then
+    [ "$(tls_probe 8443 "$tls_dir/ca.crt")" = "ok" ] && ok "8443 verifies against the POC CA alone (positive control for the next check)" || bad "8443 did not verify against the POC CA alone: $(tls_probe 8443 "$tls_dir/ca.crt")"
+    r=$(tls_probe 8443 "$foreign_dir/ca.crt")
+    untrusted "$r" && ok "8443 is rejected when only an unrelated CA is trusted ($r)" || bad "8443 with only an unrelated CA trusted: expected an untrusted-issuer error, got $r"
+  else
+    skip "8443 rejected without the POC CA (needs node on PATH; curl and openssl on this host consult the system trust store)"
+  fi
   curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8443:127.0.0.1" "https://other.local:8443/fhir/metadata"; rc=$?
   [ "$rc" = "60" ] && ok "a different host name is rejected (curl exit 60: name mismatch, SAN enforced)" || bad "other host name: expected curl exit 60 (name mismatch), got $rc"
 else
@@ -269,8 +303,13 @@ else
   code=$(curle -o /dev/null -w '%{http_code}' "https://$host:8444/ping")
   if [ "$code" = "200" ]; then
     ok "GET /ping over HTTPS on 8444 with the POC CA (HTTP $code)"
-    curl -s -o /dev/null --resolve "$host:8444:127.0.0.1" "https://$host:8444/ping"; rc=$?
-    [ "$rc" = "60" ] && ok "8444 fails without the POC CA (curl exit 60)" || bad "8444 without the POC CA: expected curl exit 60, got $rc"
+    if [ "$have_node" = true ]; then
+      [ "$(tls_probe 8444 "$tls_dir/ca.crt")" = "ok" ] && ok "8444 verifies against the POC CA alone (positive control)" || bad "8444 did not verify against the POC CA alone"
+      r=$(tls_probe 8444 "$foreign_dir/ca.crt")
+      untrusted "$r" && ok "8444 is rejected when only an unrelated CA is trusted ($r)" || bad "8444 with only an unrelated CA trusted: expected an untrusted-issuer error, got $r"
+    else
+      skip "8444 rejected without the POC CA (needs node on PATH)"
+    fi
     curl -s -o /dev/null --cacert "$tls_dir/ca.crt" --resolve "other.local:8444:127.0.0.1" "https://other.local:8444/ping"; rc=$?
     [ "$rc" = "60" ] && ok "8444 rejects a different host name (curl exit 60, SAN enforced)" || bad "8444 other host name: expected curl exit 60, got $rc"
   else
@@ -382,6 +421,61 @@ if docker ps --format '{{.Names}}' | grep -q '^spezi-poc-keycloak$'; then
     || { bad "Keycloak's index checker reports missing indexes:"; echo "$missing" | sed 's/^/        /'; }
 else
   skip "Keycloak log checks (container not running)"
+fi
+
+echo "== deployed services (M13a): analytics worker, analytic API, web"
+for svc in analytics-worker analytics-api web idp-edge; do
+  [ "$(health $svc)" = healthy ] && ok "$svc is healthy" || bad "$svc health is '$(health $svc)'"
+done
+cn() { docker inspect -f '{{.Name}}' "$(dc ps -q "$1")" 2>/dev/null | tr -d '/'; }
+ca="${POC_TLS_DIR:-$HOME/.poc-ca}/ca.crt"
+if [ -f "$ca" ] && [ -f idp/.env.local ]; then
+  # A clinician token from the real realm (the same path the web app uses); sent to curl on stdin, never in argv.
+  ctoken=$(python3 - <<'PY' 2>/dev/null
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("oidc", os.path.join("idp", "oidc.py"))
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+st, d = m.fetch_token("clinician")
+print(d.get("access_token", "") if st == 200 else "")
+PY
+)
+  status() { # status <host:port> <path> [token] [curl args...]: HTTP status over TLS verified by the POC CA
+    local hp="$1" path="$2" tok="${3:-}"; shift 3 || shift $#
+    local cfg=""; [ -n "$tok" ] && cfg="header = \"Authorization: Bearer $tok\""
+    printf '%s\n' "$cfg" | curl -s -o /dev/null -w '%{http_code}' --max-time 15 --cacert "$ca" \
+      --resolve "macpro16.local:${hp#*:}:127.0.0.1" --config - "$@" "https://macpro16.local:${hp#*:}$path"
+  }
+  if [ -n "$ctoken" ]; then
+    api=macpro16.local:8445; web=macpro16.local:3000
+    [ "$(status $api /v1/metrics '')" = 401 ] && ok "analytic API: no token is refused (401)" || bad "analytic API without a token did not answer 401"
+    [ "$(status $api /v1/metrics "$ctoken")" = 200 ] && ok "analytic API: a clinician token is served (200: positive control for the 401)" || bad "analytic API refused a valid clinician token"
+    [ "$(status $web / '')" = 200 ] && ok "web: the app is served over TLS verified by the POC CA" || bad "web index is not served (200 expected)"
+    [ "$(status $web /callback?code=x '')" = 200 ] && ok "web: the OIDC redirect path serves the app (SPA fallback)" || bad "web /callback is not served"
+    csp=$(printf '\n' | curl -s -I --max-time 15 --cacert "$ca" --resolve "macpro16.local:3000:127.0.0.1" --config - https://macpro16.local:3000/ | tr -d '\r' | grep -i '^content-security-policy:' || true)
+    case "$csp" in *"script-src 'self'"*) ok "web: Content-Security-Policy restricts scripts to the app's own origin";; *) bad "web: no usable Content-Security-Policy header";; esac
+    [ "$(status $web /fhir/metadata '')" = 200 ] && ok "web relay: /fhir/metadata is anonymous, as on HAPI (200)" || bad "web relay /fhir/metadata not 200"
+    [ "$(status $web '/fhir/Patient?_count=1' '')" = 401 ] && ok "web relay: /fhir without a token is refused by HAPI (401)" || bad "web relay /fhir/Patient without a token was not 401"
+    [ "$(status $web '/fhir/Patient?_count=1' "$ctoken")" = 200 ] && ok "web relay: /fhir with a clinician token is served (200)" || bad "web relay /fhir/Patient refused a valid token"
+    [ "$(status $web /fhir/Observation "$ctoken" -X POST)" = 405 ] && ok "web relay: a write is refused at the edge (405)" || bad "web relay accepted a non-GET request"
+    [ "$(status $web /analytics/v1/metrics '')" = 401 ] && ok "web relay: /analytics without a token is refused (401)" || bad "web relay /analytics without a token was not 401"
+    [ "$(status $web /analytics/v1/metrics "$ctoken")" = 200 ] && ok "web relay: /analytics with a clinician token is served (200)" || bad "web relay /analytics refused a valid token"
+  else
+    skip "deployed-service HTTP checks (could not get a clinician token from the realm)"
+  fi
+else
+  skip "deployed-service HTTP checks (POC CA or idp/.env.local not found)"
+fi
+w=$(cn analytics-worker); a=$(cn analytics-api)
+if [ -n "$w" ] && [ -n "$a" ]; then
+  [ "$(docker exec "$w" sh -c 'env | grep -c "^ORACLE_PWD="')" = 0 ] && ok "worker container has no Oracle SYS password" || bad "worker container sees ORACLE_PWD"
+  [ "$(docker exec "$a" sh -c 'env | grep -c "^POC_WORKER_CLIENT_SECRET="')" = 0 ] && ok "API container has no worker client secret" || bad "API container sees the worker's secret"
+  [ "$(docker exec "$w" sh -c 'env | grep -c "^POC_WORKER_CLIENT_SECRET="')" = 1 ] && ok "worker container has its client secret (positive control for the check above)" || bad "worker container lacks its client secret"
+  ro=$(docker exec "$w" sh -c 'touch /app/x 2>&1' || true)
+  case "$ro" in *"Read-only file system"*) ok "worker image filesystem is read-only";; *) bad "worker could write to its image filesystem";; esac
+  n=$(docker logs --since 3m "$w" 2>&1 | grep -c '"scanned"' || true)
+  [ "${n:-0}" -ge 1 ] 2>/dev/null && ok "worker is scanning on its own schedule ($n cycles in the last 3 minutes)" || bad "no scan cycle logged by the worker in the last 3 minutes"
+else
+  bad "analytics worker or API container is not running"
 fi
 
 echo

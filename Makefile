@@ -36,15 +36,17 @@ test-analytics-live:  ## rollups against the live stack: HAPI + Keycloak + Oracl
 	@./analytics/live-test.sh
 analytics-migrate:  ## create the analytic store tables (idempotent)
 	@./analytics/db-migrate.sh
-analytics-run:  ## one worker cycle on the host
+analytics-run:  ## one worker cycle on the host (the deployed worker already scans every 30 s; this is for ad hoc runs)
 	@./analytics/run.sh once
-analytics-api:  ## the analytic API on https://127.0.0.1:8445 (loopback, TLS, clinician token); Ctrl-C to stop
+analytics-api:  ## DEV: the analytic API on the host (port 8445); the deployed stack already serves it, so stop that first
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^spezi-poc-analytics-api$$'; then echo "analytics-api: the deployed service owns 127.0.0.1:8445 (spezi-poc-analytics-api). It is already running; to run from source instead: docker stop spezi-poc-analytics-api"; exit 1; fi
 	@./analytics/run.sh api
 test-web:  ## clinician web app: typecheck + unit and component tests (Node; no stack needed)
 	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
 test-web-live:  ## read-only banner data path against the live stack (HAPI + Keycloak)
 	@./web/live-test.sh
-web-dev:  ## the web app's dev server: https://macpro16.local:3000 (TLS, all interfaces); Ctrl-C stops
+web-dev:  ## DEV: Vite's dev server on :3000 (hot reload); the deployed stack already serves the built app, so stop that first
+	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^spezi-poc-web$$'; then echo "web-dev: the deployed web app owns port 3000 (spezi-poc-web), already running at https://macpro16.local:3000; to use the dev server instead: docker stop spezi-poc-web"; exit 1; fi
 	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm run dev
 
 guard:          ## scan staged files
@@ -60,6 +62,7 @@ hooks:          ## enable the pre-commit guard for this clone
 stack-env:      ## generate gitignored local credentials (never overwrites)
 	@./db/make-env.sh
 	@./idp/make-env.sh
+	@./analytics/make-env.sh
 tls: stack-env  ## create the local CA and the HAPI, proxy and Keycloak certificates (idempotent)
 	@./scripts/make-tls.sh
 stack-up:       ## first run: init profile once, then marker; later runs: plain up -d

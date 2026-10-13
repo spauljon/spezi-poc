@@ -1,0 +1,18 @@
+# Allowlist for builds whose context is the repository root (analytics/ and web/ images): nothing but what the image
+# needs is sent to the Docker daemon, so git-ignored credentials (.env.local), keys and node_modules never are.
+*
+!analytics/package.json
+!analytics/package-lock.json
+!analytics/.npmrc
+!analytics/tsconfig.json
+!analytics/healthcheck.mjs
+!analytics/src
+!contract/metrics.json
+!web/package.json
+!web/package-lock.json
+!web/.npmrc
+!web/tsconfig.json
+!web/vite.config.ts
+!web/index.html
+!web/src
+!web/nginx

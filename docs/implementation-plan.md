@@ -431,6 +431,22 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
+### Milestone 13a: Deployment and scheduled scans [repo/analytics/web]
+
+*(Added after M13 at the developer's request; not in the original sequence.)*
+
+**Goal:** Nothing is started by hand: the analytics worker, the analytic API and the web app are deployed by `make stack-up`, supervised, and the worker scans HAPI on a schedule.
+
+**Decisions (with the developer):** containers in the existing compose project; the web app as a production build behind the pinned nginx (Vite's dev server stays for development); scans every 30 seconds; `node:24-slim` pinned by digest as the one new external image.
+
+**Tasks:** 1. Image and compose service for the worker (loop that survives failures, heartbeat, healthcheck). 2. Service for the API (loopback publish, TLS key kept 0600). 3. Web image and nginx with verified upstream TLS and a CSP. 4. Least-privilege credentials per container. 5. Bootstrap runs the analytics migration and waits for every service to be healthy. 6. Extend `make stack-verify`.
+
+**Verify:** after `make stack-up`, a sample written to HAPI becomes a rollup with nobody invoking the worker; stopping HAPI does not kill the worker, and it recovers; a crashed worker is restarted; `make stack-verify` passes.
+
+**Status (2026-10-13):** built and verified; **awaiting your review** (not committed). Measured on the running stack: a new sample appeared as a rollup via the deployed API 19 s after the write with nobody invoking anything; with HAPI stopped the worker logged `fetch failed` with 30 s then 60 s backoff, stayed running and healthy, and resumed by itself when HAPI returned; a crashed worker process was restarted by Docker (restarts=1). `make stack-verify` gained 20 checks (health, API 401/200, web relay 401/200/405 with positive controls, CSP, no SYS password in the worker, no worker secret in the API, read-only filesystem, scans on schedule). 84 analytics unit tests (7 new for the loop) and 82 web tests pass. **Findings:** (1) `docker kill` counts as a manual stop for `unless-stopped`, so a crash had to be simulated inside the container; (2) with the POC CA trusted in the macOS keychain, curl, LibreSSL and Python all accepted the server with no CA given, which broke two existing "untrusted" checks in `db/verify.sh`; they now use Node's TLS with an unrelated CA (and skip loudly without Node). Decisions and assumptions in [analytics/README.md](../analytics/README.md) and [web/README.md](../web/README.md).
+
+---
+
 ### Milestone 14: Longitudinal trend view [web/]
 
 **Goal:** Weeks-to-months daily min/median/max bands per metric, from the analytic API, with gaps clearly shown.

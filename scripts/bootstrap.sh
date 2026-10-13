@@ -9,7 +9,9 @@
 #   3. Fails fast if the init did not exit 0
 #   4. Removes the exited init container so no inactive service lingers
 #   5. Loads Keycloak's schema into KEYCLOAKPDB (idp/db-migrate.sh): Keycloak must not start before it exists
-#   6. Starts the rest of the stack and writes the db/.initialized marker
+#   6. Creates the analytics schema (analytics/db-migrate.sh): the worker needs its tables before it starts
+#   7. Starts the rest of the stack (HAPI, Keycloak and proxy, analytics worker and API, web) and WAITS until every
+#      service reports healthy, writes the db/.initialized marker, and ensures the synthetic patient exists
 #
 # Later runs (marker present): oracle first, then idp/db-migrate.sh (idempotent: a no-op once the schema is
 # loaded), then plain `up -d`; the init service is not even in play.
@@ -59,6 +61,30 @@ migrate_keycloak_schema() {
   "${RUN_DIR}/idp/db-migrate.sh"
 }
 
+# The analytics tables are created as their no-login owner, idempotently, before the worker and API start.
+migrate_analytics_schema() {
+  log "Analytics schema ..."
+  "${RUN_DIR}/analytics/db-migrate.sh"
+}
+
+# Starts everything and returns only when every service is healthy (or fails loudly with what is not).
+start_all() {
+  ${COMPOSE_CMD} up -d --build --wait --wait-timeout 900 || {
+    ${COMPOSE_CMD} ps >&2 || true
+    fail "a service did not become healthy; see 'make stack-ps' and 'docker logs <container>'."
+  }
+}
+
+# The capture app creates the patient on its first sync; the web app needs one to show, so make sure it exists
+# (idempotent conditional create). Best effort: the stack is up either way, and the message says how to retry.
+ensure_patient() {
+  if command -v python3 > /dev/null 2>&1 && python3 "${RUN_DIR}/hapi/auth.py" seed > /dev/null 2>&1; then
+    log "Synthetic patient is present."
+  else
+    echo "note: could not confirm the synthetic patient; run 'python3 hapi/auth.py seed' (needs python3 and curl)" >&2
+  fi
+}
+
 run_initialize() {
   log "Project spezi-poc is not initialized. Running with the *initialize* profile ..."
 
@@ -82,8 +108,9 @@ run_initialize() {
   ${COMPOSE_CMD} --profile initialize rm -f oracle-init > /dev/null
 
   migrate_keycloak_schema
+  migrate_analytics_schema
 
-  ${COMPOSE_CMD} up -d --build
+  start_all
   touch "${MARKER_FILE}"
   log "Initialization complete. Marker file written: ${MARKER_FILE}"
 }
@@ -93,7 +120,8 @@ run_initialized() {
   ${COMPOSE_CMD} up -d --build oracle
   wait_for_oracle
   migrate_keycloak_schema
-  ${COMPOSE_CMD} up -d --build
+  migrate_analytics_schema
+  start_all
 }
 
 assert_docker_running
@@ -101,6 +129,7 @@ assert_docker_running
 # create gitignored credentials where absent (never overwrites)
 "${RUN_DIR}/db/make-env.sh"
 "${RUN_DIR}/idp/make-env.sh"
+"${RUN_DIR}/analytics/make-env.sh"   # derived: only the keys the analytics containers need
 
 # create the local CA and the HAPI, proxy and Keycloak certificates where absent (idempotent; keys live outside the repo)
 "${RUN_DIR}/scripts/make-tls.sh"
@@ -110,5 +139,7 @@ if [ -f "${MARKER_FILE}" ]; then
 else
   run_initialize
 fi
+
+ensure_patient
 
 log "spezi-poc is up. Verify with: make stack-verify"
