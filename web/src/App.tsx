@@ -1,5 +1,5 @@
 import { useAuth } from "./auth/AuthProvider.tsx";
-import { BannerPage } from "./banner/BannerPage.tsx";
+import { PatientPage } from "./PatientPage.tsx";
 import type { WebConfig } from "./config.ts";
 import type { WebContract } from "./contract.ts";
 
@@ -40,7 +40,7 @@ export function App({ config, contract }: { config: WebConfig; contract: WebCont
           </div>
         )}
         {state.status === "signedIn" && state.user.roles.includes("clinician-reader") && (
-          <BannerPage config={config} contract={contract} />
+          <PatientPage config={config} contract={contract} />
         )}
       </main>
       <footer className="muted small">

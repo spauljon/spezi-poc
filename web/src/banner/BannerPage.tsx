@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import type { WebConfig } from "../config.ts";
 import type { WebContract } from "../contract.ts";
-import { FhirClient, FhirError } from "../fhir/client.ts";
+import { FhirClient } from "../fhir/client.ts";
+import { explainError } from "../explain.ts";
+import type { Patient } from "../fhir/types.ts";
 import { Banner } from "./Banner.tsx";
-import { BannerLoadError, loadBanner } from "./load.ts";
+import { loadBanner } from "./load.ts";
 import type { BannerModel } from "./model.ts";
 
 type View =
@@ -12,37 +14,14 @@ type View =
   | { readonly kind: "ready"; readonly model: BannerModel; readonly loadedAt: number }
   | { readonly kind: "error"; readonly title: string; readonly detail: string; readonly retry: boolean };
 
-function explain(error: unknown): View {
-  if (error instanceof BannerLoadError) {
-    return {
-      kind: "error",
-      title: error.reason === "patientNotFound" ? "Patient not found" : "More than one patient matches",
-      detail: error.message,
-      retry: false,
-    };
-  }
-  if (error instanceof FhirError) {
-    switch (error.kind) {
-      case "unauthorized":
-        return { kind: "error", title: "Your sign-in was not accepted", detail: "Please sign in again.", retry: false };
-      case "forbidden":
-        return { kind: "error", title: "Not permitted", detail: "This account may not read patient data.", retry: false };
-      case "network":
-        return { kind: "error", title: "The server could not be reached", detail: "Check the connection and try again.", retry: true };
-      default:
-        return { kind: "error", title: "The server reported a problem", detail: error.message, retry: true };
-    }
-  }
-  return { kind: "error", title: "Something went wrong", detail: "The banner could not be loaded.", retry: true };
-}
-
 /**
  * Loads the banner, refreshes it every minute, and re-evaluates staleness against the clock every 15 seconds so the
  * indicator appears by itself when data stops arriving.
  */
-export function BannerPage({ config, contract, refreshMs = 60_000, clockMs = 15_000 }: {
+export function BannerPage({ config, contract, patient, refreshMs = 60_000, clockMs = 15_000 }: {
   config: WebConfig;
   contract: WebContract;
+  patient: Patient & { id: string };
   refreshMs?: number;
   clockMs?: number;
 }) {
@@ -53,12 +32,12 @@ export function BannerPage({ config, contract, refreshMs = 60_000, clockMs = 15_
   const load = useCallback(async () => {
     const client = new FhirClient(config.fhirBase, () => auth.accessToken());
     try {
-      const model = await loadBanner(client, config, contract, new Date());
+      const model = await loadBanner(client, config, contract, new Date(), patient);
       setView({ kind: "ready", model, loadedAt: Date.now() });
     } catch (error) {
-      setView(explain(error));
+      setView({ kind: "error", ...explainError(error) });
     }
-  }, [auth, config, contract]);
+  }, [auth, config, contract, patient]);
 
   useEffect(() => {
     void load();

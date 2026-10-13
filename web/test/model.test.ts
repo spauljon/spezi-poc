@@ -66,6 +66,18 @@ describe("buildBanner", () => {
     expect(model.values.find((v) => v.metricId === "restingHeartRate")!.source).toBe("unknown");
   });
 
+  it("HAPI's '#<request id>' suffix on meta.source does not hide the source (seen on every stored resource)", () => {
+    const stored = obs("heartRate", 70, ago(5), ago(4), `${contract.metaSource.synthetic}#QHpCc4VhJA80HQOm`);
+    const noUri = obs("hrvSdnn", 40, ago(5), ago(4), "#tndW9BkQ8MgJ3H4k");
+    const model = buildBanner(patient, [stored, noUri], contract, NOW, 30);
+    expect(model.values.find((v) => v.metricId === "heartRate")!.source).toBe("synthetic");
+    expect(model.values.find((v) => v.metricId === "hrvSdnn")!.source).toBe("unknown");
+    expect(model.sources).toEqual(["synthetic", "unknown"]);
+    // a look-alike URI that only starts with the contract's is not the contract's
+    const lookalike = obs("restingHeartRate", 50, ago(5), ago(4), `${contract.metaSource.synthetic}-evil#x`);
+    expect(buildBanner(patient, [lookalike], contract, NOW, 30).values[0]!.source).toBe("unknown");
+  });
+
   it("a receipt time ahead of the clock is reported and the age is clamped to zero", () => {
     const future = new Date(NOW.getTime() + 5 * MIN).toISOString();
     const model = buildBanner(patient, [obs("heartRate", 70, ago(1), future)], contract, NOW, 30);

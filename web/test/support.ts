@@ -71,30 +71,68 @@ export const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/fhir+json" } });
 
 /**
- * A stand-in for HAPI's search that honors what the banner sends: patient lookup by identifier, a per-code search
- * sorted by `-date`, and an any-code search sorted by `-_lastUpdated` (both `_count=1`). Records every URL.
+ * A stand-in for HAPI's Observation/Patient search that evaluates what the app sends: `patient`, `code` (comma list
+ * of system|code), `status`, `_source`, `date` (ge/lt, on the effective instant or period start), `_sort` (with a
+ * direction and `_id` as the final key), `_count`, `_offset`, `_total=accurate`, and `_elements=meta`. Records every
+ * URL (decoded) so tests can assert on what was asked.
  */
 export function fakeHapi(
   observations: Observation[],
-  opts: { patients?: unknown[]; status?: number; failNetwork?: () => boolean } = {},
+  opts: {
+    patients?: unknown[];
+    status?: number;
+    failNetwork?: () => boolean;
+    /** Resolve a response later (to test that a stale answer is discarded). */
+    delay?: (url: string) => Promise<void>;
+  } = {},
 ) {
   const urls: string[] = [];
+  const ms = (v: string | undefined) => (v === undefined ? Number.NaN : Date.parse(v));
+  const at = (o: Observation) => ms(o.effectiveDateTime ?? o.effectivePeriod?.start);
+  const sortKey = (o: Observation, key: string): string | number => {
+    switch (key) {
+      case "date": return at(o);
+      case "code": return o.code?.coding?.[0]?.code ?? "";
+      case "value-quantity": return o.valueQuantity?.value ?? Number.NEGATIVE_INFINITY;
+      case "status": return o.status ?? "";
+      case "_lastUpdated": return ms(o.meta?.lastUpdated);
+      default: return o.id ?? "";
+    }
+  };
   const impl = async (input: string | URL | Request): Promise<Response> => {
     const url = decodeURIComponent(String(input));
     urls.push(url);
+    if (opts.delay) await opts.delay(url);
     if (opts.failNetwork?.()) throw new TypeError("Failed to fetch");
     if (opts.status && opts.status !== 200) return json(opts.status, {});
     if (url.includes("Patient?")) return json(200, bundle(opts.patients ?? [patient]));
-    const ms = (v: string | undefined) => (v === undefined ? Number.NaN : Date.parse(v));
-    const eff = (o: Observation) => ms(o.effectiveDateTime ?? o.effectivePeriod?.end);
-    if (url.includes("_sort=-_lastUpdated")) {
-      const sorted = [...observations].sort((a, b) => ms(b.meta?.lastUpdated) - ms(a.meta?.lastUpdated));
-      return json(200, bundle(sorted.slice(0, 1).map((o) => ({ resourceType: "Observation", meta: o.meta }))));
+
+    const q = new URL(url, "https://hapi.test").searchParams;
+    const codes = (q.get("code") ?? "").split(",").filter(Boolean);
+    const ge = q.getAll("date").find((d) => d.startsWith("ge"))?.slice(2);
+    const lt = q.getAll("date").find((d) => d.startsWith("lt"))?.slice(2);
+    let rows = observations.filter((o) =>
+      (codes.length === 0 || o.code?.coding?.some((c) => codes.includes(`${c.system}|${c.code}`))) &&
+      (!q.get("status") || o.status === q.get("status")) &&
+      (!q.get("_source") || o.meta?.source === q.get("_source")) &&
+      (ge === undefined || at(o) >= ms(ge)) && (lt === undefined || at(o) < ms(lt)));
+    const keys = (q.get("_sort") ?? "_id").split(",").map((k) => ({ key: k.replace(/^-/, ""), sign: k.startsWith("-") ? -1 : 1 }));
+    rows = [...rows].sort((a, b) => {
+      for (const { key, sign } of keys) {
+        const x = sortKey(a, key), y = sortKey(b, key);
+        if (x < y) return -1 * sign;
+        if (x > y) return 1 * sign;
+      }
+      return 0;
+    });
+    const total = rows.length;
+    const offset = Number(q.get("_offset") ?? 0);
+    const count = Number(q.get("_count") ?? 50);
+    let page: unknown[] = rows.slice(offset, offset + count);
+    if (q.get("_elements") === "meta") {
+      page = (page as Observation[]).map((o) => ({ resourceType: "Observation", meta: o.meta }));
     }
-    const wanted = /code=([^&]*)/.exec(url)?.[1];
-    const matches = observations.filter((o) => o.code?.coding?.some((c) => `${c.system}|${c.code}` === wanted));
-    matches.sort((a, b) => eff(b) - eff(a));
-    return json(200, bundle(matches.slice(0, 1)));
+    return json(200, { ...bundle(page), ...(q.get("_total") === "accurate" ? { total } : {}) });
   };
   return Object.assign(vi.fn(impl), { urls });
 }

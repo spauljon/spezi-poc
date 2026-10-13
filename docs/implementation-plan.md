@@ -427,6 +427,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Verify:** results match direct HAPI searches; sort/filter combos behave over thousands of rows.
 
+**Status (2026-10-13):** built and verified; **awaiting your review** (not committed). No new packages. A filterable (metrics, UTC date range, source, status), sortable (five columns), server-paged table with the server's total, units beside values, flagged statuses, empty/error/stale-response handling and keyboard-operable headers. 82 unit and component tests pass. `make test-web-live` compares 31 filter and sort combinations over all 4,187 of the patient's Observations (3,000 of them seeded synthetic data for this check, left in HAPI) with an independent read: totals equal, every page walked with no duplicate or missing row, the set equal and the order monotonic. Three mutations (off-by-one offset, exclusive end day, ignored status) each fail the live test for the stated reason; a fourth (no stale-response guard) fails the component test. **Findings:** (1) HAPI stores `meta.source` as `<uri>#<request id>`, so M12's exact-match source detection showed every live resource as "Unknown source" (the M12 unit tests used bare URIs); fixed here. (2) HAPI sorts correctly by date, code, value, status and `_lastUpdated` but not by `_source`, and ignores `_source:not`. Assumptions F1 to F8 in [web/README.md](../web/README.md).
+
 ---
 
 ### Milestone 14: Longitudinal trend view [web/]

@@ -16,12 +16,50 @@ After signing in as the clinician (Keycloak, authorization code + PKCE), a patie
 It re-reads every minute and re-evaluates the age against the clock every 15 seconds, so staleness appears by
 itself when data stops arriving.
 
+## What M13 adds: the flowsheet
+
+Below the banner, a table of the patient's Observations across metrics (quantities and sleep-stage intervals):
+
+- **Filters:** metrics (checkboxes), UTC date range (end day inclusive), source (any / synthetic / HealthKit),
+  status (any, or one of the R4 Observation statuses), rows per page (25, 50, 100). Any filter change returns to page 1.
+- **Sort:** Measured, Metric, Value, Status, Received by server; click a header to sort, again to reverse
+  (`aria-sort` follows; the headers are buttons, so the table is keyboard operable). Source is not sortable.
+- **Paging, filtering, ordering and the total are the server's work** (`_count`, `_offset`, `_sort`, `_total=accurate`),
+  so the table stays correct over thousands of rows and the page holds only what is shown. `_id` is the last sort
+  key so equal keys cannot reorder between pages.
+- **Provenance and oddities stay visible:** units beside every value; period-valued samples show their start and
+  end; a status other than `final` is flagged (and `entered-in-error` rows are struck through, not hidden);
+  an unknown code, a missing value or a unit that differs from the contract's is shown as such, not corrected.
+- **States:** loading (previous rows stay while a new page loads), empty (with "Clear filters"), an inverted date
+  range explained without a request, server errors with retry. A response that arrives after a newer request was
+  made is discarded.
+
+### Assumptions made in M13 (review these)
+
+- **F1 Sort columns were verified against this HAPI**, not assumed: `date`, `code`, `value-quantity`, `status` and
+  `_lastUpdated` order correctly (checked over the whole data set, both directions; status after seeding two
+  synthetic Observations with other statuses). `_source` is accepted but returned rows out of order, so Source is
+  filterable and not sortable.
+- **F2 "Measured" sorts by `date`**, which HAPI indexes as the instant, or the START of a period.
+- **F3 Sorting by Value mixes units** when several metrics are selected (ms and /min are ordered as bare numbers).
+  The unit is always beside the value; filter to one metric for a meaningful value order.
+- **F4 The metric list is the contract's** (3 quantities, 5 sleep stages): an Observation with another code is
+  never requested. `_source:not` is ignored by this HAPI (it returned the positive match), so there is no
+  "unknown source" filter; such rows show as "Unknown source".
+- **F5 HAPI writes `meta.source` as `<uri>#<request id>`.** Source detection compares the URI part. (This was a
+  bug in M12's banner, invisible to its unit tests because they used the bare URI; fixed here and covered by a
+  unit test and by the live test.)
+- **F6 Dates are UTC days** (as everywhere else, A6); the filter is applied to the sample's instant.
+- **F7 State is not in the URL**: a reload resets filters (and signs in again, W2). Linkable views are a later
+  refinement.
+- **F8 The Observation status list is the R4 value set**, a FHIR constant, not part of the contract.
+
 ## Run
 
 ```bash
 make web-dev          # https://macpro16.local:3000 (TLS, all interfaces); Ctrl-C stops
-make test-web         # typecheck + 51 unit and component tests (no stack needed)
-make test-web-live    # read-only: the banner's data path against the live HAPI with a clinician token
+make test-web         # typecheck + 82 unit and component tests (no stack needed)
+make test-web-live    # read-only: banner and flowsheet against the live HAPI with a clinician token
 ```
 
 The browser must trust the POC CA (`~/.poc-ca/ca.crt`), as for the iOS simulator. The app needs the stack up

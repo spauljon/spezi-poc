@@ -36,11 +36,20 @@ export interface BannerModel {
 const instant = (o: Observation): string | undefined => o.effectiveDateTime ?? o.effectivePeriod?.end ?? o.effectivePeriod?.start;
 const ms = (iso: string | undefined): number => (iso === undefined ? Number.NaN : Date.parse(iso));
 
+/**
+ * The URI part of `meta.source`. HAPI appends the id of the request that wrote the resource (`<uri>#<request id>`),
+ * which is not part of what the capture app said; a bare `#id` (no uri) means the writer gave none.
+ */
+export function sourceUri(source: string | undefined): string {
+  return (source ?? "").split("#")[0] ?? "";
+}
+
 export function sourceKind(meta: Observation["meta"], contract: WebContract): SourceKind {
-  if (meta?.source === contract.metaSource.synthetic) {
+  const uri = sourceUri(meta?.source);
+  if (uri === contract.metaSource.synthetic) {
     return "synthetic";
   }
-  if (meta?.source === contract.metaSource.healthKit) {
+  if (uri === contract.metaSource.healthKit) {
     return "healthKit";
   }
   return "unknown";

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App.tsx";
 import { AuthProvider } from "../src/auth/AuthProvider.tsx";
@@ -89,7 +89,7 @@ describe("banner states", () => {
     ]));
     renderApp(signedIn());
     expect(await screen.findByText(/Current: last data received/)).toBeTruthy();
-    expect(screen.getByText("72")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Patient banner" })).getByText("72")).toBeTruthy();
     expect(screen.getAllByText(/UTC/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Synthetic simulator").length).toBeGreaterThan(0);
     expect(screen.queryByRole("alert")).toBeNull();
@@ -100,7 +100,7 @@ describe("banner states", () => {
     renderApp(signedIn());
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/Stale: last data received 4 h 59 min ago/);
-    expect(screen.getByText("72")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Patient banner" })).getByText("72")).toBeTruthy();
   });
 
   it("staleness appears by itself as the clock advances, with no new request", async () => {

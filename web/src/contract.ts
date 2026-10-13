@@ -17,8 +17,17 @@ export interface WebContract {
   readonly patientIdentifierSystem: string;
   readonly metaSource: { readonly synthetic: string; readonly healthKit: string };
   readonly quantityMetrics: readonly QuantityMetric[];
-  /** LOINC code -> stage id for sleep stages (used for "last data received", not displayed here). */
+  /** Sleep stage codes (used for "last data received"). */
   readonly sleepStageCodes: readonly string[];
+  /** Sleep stages: one duration Observation per stage interval. */
+  readonly sleepStages: readonly SleepStage[];
+  readonly sleepUnit: string;
+}
+
+export interface SleepStage {
+  readonly id: string;
+  readonly loincCode: string;
+  readonly display: string;
 }
 
 interface RawMetric {
@@ -26,7 +35,7 @@ interface RawMetric {
   kind: string;
   loinc?: { code: string; display: string };
   unit: { ucum: string; display: string };
-  stages?: Record<string, { code: string }>;
+  stages?: Record<string, { code: string; display?: string }>;
 }
 
 export const SUPPORTED_MAJOR = 1;
@@ -47,9 +56,11 @@ export function parseContract(file: unknown): WebContract {
   const quantityMetrics = c.metrics
     .filter((m) => m.kind === "quantity" && m.loinc)
     .map((m) => ({ id: m.id, loincCode: m.loinc!.code, display: m.loinc!.display, unit: m.unit.ucum }));
-  const sleepStageCodes = c.metrics
-    .filter((m) => m.kind === "sleepStage")
-    .flatMap((m) => Object.values(m.stages ?? {}).map((s) => s.code));
+  const sleep = c.metrics.find((m) => m.kind === "sleepStage");
+  const sleepStages: SleepStage[] = Object.entries(sleep?.stages ?? {}).map(([id, s]) => ({
+    id, loincCode: s.code, display: s.display ?? id,
+  }));
+  const sleepStageCodes = sleepStages.map((s) => s.loincCode);
   return {
     version: c.contractVersion,
     loincSystem: c.systems.loinc,
@@ -57,6 +68,8 @@ export function parseContract(file: unknown): WebContract {
     metaSource: c.systems.metaSource,
     quantityMetrics,
     sleepStageCodes,
+    sleepStages,
+    sleepUnit: sleep?.unit.ucum ?? "",
   };
 }
 

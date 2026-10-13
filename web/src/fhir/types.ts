@@ -8,6 +8,7 @@ export interface Coding {
 export interface Observation {
   resourceType: "Observation";
   id?: string;
+  status?: string;
   meta?: { lastUpdated?: string; source?: string };
   code?: { coding?: Coding[] };
   subject?: { reference?: string };

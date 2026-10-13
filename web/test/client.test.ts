@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadBanner, BannerLoadError } from "../src/banner/load.ts";
+import { loadBanner } from "../src/banner/load.ts";
+import { PatientLoadError, loadPatient } from "../src/patient.ts";
 import { FhirClient, FhirError } from "../src/fhir/client.ts";
 import { NOW, bundle, config, contract, fakeHapi, json, obs, patient, sleepObs } from "./support.ts";
 
@@ -46,43 +47,52 @@ describe("FhirClient", () => {
 });
 
 describe("loadBanner", () => {
-  it("looks the patient up by the contract's identifier, then asks per metric (newest by time) and once for the newest receipt", async () => {
+  const pat = { ...patient, id: "42" };
+
+  it("asks per metric (newest by time) and once for the newest receipt, for the resolved patient", async () => {
     const hapi = fakeHapi([obs("heartRate", 72, "2026-10-12T11:50:00+00:00", "2026-10-12T11:50:05.000+00:00")]);
-    const model = await loadBanner(client(hapi as unknown as typeof fetch), config, contract, NOW);
-    const [first, ...rest] = hapi.urls;
-    expect(first).toContain(`identifier=${contract.patientIdentifierSystem}|poc-0001`);
+    const model = await loadBanner(client(hapi as unknown as typeof fetch), config, contract, NOW, pat);
     for (const m of contract.quantityMetrics) {
-      const asked = rest.filter((u) => u.includes(`code=${contract.loincSystem}|${m.loincCode}`));
+      const asked = hapi.urls.filter((u) => u.includes(`code=${contract.loincSystem}|${m.loincCode}`));
       expect(asked).toHaveLength(1);
       expect(asked[0]).toContain("patient=Patient/42");
       expect(asked[0]).toContain("_sort=-date");
       expect(asked[0]).toContain("_count=1");
     }
-    expect(rest.filter((u) => u.includes("_sort=-_lastUpdated"))).toHaveLength(1);
-    expect(rest.some((u) => u.includes("$lastn"))).toBe(false); // not usable on this HAPI
+    expect(hapi.urls.filter((u) => u.includes("_sort=-_lastUpdated"))).toHaveLength(1);
+    expect(hapi.urls.some((u) => u.includes("$lastn") || u.includes("Patient?"))).toBe(false);
     expect(model.values.map((v) => [v.metricId, v.value])).toEqual([["heartRate", 72]]);
   });
 
   it("last data received counts a sleep stage the metric searches never see", async () => {
     const stage = sleepObs(contract.sleepStageCodes[0]!, "2026-10-12T11:59:00.000+00:00");
     const hapi = fakeHapi([obs("heartRate", 72, "2026-10-12T10:00:00+00:00", "2026-10-12T10:00:05.000+00:00"), stage]);
-    const model = await loadBanner(client(hapi as unknown as typeof fetch), config, contract, NOW);
+    const model = await loadBanner(client(hapi as unknown as typeof fetch), config, contract, NOW, pat);
     expect(model.lastReceivedAt).toBe("2026-10-12T11:59:00.000Z");
     expect(model.staleness.state).toBe("current");
   });
 
-  it("no patient is patientNotFound; two are patientAmbiguous", async () => {
-    const none = await loadBanner(client(fakeHapi([], { patients: [] }) as unknown as typeof fetch), config, contract, NOW)
-      .catch((e: unknown) => e) as BannerLoadError;
-    expect(none).toBeInstanceOf(BannerLoadError);
-    expect(none.reason).toBe("patientNotFound");
-    const two = await loadBanner(client(fakeHapi([], { patients: [patient, { ...patient, id: "43" }] }) as unknown as typeof fetch), config, contract, NOW)
-      .catch((e: unknown) => e) as BannerLoadError;
-    expect(two.reason).toBe("patientAmbiguous");
+  it("a patient with no observations yields an empty banner, not an error", async () => {
+    const model = await loadBanner(client(fakeHapi([]) as unknown as typeof fetch), config, contract, NOW, pat);
+    expect(model.staleness.state).toBe("none");
+  });
+});
+
+describe("loadPatient", () => {
+  it("looks the patient up by the contract's identifier system", async () => {
+    const hapi = fakeHapi([]);
+    const p = await loadPatient(client(hapi as unknown as typeof fetch), config, contract);
+    expect(p.id).toBe("42");
+    expect(hapi.urls[0]).toContain(`identifier=${contract.patientIdentifierSystem}|poc-0001`);
   });
 
-  it("a patient with no observations yields an empty banner, not an error", async () => {
-    const model = await loadBanner(client(fakeHapi([]) as unknown as typeof fetch), config, contract, NOW);
-    expect(model.staleness.state).toBe("none");
+  it("no patient is patientNotFound; two are patientAmbiguous", async () => {
+    const none = await loadPatient(client(fakeHapi([], { patients: [] }) as unknown as typeof fetch), config, contract)
+      .catch((e: unknown) => e) as PatientLoadError;
+    expect(none).toBeInstanceOf(PatientLoadError);
+    expect(none.reason).toBe("patientNotFound");
+    const two = await loadPatient(client(fakeHapi([], { patients: [patient, { ...patient, id: "43" }] }) as unknown as typeof fetch), config, contract)
+      .catch((e: unknown) => e) as PatientLoadError;
+    expect(two.reason).toBe("patientAmbiguous");
   });
 });
