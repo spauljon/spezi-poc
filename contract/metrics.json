@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.2.0",
+  "contractVersion": "1.3.0",
   "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
   "fhirVersion": "4.0.1",
   "verification": {
@@ -29,13 +29,15 @@
   "dataQualityFlags": {
     "artifactSuspected": "artifact-suspected",
     "duplicateResolved": "duplicate-resolved",
-    "lateArrival": "late-arrival"
+    "lateArrival": "late-arrival",
+    "userEntered": "user-entered"
   },
   "categories": {
     "vital-signs": { "code": "vital-signs", "display": "Vital Signs" },
     "activity": { "code": "activity", "display": "Activity" }
   },
   "rules": {
+    "userEntered": "A sample that its source says was entered by hand (HealthKit: metadata HKMetadataKeyWasUserEntered true) carries meta.tag with system systems.dataQualityFlag and code dataQualityFlags.userEntered; any other sample carries no tag. It is provenance, not a defect: the value is stored and drawn as it is.",
     "status": "final",
     "identifierValue": {
       "synthetic": "as given",
@@ -116,6 +118,6 @@
     "A15": "Device.version entries carry only value and type.text ('hardware' or 'software'); no code system is invented for version types.",
     "A16": "HealthKit sample UUIDs are lowercased for identifier.value so that identity does not depend on which API produced the string.",
     "A17": "Zero is rejected for every metric; no plausibility ranges are applied in v1 (artifact flagging is a later milestone).",
-    "A30": "Data-quality flags are Coding entries in Observation.meta.tag (FHIR data model A8) in the project-defined system systems.dataQualityFlag; the codes are dataQualityFlags. The system is this project's own, so there is no external terminology to verify it against. v1 ingest writes none of them; a reader displays a flag when it is present and never infers one (M15)."
+    "A30": "Data-quality flags are Coding entries in Observation.meta.tag (FHIR data model A8) in the project-defined system systems.dataQualityFlag; the codes are dataQualityFlags. The system is this project's own, so there is no external terminology to verify it against. Ingest writes only user-entered (a provenance note: the value was typed in by hand); artifact-suspected, duplicate-resolved and late-arrival are written by nothing yet (M19). A reader displays a flag when it is present and never infers one (M15)."
   }
 }

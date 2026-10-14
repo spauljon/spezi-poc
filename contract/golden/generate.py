@@ -71,25 +71,32 @@ def observation(m, sample, code, display, value, unit, patient, device_ref):
         o["effectiveDateTime"] = fmt(start, tz)
     else:
         o["effectivePeriod"] = {"start": fmt(start, tz), "end": fmt(end, tz)}
+    if sample.get("userEntered"):
+        # provenance, not a defect (contract rules.userEntered): the value is stored as given
+        o["meta"]["tag"] = [{"system": SYS["dataQualityFlag"], "code": CONTRACT["dataQualityFlags"]["userEntered"]}]
     if device_ref:
         o["device"] = {"reference": device_ref}
     return o
 
 
 def quantity_case(name, note, metric_id, value, start, end, issued="2026-01-15T16:31:00Z", tz="America/Los_Angeles",
-                  source="synthetic", sid="syn-000001", device_ref=SYN_DEVICE_REF):
+                  source="synthetic", sid="syn-000001", device_ref=SYN_DEVICE_REF, user_entered=False):
     m = metric(metric_id)
     sample = {"metric": metric_id, "value": value, "start": start, "end": end, "issued": issued, "timeZone": tz,
               "source": source, "id": sid}
+    if user_entered:
+        sample["userEntered"] = True
     return {"name": name, "note": note, "patientId": PATIENT, "deviceReference": device_ref, "sample": sample,
             "expected": observation(m, sample, m["loinc"]["code"], m["loinc"]["display"], number(value), m["unit"], PATIENT, device_ref)}
 
 
 def sleep_case(name, note, stage, start, end, issued="2026-01-15T17:55:00Z", tz="America/Los_Angeles",
-               source="synthetic", sid="syn-sleep-0001", device_ref=SYN_DEVICE_REF):
+               source="synthetic", sid="syn-sleep-0001", device_ref=SYN_DEVICE_REF, user_entered=False):
     m = metric("sleepStage")
     sample = {"metric": "sleepStage", "stage": stage, "start": start, "end": end, "issued": issued, "timeZone": tz,
               "source": source, "id": sid}
+    if user_entered:
+        sample["userEntered"] = True
     case = {"name": name, "note": note, "patientId": PATIENT, "deviceReference": device_ref, "sample": sample}
     if stage in m["unmapped"]:
         case["expectedOutcome"] = "unmapped"
@@ -170,6 +177,9 @@ def build():
         quantity_case("heart-rate-healthkit-uuid-lowercased", "HealthKit identity: healthkit-sample system, lowercase UUID, healthkit meta.source.",
                       "heartRate", 64, "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", source="healthKit",
                       sid="3F2504E0-4F89-11D3-9A0C-0305E82C3301", device_ref="Device/example-watch"),
+        quantity_case("heart-rate-healthkit-user-entered", "Typed in by hand in Apple Health: stored as given, tagged user-entered; "
+                      "a hand entry has no device.", "heartRate", 80, "2026-01-15T16:30:00Z", "2026-01-15T16:30:00Z",
+                      source="healthKit", sid="A1B2C3D4-0000-4000-8000-000000000001", device_ref=None, user_entered=True),
         quantity_case("resting-heart-rate-day-period", "Resting HR over a local day: LOINC 40443-4 and a period.", "restingHeartRate", 58,
                       "2026-01-15T08:00:00Z", "2026-01-16T08:00:00Z", sid="syn-rest-0001"),
         quantity_case("hrv-sdnn-instant", "HRV SDNN: LOINC 112429-6, UCUM ms.", "hrvSdnn", 48.3,
@@ -193,6 +203,9 @@ def build():
         sleep_case("sleep-rem", "asleepREM.", "asleepREM", "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", sid="syn-sleep-0003"),
         sleep_case("sleep-unspecified", "asleepUnspecified.", "asleepUnspecified", "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", sid="syn-sleep-0004"),
         sleep_case("sleep-awake", "awake maps to Awakening duration 103210-1 (A4).", "awake", "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", sid="syn-sleep-0005"),
+        sleep_case("sleep-user-entered", "A sleep interval entered by hand: the same tag, the same duration rule.", "asleepCore",
+                   "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", source="healthKit", sid="A1B2C3D4-0000-4000-8000-000000000002",
+                   device_ref=None, user_entered=True),
         sleep_case("sleep-in-bed-is-unmapped", "inBed has no verified code: no Observation, and not an error.", "inBed", "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", sid="syn-sleep-0006"),
         sleep_case("sleep-half-minute", "30 s is 0.5 min.", "asleepCore", "2026-01-15T09:10:00Z", "2026-01-15T09:10:30Z", sid="syn-sleep-0007"),
         sleep_case("sleep-one-second-rounds-half-up", "1 s is 0.01666... min, rounded to 0.02.", "asleepCore", "2026-01-15T09:10:00Z", "2026-01-15T09:10:01Z", sid="syn-sleep-0008"),
