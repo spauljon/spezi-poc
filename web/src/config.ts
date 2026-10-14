@@ -7,6 +7,8 @@ export interface WebConfig {
   readonly analyticsBase: string;
   /** Value of the capture patient's business identifier (system comes from the contract). */
   readonly patientIdentifier: string;
+  /** Business identifier of the separate patient that holds the developer's own HealthKit data (never mixed with the synthetic one). */
+  readonly healthKitPatientIdentifier: string;
   /** Data older than this (by when the server received it) is shown as stale. */
   readonly staleAfterMinutes: number;
   readonly redirectUri: string;
@@ -33,6 +35,7 @@ export function loadConfig(env: Env, location: Pick<Location, "origin" | "hostna
     fhirBase: "/fhir",
     analyticsBase: "/analytics",
     patientIdentifier: env["VITE_POC_PATIENT_IDENTIFIER"] ?? "poc-0001",
+    healthKitPatientIdentifier: env["VITE_POC_HEALTHKIT_PATIENT_IDENTIFIER"] ?? "poc-real",
     staleAfterMinutes: stale,
     redirectUri: `${location.origin}/callback`,
   };

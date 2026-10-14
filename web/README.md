@@ -268,6 +268,14 @@ on every field for all three, and the live test holds the web to it too.
 - **S10 The page lists what HAPI returned for the session's window,** excluding an interval that merely touches it
   (HAPI matches overlapping periods, so such an interval is returned and discarded here; there is a test).
 
+## Data set switch (M17)
+
+The page header offers **Synthetic data** (default) and **Real data (Apple Health)**. Each loads its own Patient by
+business identifier (`VITE_POC_PATIENT_IDENTIFIER`, default `poc-0001`; `VITE_POC_HEALTHKIT_PATIENT_IDENTIFIER`,
+default `poc-real`); the two are never combined. The real set shows a "Real data" note, and a missing real patient is
+explained in words. The choice is held in memory only: a reload returns to synthetic. A hand-entered sample appears
+among the flagged samples as "entered by hand, not measured by a device".
+
 ## Deployed vs development (M13a)
 
 `make stack-up` also deploys the web app: `web/Dockerfile` builds the app (`vite build`, Node 24 by digest) and

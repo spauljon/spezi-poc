@@ -28,34 +28,54 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
   const [state, setState] = useState<State>({ kind: "loading" });
+  // In memory only: reloading the page always returns to the synthetic data set.
+  const [dataSet, setDataSet] = useState<"synthetic" | "real">("synthetic");
 
   const load = useCallback(async () => {
+    setState({ kind: "loading" });
     try {
       const client = new FhirClient(config.fhirBase, () => auth.accessToken());
-      setState({ kind: "ready", patient: await loadPatient(client, config, contract) });
+      const identifier = dataSet === "real" ? config.healthKitPatientIdentifier : config.patientIdentifier;
+      setState({ kind: "ready", patient: await loadPatient(client, { ...config, patientIdentifier: identifier }, contract) });
     } catch (error) {
       setState({ kind: "error", error: explainError(error) });
     }
-  }, [auth, config, contract]);
+  }, [auth, config, contract, dataSet]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const switcher = (
+    <div className="dataset" role="group" aria-label="Data set">
+      <button type="button" aria-pressed={dataSet === "synthetic"} onClick={() => setDataSet("synthetic")}>Synthetic data</button>
+      <button type="button" aria-pressed={dataSet === "real"} onClick={() => setDataSet("real")}>Real data (Apple Health)</button>
+    </div>
+  );
   if (state.kind === "loading") {
-    return <p role="status" className="state">Loading patient…</p>;
+    return <><p role="status" className="state">Loading patient…</p></>;
   }
   if (state.kind === "error") {
     return (
-      <div role="alert" className="state state-error">
-        <h2>{state.error.title}</h2>
-        <p>{state.error.detail}</p>
-        {state.error.retry && <button type="button" onClick={() => void load()}>Try again</button>}
-      </div>
+      <>
+        {switcher}
+        <div role="alert" className="state state-error">
+          <h2>{state.error.title}</h2>
+          <p>
+            {state.error.detail}
+            {dataSet === "real" && " This is the separate patient for real Apple Health data; it exists only after the phone has uploaded."}
+          </p>
+          {state.error.retry && <button type="button" onClick={() => void load()}>Try again</button>}
+        </div>
+      </>
     );
   }
   return (
     <>
+      {switcher}
+      {dataSet === "real" && (
+        <p className="real-data" role="note"><strong>Real data.</strong> This is a person&apos;s own Apple Health data, not synthetic.</p>
+      )}
       <BannerPage config={config} contract={contract} patient={state.patient} />
       <nav aria-label="Views" className="views">
         <a href={trendsHref()} aria-current={route.view === "trends" || route.view === "day" ? "page" : undefined}>Trends</a>

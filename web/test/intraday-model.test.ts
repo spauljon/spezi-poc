@@ -16,6 +16,11 @@ const FAR_FUTURE = new Date("2030-01-01T00:00:00Z");
 describe("toSample", () => {
   const base = (over: Partial<Observation> = {}): Observation => ({ ...obs("heartRate", 72, iso(at(3)), iso(at(3))), id: "7", ...over });
 
+  it("a user-entered tag is carried like any stored flag, from the contract's code", () => {
+    const o = base({ meta: { tag: [{ system: flag.system, code: flag.userEntered }] } });
+    expect((toSample(o, hr, contract) as Sample).flags).toEqual([flag.userEntered]);
+  });
+
   it("reads an instant, its value and its stored flags", () => {
     const o = base({ meta: { tag: [{ system: flag.system, code: flag.artifactSuspected }] } });
     expect(toSample(o, hr, contract)).toEqual({ id: "7", t: at(3), v: 72, flags: [flag.artifactSuspected] });

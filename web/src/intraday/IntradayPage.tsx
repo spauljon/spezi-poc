@@ -81,6 +81,7 @@ export function IntradayPage({ config, contract, patientId, day, metric, range, 
     if (code === f.artifactSuspected) return "artifact suspected";
     if (code === f.duplicateResolved) return "duplicate resolved";
     if (code === f.lateArrival) return "late arrival";
+    if (code === f.userEntered) return "entered by hand, not measured by a device";
     return `unrecognised flag "${code}"`;
   }, [contract]);
 

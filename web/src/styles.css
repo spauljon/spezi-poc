@@ -162,3 +162,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .sleep-summary a:focus-visible { outline: 3px solid var(--accent); }
 .bar-selected .stage-bar { stroke: var(--viz-ink); stroke-width: 2; }
 .session-choice { margin-right: 1rem; }
+
+.dataset { display: flex; gap: 0.5rem; margin: 0.75rem 0; }
+.dataset button[aria-pressed="true"] { font-weight: 600; border: 2px solid var(--accent); }
+.real-data { border-left: 4px solid var(--accent); padding: 0.4rem 0.75rem; margin: 0.5rem 0; }

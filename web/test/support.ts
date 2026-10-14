@@ -13,6 +13,7 @@ export const config: WebConfig = {
   fhirBase: "/fhir",
   analyticsBase: "/analytics",
   patientIdentifier: "poc-0001",
+  healthKitPatientIdentifier: "poc-real",
   staleAfterMinutes: 30,
   redirectUri: "https://web.test:3000/callback",
 };

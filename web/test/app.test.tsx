@@ -136,6 +136,20 @@ describe("banner states", () => {
     expect(await screen.findByText("Patient not found")).toBeTruthy();
   });
 
+  it("the real-data set loads its own patient identifier, says so, and the default is synthetic", async () => {
+    const fake = fakeHapi([obs("heartRate", 72, ago(5), ago(4))]);
+    vi.stubGlobal("fetch", fake);
+    renderApp(signedIn());
+    await screen.findByText(/Current: last data received/);
+    expect(fake.urls.some((u) => u.includes("identifier=" + contract.patientIdentifierSystem + "|poc-0001"))).toBe(true);
+    expect(screen.queryByText("Real data.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Real data (Apple Health)" }));
+    expect(await screen.findByText("Real data.")).toBeTruthy();
+    expect(fake.urls.some((u) => u.includes("identifier=" + contract.patientIdentifierSystem + "|poc-real"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Synthetic data" }));
+    await waitFor(() => expect(screen.queryByText("Real data.")).toBeNull());
+  });
+
   it("an unreachable server offers a retry, and retry loads", async () => {
     let fail = true;
     const fake = fakeHapi([obs("heartRate", 72, ago(5), ago(4))], { failNetwork: () => fail });
