@@ -98,9 +98,11 @@ struct HomeView: View {
             // Collection runs exactly while Apple Health is both chosen and allowed; otherwise the bridge drops (and counts).
             .task(id: Wish(stored: stored, allowed: gate.isAvailable)) {
                 sources.update(stored: stored, gate: gate)
-                let running = stored == .appleHealth && gate.isAvailable
-                await HealthKitBridge.shared.setEnabled(running)
-                if running {
+                let chosen = stored == .appleHealth
+                // Collection starts only with the gate open. Once started it cannot be paused without losing its place,
+                // so while the only obstacle is being signed out, samples are still queued (and not uploaded).
+                await HealthKitBridge.shared.setEnabled(gate.acceptsSamples(chosen: chosen))
+                if gate.mayStartCollection(chosen: chosen) {
                     simulator.stop()
                     await healthKit.triggerDataSourceCollection()
                 }
@@ -145,7 +147,7 @@ struct HomeView: View {
                 .accessibilityIdentifier("source-\(option.rawValue)")
             }
             if stored == .appleHealth, case .unavailable(let reason) = gate {
-                Label("Apple Health is paused. \(reason.message)", systemImage: "pause.circle")
+                Label("Apple Health upload is paused. \(reason.message)", systemImage: "pause.circle")
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
@@ -157,8 +159,15 @@ struct HomeView: View {
             if source == .appleHealth {
                 LabeledContent("Received since app start", value: "\(sources.counters.accepted)")
                     .accessibilityIdentifier("healthKitReceived")
+                if sources.counters.unsaved > 0 {
+                    Label("\(sources.counters.unsaved) received but not yet saved on this device; retrying.", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+                LabeledContent("Received in total", value: "\(sources.counters.lifetimeAccepted)")
+                    .accessibilityIdentifier("healthKitReceivedTotal")
                 if let last = sources.counters.lastReceivedAt {
-                    LabeledContent("Last received", value: last.formatted(date: .omitted, time: .standard))
+                    LabeledContent("Last received", value: last.formatted(date: .abbreviated, time: .standard))
                 }
             }
         }
@@ -182,6 +191,7 @@ struct HomeView: View {
             guard gate.isAvailable else { return }
             do {
                 try await healthKit.askForAuthorization()
+                HealthKitWindow.commit(TemplateApplicationDelegate.windowStart)
                 stored = .appleHealth
             } catch {
                 sources.message = "Apple Health access could not be requested."

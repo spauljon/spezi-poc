@@ -9,6 +9,7 @@
 import Foundation
 import Network
 import Observation
+import UIKit
 
 
 /// What the sync screen shows, and the one place that decides *when* to drain: after new samples arrive (debounced), when
@@ -23,6 +24,9 @@ final class SyncModel {
     private(set) var duplicatesDropped = 0
     /// Apple Health samples that were deleted there and have not been applied to the server (see `SampleQueue`).
     private(set) var deletionsNotApplied = 0
+    /// The most recent time the app tried to upload, and how it went: kept across launches, so a background wake-up that
+    /// ended in a failure (or never got as far as an attempt) is still readable the next time the app is opened.
+    private(set) var lastAttempt: UploadAttempt?
     /// While paused nothing is uploaded; the queue keeps filling. Also how the simulator emulates "offline" on demand.
     var isPaused = false {
         didSet { if !isPaused { kick() } }
@@ -36,11 +40,15 @@ final class SyncModel {
     @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var timer: Task<Void, Never>?
     @ObservationIgnored private var monitor: NWPathMonitor?
+    @ObservationIgnored private var backgroundTask = UIBackgroundTaskIdentifier.invalid
+    @ObservationIgnored private let defaults: UserDefaults
     
     
     /// - Parameters:
     ///   - engine: `nil` when the app is not configured (the screen then says why).
-    init(queue: SampleQueue, engine: SyncEngine?, unavailableReason: String? = nil, debounce: TimeInterval = 1, monitorNetwork: Bool = true) {
+    init(queue: SampleQueue, engine: SyncEngine?, unavailableReason: String? = nil, debounce: TimeInterval = 1, monitorNetwork: Bool = true, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.lastAttempt = UploadAttempt.load(from: defaults)
         self.queue = queue
         self.engine = engine
         self.unavailableReason = unavailableReason
@@ -72,6 +80,27 @@ final class SyncModel {
             await refreshCounts()
             kick()
         }
+    }
+    
+    /// Stores the batch and returns only when it is committed to the queue (`false` if it could not be). Used where the
+    /// caller must not let a source's bookmark advance until the samples are safe (HealthKit).
+    func enqueueDurably(_ ingested: [IngestedSample], fallbackDevice: DeviceDescriptor) async -> Bool {
+        guard !ingested.isEmpty else { return true }
+        // iOS may suspend the app moments after HealthKit's completion handler: keep it running until the upload that
+        // follows has finished (ended in the loop below, or by expiry).
+        beginBackgroundWork()
+        do {
+            let result = try await queue.enqueue(ingested.map { QueuedItem(sample: $0.sample, device: $0.device ?? fallbackDevice) })
+            duplicatesDropped += result.known
+        } catch {
+            endBackgroundWork()
+            return false
+        }
+        Task {
+            await refreshCounts()
+            kick()
+        }
+        return true
     }
     
     /// "Sync now": retry everything immediately, including items waiting out a backoff.
@@ -113,11 +142,16 @@ final class SyncModel {
                     try? await Task.sleep(for: .seconds(self.debounce))
                 }
                 if self.isPaused || !self.isOnline {
+                    self.record(outcome: self.isPaused ? "not attempted: paused" : "not attempted: offline", sent: 0)
                     await self.refreshCounts()
+                    self.endBackgroundWork()
                     continue
                 }
+                let before = self.status.counts.sent
                 let result = await engine.drain()
                 await self.apply(result)
+                self.record(outcome: result.lastError ?? "ok", sent: max(result.counts.sent - before, 0))
+                self.endBackgroundWork()
             }
         }
         if monitorNetwork {
@@ -140,6 +174,29 @@ final class SyncModel {
         kick() // deliver whatever a previous run left behind
     }
     
+    private func beginBackgroundWork() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "poc-upload") { [weak self] in
+            // Out of time: the queue is durable, the next attempt resumes from it.
+            Task { @MainActor in
+                self?.record(outcome: "background time ran out", sent: 0)
+                self?.endBackgroundWork()
+            }
+        }
+    }
+    
+    private func endBackgroundWork() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+    
+    private func record(outcome: String, sent: Int) {
+        let attempt = UploadAttempt(at: .now, outcome: outcome, sent: sent, inBackground: UIApplication.shared.applicationState != .active)
+        lastAttempt = attempt
+        attempt.save(to: defaults)
+    }
+    
     private func apply(_ result: SyncStatus) async {
         status = result
         rejections = (try? await queue.rejections(limit: 5)) ?? []
@@ -150,6 +207,27 @@ final class SyncModel {
                 try? await Task.sleep(for: .seconds(wait))
                 if !Task.isCancelled { self?.kick() }
             }
+        }
+    }
+}
+
+
+/// One upload attempt: when, what came of it, and whether the app was in the background. No sample value is in here.
+struct UploadAttempt: Codable, Equatable, Sendable {
+    var at: Date
+    var outcome: String
+    var sent: Int
+    var inBackground: Bool
+    
+    private static let key = "sync.lastAttempt"
+    
+    static func load(from defaults: UserDefaults) -> UploadAttempt? {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(UploadAttempt.self, from: $0) }
+    }
+    
+    func save(to defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(self) {
+            defaults.set(data, forKey: Self.key)
         }
     }
 }

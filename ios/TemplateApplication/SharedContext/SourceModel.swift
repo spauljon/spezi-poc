@@ -27,6 +27,7 @@ final class SourceModel {
     }
     
     func refreshCounters() async {
+        await HealthKitBridge.shared.flush()
         counters = await HealthKitBridge.shared.counters
     }
 }

@@ -189,6 +189,8 @@ struct NoLoggingTests {
             "TemplateApplication/Ingest/HealthKitRecord.swift",
             "TemplateApplication/Ingest/HealthKitMapper.swift",
             "TemplateApplication/Ingest/HealthKitIngestSource.swift",
+            "TemplateApplication/Ingest/HealthKitResume.swift",
+            "TemplateApplication/Ingest/HealthKitWindow.swift",
             "TemplateApplication/TemplateApplicationStandard.swift",
             "TemplateApplication/SharedContext/HealthKitGate.swift",
             "TemplateApplication/SharedContext/SourceModel.swift",
@@ -197,5 +199,31 @@ struct NoLoggingTests {
             let text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
             #expect(Self.offences(in: text).isEmpty, "\(file): \(Self.offences(in: text))")
         }
+    }
+}
+
+
+@Suite("Last upload attempt")
+struct UploadAttemptTests {
+    @Test("an attempt is stored and read back across a new preferences handle; a fresh store has none")
+    func persists() {
+        let suite = "attempt-tests-\(UUID().uuidString)"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let attempt = UploadAttempt(at: Date(timeIntervalSince1970: 1_800_000_000), outcome: "Sign in to upload.", sent: 0, inBackground: true)
+        attempt.save(to: UserDefaults(suiteName: suite)!)
+        #expect(UploadAttempt.load(from: UserDefaults(suiteName: suite)!) == attempt)
+        
+        let other = "attempt-tests-\(UUID().uuidString)"
+        defer { UserDefaults(suiteName: other)?.removePersistentDomain(forName: other) }
+        #expect(UploadAttempt.load(from: UserDefaults(suiteName: other)!) == nil)
+    }
+    
+    @Test("a stored value that is not an attempt is ignored, not a crash")
+    func garbage() {
+        let suite = "attempt-tests-\(UUID().uuidString)"
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(Data("not json".utf8), forKey: "sync.lastAttempt")
+        #expect(UploadAttempt.load(from: defaults) == nil)
     }
 }

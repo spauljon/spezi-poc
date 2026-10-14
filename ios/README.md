@@ -252,6 +252,32 @@ records.
 3. Build to the phone, sign in as the capture user, choose **Apple Health** on Home, approve the four read types.
 4. Check by **counts and structure only**: `Patient?identifier=<system>|poc-real` exists and `Observation?subject=<id>&_summary=count` grows. Do not paste values or screenshots.
 
+## Background delivery and durable handoff (M18)
+
+| Piece | What it does |
+|---|---|
+| `continueInBackground: true` | The four collectors use an observer query plus HealthKit background delivery, so iOS can wake the app when new samples arrive. Entitlement: `com.apple.developer.healthkit.background-delivery` in `Config/TemplateApplication.entitlements`. |
+| `HealthKitResume` (Spezi module) | Background delivery needs the observer re-registered at **every** launch, and a background launch has no screen. If the user has chosen Apple Health (and HealthKit is available, the server is https, a separate patient is configured), it starts the collectors at launch. It never opens the gate on its own beyond that. |
+| Sign-in at launch | `AuthService.restore` runs in `TemplateApplication.init`, not only when Home appears, so a wake-up can upload. The tokens sit in the Keychain at `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (the library default without user presence), readable with the phone locked once it has been unlocked after boot. |
+| Acknowledged handoff | `HealthKitBridge.receive` returns only after `SyncModel.enqueueDurably` has committed the batch. SpeziHealthKit saves its anchor the moment the callback returns, so returning earlier could lose a sample for good. A batch that could not be stored is kept in memory, shown as "received but not yet saved", and retried (next arrival, or the Home refresh). |
+| Hold, do not drop | SpeziHealthKit has no pause that keeps its anchor (`resetSampleCollection` clears it). So while the only thing closing the gate is being signed out, samples are still queued locally and **nothing is uploaded** (the engine says "Sign in to upload."). Other closed-gate reasons still drop. |
+| Records before wiring | A background launch is quick: records that arrive before the bridge is wired are buffered and processed when it is. |
+| `HealthKitWindow` | The first window is a week, fixed once when Apple Health is first chosen and reused at every launch. Previously it was "seven days before this launch", which would skip data after a long gap. |
+| Background time for the upload | iOS can suspend the app moments after HealthKit's completion handler. `SyncModel.enqueueDurably` takes a `UIApplication` background-task assertion before the write and releases it when the drain that follows has finished (or on expiry), so a wake-up can upload what it queued instead of waiting for the next time the app is opened. Found as the likely cause of a 13:42 receive being stored at 13:50 on the device. |
+| Last upload attempt | Persisted: when, the outcome (`ok`, "Sign in to upload.", "not attempted: offline", "background time ran out", or the error), how many were sent, and whether the app was in the background. Shown in the Sync section. |
+| Counters | "Received since app start", "Received in total" (kept across launches) and "Last received" (date and time). Counts and a timestamp only, never a value. |
+
+### Assumptions made in M18 (review these)
+
+- **Holding real samples while signed out is a change from M17** (which dropped them). It is safe because the engine uploads nothing without a token and the queue is excluded from backup and protected at rest; it is necessary because dropping is permanent.
+- **Background frequency is iOS's decision**, per type; the app asks for `.immediate` and cannot force it. Wake-ups may be delayed or skipped (low power, force-quit apps are not woken until opened again).
+- **A force-quit app is not woken** by iOS until the user opens it again. That is the platform's behaviour, not a bug here.
+- **If the queue write fails twice in a row, a kill loses the unsaved batch.** The failure is visible on screen; there is no safer place to put it.
+- **Deletions are still recorded, not applied** (A11).
+- **Device identity includes the software version** (M6 key rule): a watchOS update creates a new `Device`, so each measurement keeps the software it was taken with. This is a provenance choice; say if you would rather one Watch be one `Device`.
+- **Open finding (not changed):** a sample with no `HKDevice` takes its device name from the source app's name, but the `Device.deviceName` type is `model-name`. `other` (or `user-friendly-name`) would be more honest. It changes the contract (1.4.0, generator, golden, iOS and any consumer) so it is yours to decide.
+- **Entitlement evidence** (task 1): the signed build's entitlements and the embedded profile both include background delivery on a free profile (checked with `codesign` and the profile's contents), expiring 2026-10-21. That shows signing works; whether iOS actually wakes the app is what the device measurement shows.
+
 ## Launch arguments (UI tests and development)
 
 `--showOnboarding` always shows the onboarding; `--skipOnboarding` skips it.

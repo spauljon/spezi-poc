@@ -264,18 +264,35 @@ private final class Collected: @unchecked Sendable {
     private var samples: [IngestedSample] = []
     private var deletions: [String] = []
     func add(_ s: IngestedSample) { lock.withLock { samples.append(s) } }
+    func add(all s: [IngestedSample]) { lock.withLock { samples += s } }
     func add(deletions d: [String]) { lock.withLock { deletions += d } }
     var all: [IngestedSample] { lock.withLock { samples } }
     var deleted: [String] { lock.withLock { deletions } }
 }
 
+/// A throwaway preferences store, so a test never touches the app's own.
+private func isolatedDefaults() -> UserDefaults {
+    let name = "healthkit-tests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    defaults.removePersistentDomain(forName: name)
+    return defaults
+}
+
+/// A scripted sequence of store outcomes (the last one repeats).
+private final class Outcomes: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Bool]
+    init(_ values: [Bool]) { self.values = values }
+    func next() -> Bool { lock.withLock { values.count > 1 ? values.removeFirst() : (values.first ?? true) } }
+}
+
 @Suite("HealthKit bridge")
 struct HealthKitBridgeTests {
     private func bridge(into collected: Collected) async throws -> HealthKitBridge {
-        let bridge = HealthKitBridge()
+        let bridge = HealthKitBridge(defaults: isolatedDefaults())
         await bridge.configure(
             mapper: HealthKitMapper(registry: try registry()),
-            emit: { collected.add($0) },
+            deliver: { collected.add(all: $0); return true },
             recordDeletions: { collected.add(deletions: $0) })
         return bridge
     }
@@ -313,6 +330,77 @@ struct HealthKitBridgeTests {
         await bridge.receive(try records(), now: t0, fallbackTimeZone: .gmt)
         #expect(collected.all.count == 2)
         #expect(await bridge.counters.droppedWhileOff == 2)
+    }
+    
+    // The library saves its anchor the moment `receive` returns: a sample must already be stored by then.
+    @Test("receive returns only after the batch is stored; a failed store is kept, counted, and retried exactly once")
+    func durableHandoff() async throws {
+        let collected = Collected()
+        let outcomes = Outcomes([false, true])
+        let bridge = HealthKitBridge(defaults: isolatedDefaults())
+        await bridge.configure(
+            mapper: HealthKitMapper(registry: try registry()),
+            deliver: { batch in
+                let ok = outcomes.next()
+                if ok { collected.add(all: batch) }
+                return ok
+            },
+            recordDeletions: { _ in })
+        await bridge.setEnabled(true)
+        
+        await bridge.receive(Array(try records().prefix(1)), now: t0, fallbackTimeZone: .gmt)
+        #expect(collected.all.isEmpty, "the store failed, so nothing is stored")
+        #expect(await bridge.counters.accepted == 0, "and it is not counted as received")
+        #expect(await bridge.counters.unsaved == 1, "but it is not forgotten either")
+        
+        // the next arrival carries the earlier one with it: one store of both, in order, nothing doubled
+        await bridge.receive(Array(try records().suffix(1)), now: t0, fallbackTimeZone: .gmt)
+        #expect(collected.all.count == 2)
+        #expect(await bridge.counters.accepted == 2)
+        #expect(await bridge.counters.unsaved == 0)
+        
+        // and with nothing pending, a flush stores nothing more (the control for the retry above)
+        await bridge.flush()
+        #expect(collected.all.count == 2)
+    }
+    
+    @Test("flush retries a pending batch without waiting for another sample")
+    func flushRetries() async throws {
+        let collected = Collected()
+        let outcomes = Outcomes([false, true])
+        let bridge = HealthKitBridge(defaults: isolatedDefaults())
+        await bridge.configure(
+            mapper: HealthKitMapper(registry: try registry()),
+            deliver: { batch in
+                let ok = outcomes.next()
+                if ok { collected.add(all: batch) }
+                return ok
+            },
+            recordDeletions: { _ in })
+        await bridge.setEnabled(true)
+        await bridge.receive(try records(), now: t0, fallbackTimeZone: .gmt)
+        #expect(collected.all.isEmpty)
+        await bridge.flush()
+        #expect(collected.all.count == 2)
+        #expect(await bridge.counters.unsaved == 0)
+    }
+    
+    // A background launch is quick: HealthKit may deliver before the app has wired the bridge.
+    @Test("records that arrive before the bridge is wired are processed when it is, not dropped")
+    func arrivesBeforeWiring() async throws {
+        let collected = Collected()
+        let bridge = HealthKitBridge(defaults: isolatedDefaults())
+        await bridge.setEnabled(true)
+        await bridge.receive(try records(), now: t0, fallbackTimeZone: .gmt)
+        #expect(collected.all.isEmpty)
+        #expect(await bridge.counters.droppedWhileOff == 0, "waiting is not dropping")
+        
+        await bridge.configure(
+            mapper: HealthKitMapper(registry: try registry()),
+            deliver: { collected.add(all: $0); return true },
+            recordDeletions: { _ in })
+        #expect(collected.all.count == 2)
+        #expect(await bridge.counters.accepted == 2)
     }
     
     @Test("a record the mapper does not read is counted as ignored")
@@ -398,5 +486,138 @@ struct HealthKitGateTests {
         #expect(DataSource.effective(.appleHealth, gate: .available) == .appleHealth)
         #expect(DataSource.effective(.appleHealth, gate: .unavailable(.signedOut)) == .synthetic)
         #expect(DataSource.effective(.synthetic, gate: .available) == .synthetic)
+    }
+}
+
+
+// MARK: - what is held, what is dropped, what may start
+
+@Suite("HealthKit collection policy")
+struct HealthKitPolicyTests {
+    private let reasons: [HealthKitGate.Reason] = [.healthDataUnavailable, .notConfigured, .noSeparatePatient, .signedOut]
+    
+    @Test("an open gate starts collection and accepts samples, but only when Apple Health is chosen")
+    func open() {
+        #expect(HealthKitGate.available.mayStartCollection(chosen: true))
+        #expect(HealthKitGate.available.acceptsSamples(chosen: true))
+        #expect(!HealthKitGate.available.mayStartCollection(chosen: false))
+        #expect(!HealthKitGate.available.acceptsSamples(chosen: false))
+    }
+    
+    @Test("signed out: collection that was running keeps queueing (nothing uploads without a token); it never starts")
+    func signedOutHolds() {
+        let gate = HealthKitGate.unavailable(.signedOut)
+        #expect(gate.acceptsSamples(chosen: true))
+        #expect(!gate.mayStartCollection(chosen: true))
+        #expect(!gate.acceptsSamples(chosen: false))
+    }
+    
+    @Test("every other closed gate drops, and never starts")
+    func otherReasonsDrop() {
+        for reason in reasons where reason != .signedOut {
+            let gate = HealthKitGate.unavailable(reason)
+            #expect(!gate.acceptsSamples(chosen: true), "\(reason)")
+            #expect(!gate.mayStartCollection(chosen: true), "\(reason)")
+        }
+    }
+}
+
+
+// MARK: - resuming at launch
+
+@Suite("HealthKit resume at launch")
+struct HealthKitResumeTests {
+    private func configuration(real: String? = "poc-real", https: Bool = true) -> Result<ServerConfiguration, ServerConfiguration.Failure> {
+        var info: [String: Any] = [
+            "POCFHIRBaseURL": https ? "https://macpro16.local:8443/fhir" : "http://macpro16.local:8443/fhir",
+            "POCIssuerURL": "https://macpro16.local:8444/realms/poc", "POCClientID": "ios-capture",
+            "POCRedirectScheme": "com.blueysoft.spezipoc", "POCPatientIdentifier": "poc-0001",
+        ]
+        if let real { info["POCHealthKitPatientIdentifier"] = real }
+        do {
+            return .success(try ServerConfiguration(info: info))
+        } catch {
+            return .failure(error)
+        }
+    }
+    
+    private let chosen = DataSource.appleHealth.rawValue
+    
+    @Test("resumes only for a user who chose Apple Health, with everything but sign-in in place")
+    func resumes() {
+        #expect(HealthKitResume.shouldResume(storedChoice: chosen, configuration: configuration(), healthDataAvailable: true))
+    }
+    
+    @Test("never for a user who did not choose it (the control for the refusals below)")
+    func notChosen() {
+        #expect(!HealthKitResume.shouldResume(storedChoice: nil, configuration: configuration(), healthDataAvailable: true))
+        #expect(!HealthKitResume.shouldResume(storedChoice: DataSource.synthetic.rawValue, configuration: configuration(), healthDataAvailable: true))
+    }
+    
+    @Test("never without HealthKit, without a separate patient, or on a configuration that is not https")
+    func refusals() {
+        #expect(!HealthKitResume.shouldResume(storedChoice: chosen, configuration: configuration(), healthDataAvailable: false))
+        #expect(!HealthKitResume.shouldResume(storedChoice: chosen, configuration: configuration(real: nil), healthDataAvailable: true))
+        #expect(!HealthKitResume.shouldResume(storedChoice: chosen, configuration: configuration(https: false), healthDataAvailable: true))
+    }
+}
+
+
+// MARK: - the collection window and the counters that outlive a launch
+
+@Suite("HealthKit window and counters")
+struct HealthKitWindowTests {
+    private let day: TimeInterval = 86_400
+    
+    @Test("the first start is a week back; once committed it does not move with the launch time")
+    func windowIsFixedOnce() {
+        let defaults = isolatedDefaults()
+        let first = Date(timeIntervalSince1970: 1_800_000_000)
+        let start = HealthKitWindow.start(now: first, defaults: defaults)
+        #expect(start == first.addingTimeInterval(-7 * day))
+        
+        // not yet committed (the user has not chosen Apple Health): a later launch computes its own
+        #expect(HealthKitWindow.start(now: first.addingTimeInterval(3 * day), defaults: defaults) == first.addingTimeInterval(-4 * day))
+        
+        HealthKitWindow.commit(start, defaults: defaults)
+        // ten days later nothing the anchor has not delivered is excluded: the start is still the original one
+        #expect(HealthKitWindow.start(now: first.addingTimeInterval(10 * day), defaults: defaults) == start)
+    }
+    
+    @Test("committing again does not move it")
+    func commitOnce() {
+        let defaults = isolatedDefaults()
+        let a = Date(timeIntervalSince1970: 1_800_000_000)
+        HealthKitWindow.commit(a, defaults: defaults)
+        HealthKitWindow.commit(a.addingTimeInterval(5 * day), defaults: defaults)
+        #expect(HealthKitWindow.start(now: a.addingTimeInterval(20 * day), defaults: defaults) == a)
+    }
+    
+    @Test("the lifetime count and last-received time survive a new bridge (a relaunch); the per-launch count does not")
+    func countersPersist() async throws {
+        // two handles on one suite, the way a relaunch gets a new object over the same stored values
+        let suite = "healthkit-tests-\(UUID().uuidString)"
+        let first = HealthKitBridge(defaults: UserDefaults(suiteName: suite)!)
+        await first.configure(
+            mapper: HealthKitMapper(registry: try registry()),
+            deliver: { _ in true },
+            recordDeletions: { _ in })
+        await first.setEnabled(true)
+        await first.receive(try [
+            #require(HealthKitRecord(sample: quantity(.heartRate, 70, unit: perMinute, device: watch))),
+        ], now: t0, fallbackTimeZone: .gmt)
+        #expect(await first.counters.accepted == 1)
+        #expect(await first.counters.lifetimeAccepted == 1)
+        
+        let relaunched = HealthKitBridge(defaults: UserDefaults(suiteName: suite)!)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        #expect(await relaunched.counters.accepted == 0)
+        #expect(await relaunched.counters.lifetimeAccepted == 1)
+        #expect(await relaunched.counters.lastReceivedAt == t0)
+        
+        // and a fresh store knows nothing (the control)
+        let other = HealthKitBridge(defaults: isolatedDefaults())
+        #expect(await other.counters.lifetimeAccepted == 0)
+        #expect(await other.counters.lastReceivedAt == nil)
     }
 }

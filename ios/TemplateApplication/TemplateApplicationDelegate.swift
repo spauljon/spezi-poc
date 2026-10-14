@@ -13,20 +13,21 @@ import SwiftUI
 
 
 class TemplateApplicationDelegate: SpeziAppDelegate {
-    /// How far back the first collection reaches: a week, so a first sync is small. Samples older than this are never
-    /// read. (The module remembers where it got to; this only bounds the start.)
-    static let backfill: TimeInterval = 7 * 24 * 60 * 60
+    /// The start every collector uses in this launch (see `HealthKitWindow`); fixed for good once Apple Health is chosen.
+    static let windowStart = HealthKitWindow.start()
     
     override var configuration: Configuration {
-        let since = Date.now.addingTimeInterval(-Self.backfill)
+        let since = Self.windowStart
         return Configuration(standard: TemplateApplicationStandard()) {
             // Read-only, the four types the contract lists, and nothing starts until the user chooses Apple Health on the
             // home screen (`start: .manual`): the module is configured at launch, collection is not.
+            // Registered at every launch (see `HealthKitResume`) so iOS can wake the app to deliver new samples.
+            HealthKitResume()
             HealthKit {
-                CollectSamples(.heartRate, start: .manual, timeRange: .startingAt(since))
-                CollectSamples(.restingHeartRate, start: .manual, timeRange: .startingAt(since))
-                CollectSamples(.heartRateVariabilitySDNN, start: .manual, timeRange: .startingAt(since))
-                CollectSamples(.sleepAnalysis, start: .manual, timeRange: .startingAt(since))
+                CollectSamples(.heartRate, start: .manual, continueInBackground: true, timeRange: .startingAt(since))
+                CollectSamples(.restingHeartRate, start: .manual, continueInBackground: true, timeRange: .startingAt(since))
+                CollectSamples(.heartRateVariabilitySDNN, start: .manual, continueInBackground: true, timeRange: .startingAt(since))
+                CollectSamples(.sleepAnalysis, start: .manual, continueInBackground: true, timeRange: .startingAt(since))
             }
         }
     }

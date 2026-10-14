@@ -21,6 +21,13 @@ struct SyncSection: View {
             LabeledContent("State", value: stateText)
                 .accessibilityIdentifier("syncState")
             LabeledContent("Last sync", value: sync.status.lastSuccess.map { $0.formatted(date: .omitted, time: .standard) } ?? "never")
+            if let attempt = sync.lastAttempt {
+                LabeledContent("Last upload attempt", value: attempt.at.formatted(date: .abbreviated, time: .standard))
+                    .accessibilityIdentifier("syncLastAttempt")
+                Text("\(attempt.outcome); \(attempt.sent) sent; app was \(attempt.inBackground ? "in the background" : "open")")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             LabeledContent("Queued", value: "\(sync.status.counts.pending)")
                 .accessibilityIdentifier("syncQueued")
             LabeledContent("Uploaded", value: "\(sync.status.counts.sent)")
