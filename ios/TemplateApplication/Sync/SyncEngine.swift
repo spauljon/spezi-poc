@@ -54,6 +54,16 @@ actor SyncEngine {
         var backoff = BackoffPolicy()
         var patientIdentifier: String
         var patientSystem: String
+        /// The patient for real Apple Health data. When `nil`, such samples are NOT uploaded: they are never filed under
+        /// `patientIdentifier` (the synthetic patient), so a rollup or a night can never blend real and synthetic data.
+        var healthKitPatientIdentifier: String?
+        
+        func identifier(for source: SampleSource) -> String? {
+            switch source {
+            case .synthetic: patientIdentifier
+            case .healthKit: healthKitPatientIdentifier
+            }
+        }
     }
     
     private let queue: SampleQueue
@@ -64,7 +74,7 @@ actor SyncEngine {
     private let now: @Sendable () -> Date
     private let random: @Sendable () -> Double
     
-    private var patientID: String?
+    private var patientIDs: [SampleSource: String] = [:]
     private(set) var status = SyncStatus()
     private var draining = false
     
@@ -114,14 +124,26 @@ actor SyncEngine {
                 guard !due.isEmpty else {
                     break
                 }
+                // One source per bundle: each source has its own patient, and a bundle carries one patient.
+                let source = due[0].item.sample.source
+                let batch = due.filter { $0.item.sample.source == source }
+                let batchAttempts = batch.map(\.attempts).max() ?? 0
+                guard let identifier = settings.identifier(for: source) else {
+                    // Never fall back to another source's patient. Park these items (so the others still go out).
+                    let message = "No separate patient is configured for Apple Health data, so it was not uploaded."
+                    try await queue.recordFailure(batch.map(\.item.key), error: message, retryAt: now().addingTimeInterval(3600))
+                    status.lastError = message
+                    status.counts = try await queue.counts()
+                    continue
+                }
                 let pid: String
-                switch await resolvePatient() {
+                switch await resolvePatient(source: source, identifier: identifier) {
                 case .success(let id): pid = id
                 case .failure(let stop):
-                    try await finish(stop, keys: due.map(\.item.key), attempts: due.map(\.attempts).max() ?? 0)
+                    try await finish(stop, keys: batch.map(\.item.key), attempts: batchAttempts)
                     return status
                 }
-                switch try await upload(due.map(\.item), attempts: due.map(\.attempts).max() ?? 0, patientID: pid) {
+                switch try await upload(batch.map(\.item), attempts: batchAttempts, patientID: pid) {
                 case .done: continue
                 case .stop(let stop): // nothing more to do right now
                     status.phase = stop
@@ -290,9 +312,9 @@ actor SyncEngine {
     
     // MARK: Patient
     
-    private func resolvePatient() async -> Result<String, Stop> {
-        if let patientID {
-            return .success(patientID)
+    private func resolvePatient(source: SampleSource, identifier: String) async -> Result<String, Stop> {
+        if let known = patientIDs[source] {
+            return .success(known)
         }
         let bearer: String
         do {
@@ -300,14 +322,14 @@ actor SyncEngine {
         } catch {
             return .failure(error == .signedOut ? .blocked(.signInRequired, "Sign in to upload.") : .transient("Could not get an access token."))
         }
-        let query = FHIRSearch.identifierQuery(system: settings.patientSystem, value: settings.patientIdentifier)
+        let query = FHIRSearch.identifierQuery(system: settings.patientSystem, value: identifier)
         do throws(TransportFailure) {
             let found = try await transport.send(FHIRHTTPRequest(method: "GET", path: "Patient?\(query)&_elements=id"), token: bearer)
             switch found.status {
             case 200:
                 let ids = Self.patientIDs(found.body)
                 if ids.count == 1 {
-                    patientID = ids[0]
+                    patientIDs[source] = ids[0]
                     return .success(ids[0])
                 }
                 if ids.count > 1 {
@@ -324,7 +346,7 @@ actor SyncEngine {
             // Not there yet: conditional create (a concurrent creator or a retry cannot make a second one).
             let patient: [String: Any] = [
                 "resourceType": "Patient",
-                "identifier": [["system": settings.patientSystem, "value": settings.patientIdentifier]]
+                "identifier": [["system": settings.patientSystem, "value": identifier]]
             ]
             let body = try? JSONSerialization.data(withJSONObject: patient, options: [.sortedKeys])
             let created = try await transport.send(FHIRHTTPRequest(
@@ -333,7 +355,7 @@ actor SyncEngine {
             switch created.status {
             case 200, 201:
                 if let id = Self.resourceID(created.body) {
-                    patientID = id
+                    patientIDs[source] = id
                     return .success(id)
                 }
                 return .failure(.transient("The server did not return the Patient id."))

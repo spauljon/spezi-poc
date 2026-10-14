@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2B38DC674CF124A64B39EFD0 /* SpeziHealthKit in Frameworks */ = {isa = PBXBuildFile; productRef = DC705742BD8F219CDFE5A7E1 /* SpeziHealthKit */; };
 		2F49B7762980407C00BCB272 /* Spezi in Frameworks */ = {isa = PBXBuildFile; productRef = 2F49B7752980407B00BCB272 /* Spezi */; };
 		2FE5DC8F29EDD980004B9AB4 /* SpeziViews in Frameworks */ = {isa = PBXBuildFile; productRef = 2FE5DC8E29EDD980004B9AB4 /* SpeziViews */; };
 		2FE5DC9929EDD9D9004B9AB4 /* XCTestExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 2FE5DC9829EDD9D9004B9AB4 /* XCTestExtensions */; };
@@ -79,6 +80,7 @@
 				9733CFC62A8066DE001B7ABC /* SpeziOnboarding in Frameworks */,
 				80CC1A2C2D678F5B008654B5 /* SpeziKeychainStorage in Frameworks */,
 				3C210634D7B649C290D7CAD1 /* AppAuth in Frameworks */,
+				2B38DC674CF124A64B39EFD0 /* SpeziHealthKit in Frameworks */,
 				2F49B7762980407C00BCB272 /* Spezi in Frameworks */,
 				2FE5DC8F29EDD980004B9AB4 /* SpeziViews in Frameworks */,
 			);
@@ -165,6 +167,7 @@
 				2FE5DC8029EDD91D004B9AB4 /* SpeziOnboarding */,
 				80CC1A2B2D678F5B008654B5 /* SpeziKeychainStorage */,
 				0FC5BE3B82624C9B8EBB5223 /* AppAuth */,
+				DC705742BD8F219CDFE5A7E1 /* SpeziHealthKit */,
 			);
 			productName = TemplateApplication;
 			productReference = 653A254D283387FE005D4D48 /* TemplateApplication.app */;
@@ -255,6 +258,7 @@
 				2FE5DC9729EDD9D9004B9AB4 /* XCRemoteSwiftPackageReference "XCTestExtensions" */,
 				97F466E62A76BBEE005DC9B4 /* XCRemoteSwiftPackageReference "SpeziOnboarding" */,
 				6C63E50E4F4D49AD8D2369D6 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
+				73D4573921E3263D4FFBFE72 /* XCRemoteSwiftPackageReference "SpeziHealthKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 653A254E283387FE005D4D48 /* Products */;
@@ -466,10 +470,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "Spezi Icon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/TemplateApplication.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 5LYN5Q3HYY;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = "TemplateApplication/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -495,11 +500,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "Spezi Icon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/TemplateApplication.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 5LYN5Q3HYY;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = "TemplateApplication/Supporting Files/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -667,6 +673,14 @@
 				version = 3.0.0;
 			};
 		};
+		73D4573921E3263D4FFBFE72 /* XCRemoteSwiftPackageReference "SpeziHealthKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/StanfordSpezi/SpeziHealthKit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.4.2;
+			};
+		};
 		97F466E62A76BBEE005DC9B4 /* XCRemoteSwiftPackageReference "SpeziOnboarding" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/StanfordSpezi/SpeziOnboarding.git";
@@ -707,6 +721,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 2FE5DC8829EDD972004B9AB4 /* XCRemoteSwiftPackageReference "SpeziStorage" */;
 			productName = SpeziKeychainStorage;
+		};
+		DC705742BD8F219CDFE5A7E1 /* SpeziHealthKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 73D4573921E3263D4FFBFE72 /* XCRemoteSwiftPackageReference "SpeziHealthKit" */;
+			productName = SpeziHealthKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

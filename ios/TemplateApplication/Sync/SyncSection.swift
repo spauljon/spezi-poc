@@ -12,12 +12,12 @@ import SwiftUI
 /// Source, last sync, queue and errors: what a patient needs to know that capture is working, nothing clinical.
 struct SyncSection: View {
     @Environment(SyncModel.self) private var sync
-    @AppStorage(StorageKeys.dataSource) private var stored = DataSource.synthetic
+    @Environment(SourceModel.self) private var source
     
     var body: some View {
         @Bindable var sync = sync
         Section("Sync") {
-            LabeledContent("Source", value: DataSource.effective(stored).title)
+            LabeledContent("Source", value: source.effective.title)
             LabeledContent("State", value: stateText)
                 .accessibilityIdentifier("syncState")
             LabeledContent("Last sync", value: sync.status.lastSuccess.map { $0.formatted(date: .omitted, time: .standard) } ?? "never")
@@ -30,6 +30,11 @@ struct SyncSection: View {
             }
             if sync.status.counts.skipped > 0 {
                 LabeledContent("Not uploaded (no FHIR mapping)", value: "\(sync.status.counts.skipped)")
+            }
+            if sync.deletionsNotApplied > 0 {
+                // Deleted in Apple Health after upload: the server's copy is unchanged, and this says so.
+                LabeledContent("Deleted in Apple Health, not applied", value: "\(sync.deletionsNotApplied)")
+                    .accessibilityIdentifier("syncDeletions")
             }
             if sync.duplicatesDropped > 0 {
                 LabeledContent("Duplicates dropped", value: "\(sync.duplicatesDropped)")

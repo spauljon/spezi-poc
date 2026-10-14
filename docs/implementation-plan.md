@@ -510,6 +510,8 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Verify:** on device, a small sync appears in HAPI and the clinician web views; repo and logs contain no real values.
 
+**Status (2026-10-13):** built and verified in code and on the simulator; **awaiting your review and your on-device run** (not committed). Decisions taken with you: the defaults (SpeziHealthKit 1.4.2 pinned; deletions recorded, not applied; a separate `poc-real` Patient with a data-set switch in the web app; a `user-entered` flag, contract **1.3.0**; first backfill 7 days; signing steps are yours). Tests: 145 iOS unit and 3 UI tests, 253 web, 84 analytics, contract checks; all pass, and `make guard-all` is clean. New tests cover the mapper (units, sleep stages, user-entered, unknown values refused), the bridge (drops and counts while HealthKit is not the selected source), the gate (each refusal reason), per-source patients (two patients, one patient per bundle, and **no fallback**: with no real-data patient the real items stay on the device and the synthetic ones still upload), deletions (idempotent, queue untouched), queue file protection, and a scan proving no real-data file can log or print (with a positive control). **Not verified here:** anything with real data, the HealthKit authorization sheet, the free-provisioning limits (7-day expiry; background delivery for M18). Assumptions in [ios/README.md](../ios/README.md#healthkit-source-m17).
+
 ---
 
 ### Milestone 18: Background delivery and device mapping [ios/]

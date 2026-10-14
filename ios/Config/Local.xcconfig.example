@@ -1,2 +1,6 @@
 // Copy to Local.xcconfig (git-ignored) to override the defaults for your setup, for example another host name.
 // POC_HOST = macpro16.local
+
+// To install on your own iPhone, set YOUR Apple Developer team id (a free personal team works for HealthKit):
+// DEVELOPMENT_TEAM = ABCDE12345
+// Copy this file to Local.xcconfig (git-ignored). Never commit a team id you do not want public.

@@ -78,6 +78,12 @@ final class SignInTests: XCTestCase {
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'eyJ'")).firstMatch.exists, "a token is on screen")
         
         // The server enforces what M4 built: public metadata, a refused anonymous request, a served authenticated one.
+        // The page's length changes as sections are added: scroll until the button is reachable.
+        var searches = 0
+        while !(app.buttons["Check server"].exists && app.buttons["Check server"].isHittable) && searches < 8 {
+            app.swipeUp()
+            searches += 1
+        }
         app.buttons["Check server"].tap()
         // The results are below the fold, and a List does not render rows that are off screen.
         app.swipeUp()

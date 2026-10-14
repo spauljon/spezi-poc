@@ -79,12 +79,34 @@ actor SampleQueue {
             last_error TEXT
         );
         CREATE INDEX IF NOT EXISTS queue_state ON queue (state, next_attempt, seq);
+        CREATE TABLE IF NOT EXISTS pending_deletions (
+            uuid TEXT PRIMARY KEY,
+            seen REAL NOT NULL
+        );
         """
         guard sqlite3_exec(handle, "PRAGMA journal_mode=WAL;", nil, nil, nil) == SQLITE_OK || path == nil,
               sqlite3_exec(handle, schema, nil, nil, nil) == SQLITE_OK else {
             let message = String(cString: sqlite3_errmsg(handle))
             sqlite3_close(handle)
             throw .open(message)
+        }
+        if let path {
+            Self.protectFiles(at: path)
+        }
+    }
+    
+    /// A queue file may hold real health data. It stays encrypted at rest (class "complete until first user
+    /// authentication": readable after the first unlock, which background delivery in M18 needs, where "complete" would
+    /// fail with the phone locked) and out of iCloud and device backups. Set on the database and its WAL/SHM files.
+    static func protectFiles(at path: String) {
+        for suffix in ["", "-wal", "-shm"] {
+            let file = path + suffix
+            guard FileManager.default.fileExists(atPath: file) else { continue }
+            try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: file)
+            var url = URL(fileURLWithPath: file)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? url.setResourceValues(values)
         }
     }
     
@@ -114,6 +136,37 @@ actor SampleQueue {
             throw error
         }
         return (added, items.count - added)
+    }
+    
+    /// Remembers that HealthKit reported these samples deleted. The server is NOT changed: marking an Observation
+    /// `entered-in-error` is an update, which the capture role may not do (M4), so the deletions are only counted and
+    /// shown until that is decided (M19). A repeated report of the same sample is one record.
+    /// - Returns: how many were new.
+    func recordDeletions(_ uuids: [String], now: Date = .now) throws(QueueError) -> Int {
+        var added = 0
+        try exec("BEGIN IMMEDIATE")
+        do throws(QueueError) {
+            for uuid in uuids {
+                let statement = try prepare("INSERT OR IGNORE INTO pending_deletions (uuid, seen) VALUES (?1, ?2)")
+                defer { sqlite3_finalize(statement) }
+                bind(statement, 1, text: uuid)
+                sqlite3_bind_double(statement, 2, now.timeIntervalSince1970)
+                guard sqlite3_step(statement) == SQLITE_DONE else { throw QueueError.sql(message()) }
+                added += Int(sqlite3_changes(db))
+            }
+            try exec("COMMIT")
+        } catch {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            throw error
+        }
+        return added
+    }
+    
+    func deletionCount() throws(QueueError) -> Int {
+        let statement = try prepare("SELECT COUNT(*) FROM pending_deletions")
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw QueueError.sql(message()) }
+        return Int(sqlite3_column_int(statement, 0))
     }
     
     /// Pending items that are due, oldest first.

@@ -41,7 +41,7 @@ struct Orientation: View {
                             .accessibilityHidden(true)
                     },
                     title: "Synthetic or real",
-                    description: "Synthetic is the only option for now. Reading Apple Health comes later and will always be a separate, explicit choice."
+                    description: "Synthetic is the default. Reading your own Apple Health data is a separate, explicit choice you make on the Home screen, and it is filed under its own patient."
                 )
             ],
             actionText: "Continue",

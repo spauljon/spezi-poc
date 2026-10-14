@@ -26,11 +26,12 @@ enum DataSource: String, CaseIterable, Identifiable, Sendable {
     var detail: String {
         switch self {
         case .synthetic: "Generated on this device. No real health data is read or sent."
-        case .appleHealth: "Your own measurements. Not available yet: added in a later milestone."
+        case .appleHealth: "Your own measurements, read from Apple Health and sent to your own server. Choose it on the home screen after signing in."
         }
     }
     
-    /// Only the synthetic source exists until the HealthKit milestone.
+    /// Whether the source can be chosen WITHOUT any context (onboarding, before sign-in). Apple Health needs a verified
+    /// server and a signed-in user, so it is chosen on the home screen, where `HealthKitGate` decides.
     var isAvailable: Bool {
         self == .synthetic
     }
@@ -43,5 +44,13 @@ enum DataSource: String, CaseIterable, Identifiable, Sendable {
     /// A stored choice that is not available (for example left over from a newer build) falls back to synthetic.
     static func effective(_ stored: DataSource) -> DataSource {
         stored.isAvailable ? stored : .synthetic
+    }
+    
+    /// With the gate: Apple Health is in effect only while it is allowed (TLS, a separate patient, signed in).
+    static func effective(_ stored: DataSource, gate: HealthKitGate) -> DataSource {
+        switch (stored, gate) {
+        case (.appleHealth, .available): .appleHealth
+        default: .synthetic
+        }
     }
 }

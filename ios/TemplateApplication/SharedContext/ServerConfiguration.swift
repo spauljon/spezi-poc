@@ -39,6 +39,7 @@ struct ServerConfiguration: Equatable, Sendable {
         static let clientID = "POCClientID"
         static let redirectScheme = "POCRedirectScheme"
         static let patientIdentifier = "POCPatientIdentifier"
+        static let healthKitPatientIdentifier = "POCHealthKitPatientIdentifier"
     }
     
     /// The FHIR base, for example `https://macpro16.local:8443/fhir`.
@@ -50,6 +51,10 @@ struct ServerConfiguration: Equatable, Sendable {
     let redirectScheme: String
     /// The business identifier value of the capture patient (system: `systems.identifier.patient` in the contract).
     let patientIdentifier: String
+    /// The business identifier of the patient that holds REAL Apple Health data, or `nil` when none is configured (then
+    /// Apple Health is unavailable: real data is never filed under the synthetic patient). It always differs from
+    /// `patientIdentifier`.
+    let healthKitPatientIdentifier: String?
     
     /// The redirect URI registered for this client in the realm (`<scheme>:/oauth2redirect`).
     var redirectURI: URL {
@@ -66,6 +71,16 @@ struct ServerConfiguration: Equatable, Sendable {
         patientIdentifier = try Self.string(info, Key.patientIdentifier)
         guard redirectScheme.range(of: #"^[A-Za-z][A-Za-z0-9+.-]*$"#, options: .regularExpression) != nil else {
             throw .invalid(Key.redirectScheme)
+        }
+        // Optional: absent or unfilled means "no real-data patient", not a broken configuration.
+        let real = (info[Key.healthKitPatientIdentifier] as? String)?.trimmingCharacters(in: .whitespaces)
+        if let real, !real.isEmpty, !real.contains("$(") {
+            guard real.caseInsensitiveCompare(patientIdentifier) != .orderedSame else {
+                throw .invalid(Key.healthKitPatientIdentifier)
+            }
+            healthKitPatientIdentifier = real
+        } else {
+            healthKitPatientIdentifier = nil
         }
     }
     

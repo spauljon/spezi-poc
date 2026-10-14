@@ -78,7 +78,8 @@ private func sample(from object: [String: Any]) throws -> MetricSample {
         issued: try instant(try field("issued", in: object)),
         timeZone: try #require(TimeZone(identifier: zoneName), "unknown time zone \(zoneName)"),
         source: try #require(SampleSource(rawValue: sourceName), "unknown source \(sourceName)"),
-        id: try field("id", in: object)
+        id: try field("id", in: object),
+        userEntered: (object["userEntered"] as? Bool) ?? false
     )
 }
 
@@ -146,6 +147,26 @@ struct MetricContractTests {
             json["metrics"] = (json["metrics"] as? [[String: Any]] ?? []).filter { $0["id"] as? String != "hrvSdnn" }
         }
         #expect(throws: MetricRegistry.LoadError.self) { try MetricRegistry(data: data) }
+    }
+    
+    @Test("a contract without the user-entered flag is refused (it could not tag a hand entry)")
+    func missingUserEnteredFlag() throws {
+        let data = try mutated { json in
+            var flags = json["dataQualityFlags"] as? [String: String] ?? [:]
+            flags.removeValue(forKey: "userEntered")
+            json["dataQualityFlags"] = flags
+        }
+        #expect(throws: MetricRegistry.LoadError.self) { try MetricRegistry(data: data) }
+    }
+    
+    @Test("every metric that HealthKit can supply names the HealthKit identifier it is read from")
+    func healthKitIdentifiers() throws {
+        let registry = try registry()
+        for id in MetricID.allCases {
+            let name = try #require(registry.metric(id)?.healthKit, "\(id.rawValue) has no healthKit identifier")
+            #expect(name.hasPrefix("HKQuantityTypeIdentifier"), "\(id.rawValue): \(name)")
+        }
+        #expect(registry.sleep?.healthKit == "HKCategoryTypeIdentifierSleepAnalysis")
     }
     
     @Test("a sleep stage that is neither mapped nor listed as unmapped is refused")
@@ -397,5 +418,53 @@ struct DeviceMappingTests {
         if let key = golden["expectedKey"] as? String {
             #expect(try mapper.key(for: input) == key)
         }
+    }
+}
+
+
+// MARK: - user-entered provenance
+
+@Suite("User-entered samples")
+struct UserEnteredTests {
+    private let moment = Date(timeIntervalSince1970: 1_768_494_600)
+    
+    private func map(_ userEntered: Bool) throws -> [String: Any] {
+        let mapper = ObservationMapper(registry: try registry())
+        let sample = MetricSample(measurement: .quantity(.heartRate, 80), start: moment, end: moment, issued: moment, timeZone: .gmt,
+                                  source: .healthKit, id: "A1B2C3D4-0000-4000-8000-000000000001", userEntered: userEntered)
+        guard case .observation(let observation) = try mapper.map(sample, patientID: "p") else {
+            Issue.record("expected an observation")
+            return [:]
+        }
+        return try object(from: observation)
+    }
+    
+    @Test("a hand entry carries exactly one tag in the contract's flag system, and the value is untouched")
+    func tagged() throws {
+        let registry = try registry()
+        let observation = try map(true)
+        let meta = try #require(observation["meta"] as? [String: Any])
+        let tags = try #require(meta["tag"] as? [[String: Any]])
+        #expect(tags.count == 1)
+        #expect(tags.first?["system"] as? String == registry.systems.dataQualityFlag)
+        #expect(tags.first?["code"] as? String == registry.dataQualityFlags["userEntered"])
+        #expect((observation["valueQuantity"] as? [String: Any])?["value"] as? Int == 80)
+    }
+    
+    @Test("a sample typed by nobody carries no tag (the control)")
+    func notTagged() throws {
+        let meta = try #require(try map(false)["meta"] as? [String: Any])
+        #expect(meta["tag"] == nil)
+    }
+    
+    @Test("a queue row written before the field existed decodes as not user-entered")
+    func oldRowDecodes() throws {
+        let sample = MetricSample(measurement: .quantity(.heartRate, 70), start: moment, end: moment, issued: moment, timeZone: .gmt, source: .synthetic, id: "x")
+        var json = try #require(JSONSerialization.jsonObject(with: try JSONEncoder().encode(sample)) as? [String: Any])
+        #expect(json["userEntered"] as? Bool == false)
+        json.removeValue(forKey: "userEntered")
+        let decoded = try JSONDecoder().decode(MetricSample.self, from: try JSONSerialization.data(withJSONObject: json))
+        #expect(decoded == sample)
+        #expect(decoded.userEntered == false)
     }
 }

@@ -44,6 +44,8 @@ struct MetricRegistry: Sendable {
         let effective: String
         let stages: [String: Coding]?
         let unmapped: [String]?
+        /// The HealthKit identifier this metric is read from (for example `HKQuantityTypeIdentifierHeartRate`).
+        let healthKit: String?
     }
     
     struct Systems: Decodable, Equatable, Sendable {
@@ -64,6 +66,8 @@ struct MetricRegistry: Sendable {
         let observationCategory: String
         let identifier: Identifier
         let metaSource: MetaSource
+        /// The project's data-quality flag system (an `Observation.meta.tag` coding system), contract 1.2.0 and later.
+        let dataQualityFlag: String
     }
     
     struct DeviceKey: Decodable, Equatable, Sendable {
@@ -77,6 +81,7 @@ struct MetricRegistry: Sendable {
         let systems: Systems
         let categories: [String: Coding]
         let deviceKey: DeviceKey
+        let dataQualityFlags: [String: String]
         let metrics: [Metric]
     }
     
@@ -85,6 +90,8 @@ struct MetricRegistry: Sendable {
     let systems: Systems
     let categories: [String: Coding]
     let deviceKey: DeviceKey
+    /// The flag codes by name (`artifactSuspected`, `userEntered`, ...).
+    let dataQualityFlags: [String: String]
     private let metricsByID: [String: Metric]
     
     
@@ -122,6 +129,10 @@ struct MetricRegistry: Sendable {
         systems = file.systems
         categories = file.categories
         deviceKey = file.deviceKey
+        guard file.dataQualityFlags["userEntered"] != nil else {
+            throw .inconsistent("contract has no userEntered data-quality flag (contract 1.3.0 or later is required)")
+        }
+        dataQualityFlags = file.dataQualityFlags
         metricsByID = byID
     }
     

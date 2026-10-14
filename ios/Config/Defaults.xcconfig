@@ -12,6 +12,9 @@ POC_CLIENT_ID = ios-capture
 POC_REDIRECT_SCHEME = com.blueysoft.spezipoc
 // The capture patient's business identifier (value only; the system comes from contract/metrics.json). Synthetic.
 POC_PATIENT_IDENTIFIER = poc-0001
+// The patient that holds REAL Apple Health data. It must differ from the synthetic one above: real and synthetic data
+// never share a patient record (so no rollup or night can blend them).
+POC_HEALTHKIT_PATIENT_IDENTIFIER = poc-real
 
 // Optional per-developer overrides (same keys as above); the file is not committed.
 #include? "Local.xcconfig"

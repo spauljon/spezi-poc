@@ -39,6 +39,9 @@ struct InjectedAnomalies: OptionSet, Sendable, Hashable {
 struct IngestedSample: Equatable, Sendable {
     var sample: MetricSample
     var injected: InjectedAnomalies = []
+    /// The device this particular sample came from, when the source has more than one (HealthKit: an Apple Watch, the
+    /// phone, another app). `nil` means "the source's own `device`", which is what the synthetic source uses.
+    var device: DeviceDescriptor?
 }
 
 

@@ -61,4 +61,23 @@ struct MetricSample: Equatable, Codable, Sendable {
     var source: SampleSource
     /// A stable id for deduplication: the HealthKit sample UUID, or the synthetic sample id.
     var id: String
+    /// The source says this value was typed in by hand (HealthKit: `HKMetadataKeyWasUserEntered`). Provenance, not a
+    /// defect: it is stored as given and carries a `user-entered` tag (contract rule `userEntered`).
+    var userEntered = false
+}
+
+
+extension MetricSample {
+    /// Rows already in the upload queue were written before `userEntered` existed: a missing key reads as `false`.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        measurement = try c.decode(Measurement.self, forKey: .measurement)
+        start = try c.decode(Date.self, forKey: .start)
+        end = try c.decode(Date.self, forKey: .end)
+        issued = try c.decode(Date.self, forKey: .issued)
+        timeZone = try c.decode(TimeZone.self, forKey: .timeZone)
+        source = try c.decode(SampleSource.self, forKey: .source)
+        id = try c.decode(String.self, forKey: .id)
+        userEntered = try c.decodeIfPresent(Bool.self, forKey: .userEntered) ?? false
+    }
 }

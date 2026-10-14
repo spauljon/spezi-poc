@@ -32,8 +32,15 @@ struct FHIRReference: Codable, Equatable, Sendable {
     var reference: String
 }
 
+/// A `meta.tag` coding: system and code only (the project's flag codes carry no display).
+struct FHIRTag: Codable, Equatable, Sendable {
+    var system: String
+    var code: String
+}
+
 struct FHIRMeta: Codable, Equatable, Sendable {
     var source: String
+    var tag: [FHIRTag]?
 }
 
 struct FHIRPeriod: Codable, Equatable, Sendable {

@@ -6,13 +6,25 @@
 // SPDX-License-Identifier: MIT
 //
 
+import HealthKit
 import Spezi
+import SpeziHealthKit
 import SwiftUI
 
 
-/// The app's Spezi `Standard`: the single place data sources and the server client will meet.
+/// The app's Spezi `Standard`: where the HealthKit module hands over what it collected.
 ///
-/// Empty for now. Constraints such as `HealthKitConstraint` are adopted when the matching module is added.
-actor TemplateApplicationStandard: Standard, EnvironmentAccessible {
+/// It does nothing but reduce each sample to plain values and give them to `HealthKitBridge`, which decides whether
+/// they may go on. No value is logged anywhere in this path.
+actor TemplateApplicationStandard: Standard, EnvironmentAccessible, HealthKitConstraint {
     init() {}
+    
+    func handleNewSamples<Sample>(_ addedSamples: some Collection<Sample> & Sendable, ofType sampleType: SampleType<Sample>) async {
+        let records = addedSamples.compactMap { HealthKitRecord(sample: $0) }
+        await HealthKitBridge.shared.receive(records)
+    }
+    
+    func handleDeletedObjects<Sample>(_ deletedObjects: some Collection<HKDeletedObject> & Sendable, ofType sampleType: SampleType<Sample>) async {
+        await HealthKitBridge.shared.receiveDeleted(deletedObjects.map { $0.uuid.uuidString })
+    }
 }

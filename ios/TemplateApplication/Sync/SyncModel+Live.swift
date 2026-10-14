@@ -38,7 +38,10 @@ extension SyncModel {
                 try await auth.accessToken(configuration: configuration)
             },
             registry: registry,
-            settings: .init(patientIdentifier: configuration.patientIdentifier, patientSystem: registry.systems.identifier.patient))
+            settings: .init(
+                patientIdentifier: configuration.patientIdentifier,
+                patientSystem: registry.systems.identifier.patient,
+                healthKitPatientIdentifier: configuration.healthKitPatientIdentifier))
         return SyncModel(queue: queue, engine: engine)
     }
     

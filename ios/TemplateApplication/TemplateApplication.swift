@@ -17,6 +17,7 @@ struct TemplateApplication: App {
     @State private var auth: AuthService
     @State private var simulator: SimulatorModel
     @State private var sync: SyncModel
+    @State private var source = SourceModel()
     
     
     init() {
@@ -27,6 +28,24 @@ struct TemplateApplication: App {
         _auth = State(initialValue: auth)
         _simulator = State(initialValue: simulator)
         _sync = State(initialValue: sync)
+        Self.connectAppleHealth(to: sync)
+    }
+    
+    /// The HealthKit source sits behind the same ingest interface as the synthetic one: its samples go through the same
+    /// queue. Nothing flows until the user chooses Apple Health and the gate allows it (`HealthKitBridge` drops, and
+    /// counts, anything that arrives before).
+    private static func connectAppleHealth(to sync: SyncModel) {
+        let healthKit = HealthKitIngestSource()
+        let mapper = (try? MetricRegistry.load()).map { HealthKitMapper(registry: $0) }
+        Task {
+            await HealthKitBridge.shared.configure(
+                mapper: mapper,
+                emit: { healthKit.emit($0) },
+                recordDeletions: { uuids in await sync.recordDeletions(uuids) })
+            for await ingested in healthKit.stream() {
+                sync.enqueue(ingested, device: ingested.device ?? healthKit.device)
+            }
+        }
     }
     
     var body: some Scene {
@@ -44,6 +63,7 @@ struct TemplateApplication: App {
             .environment(auth)
             .environment(simulator)
             .environment(sync)
+            .environment(source)
             .testingSetup()
             .spezi(appDelegate)
         }

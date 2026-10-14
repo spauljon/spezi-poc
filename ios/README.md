@@ -219,6 +219,39 @@ fails if no tests ran or xcodebuild stalls; reports skipped tests). It SKIPs lou
   (`TEST_RUNNER_POC_CAPTURE_PASSWORD`); the test types it into Keycloak's login page, and it is never printed. Without
   it the test is SKIPPED and the script says so.
 
+## HealthKit source (M17)
+
+The developer's own Apple Health data, behind the same `IngestSource` interface as the synthetic generator. **Real data
+never appears in tests, fixtures, logs or this repository**: tests use synthetic in-memory `HKSample`s and hand-built
+records.
+
+| Piece | What it does |
+|---|---|
+| SpeziHealthKit 1.4.2 (exact) | `HealthKit { CollectSamples(...) }` in the delegate, `HealthKitConstraint` on the Standard. Collection is `start: .manual` (nothing is read until you choose Apple Health). |
+| `HealthKitBridge` | An actor between the Standard (which receives samples whenever HealthKit delivers) and the ingest stream. While HealthKit is not the selected source it drops and counts what arrives, so real data cannot be queued by accident. |
+| `HealthKitRecord` / `HealthKitMapper` | A sendable plain copy of an `HKSample`, then the app's `MetricSample` and device descriptor. Heart rate and resting rate are `count/min`, SDNN is `ms` (explicit units, never the user's locale). Sleep raw values map to the contract's stages; an unknown value is refused, not guessed. |
+| `HealthKitGate` | HealthKit is selectable only when HealthKit data is available on the device, a separate real-data patient is configured, the endpoint is TLS and the app is signed in. The reason is shown in words when it is not. |
+| Per-source patient | The queue holds both sources; `SyncEngine` files each batch under its own patient (`poc-0001` synthetic, `poc-real` real). With no real-data patient configured, real items **stay on the device** and the synthetic ones still go (it never falls back to the synthetic patient). |
+| Queue protection | The queue database and its `-wal`/`-shm` files are excluded from backup and use `completeUntilFirstUserAuthentication` (so background delivery in M18 can write while the phone is locked). |
+
+### Assumptions made in M17 (review these)
+
+- **First backfill is the last 7 days** (`.startingAt`), then only new samples. Change `since` in the delegate for more.
+- **Deletions are recorded, not applied.** HealthKit deletions are stored locally and shown as a count ("Deleted in Apple Health, not applied"); the server is unchanged. The `capture-writer` role is create/read only (A11), so a retraction would need `update`, which is deliberately forbidden.
+- **User-entered samples are uploaded and tagged** `user-entered` (contract 1.3.0, `Observation.meta.tag`), never dropped; clinicians see the provenance.
+- **Device mapping**: from `HKDevice` where present, else the source app's name, else "Apple Health". Richer mapping is M18.
+- **Sleep**: HealthKit's category values map to the contract stages; `inBed` and unspecified-asleep are mapped as the contract says (see `metrics.json`), nothing is derived.
+- **Units**: UCUM `/min` and `ms`, set in code from HealthKit's unit objects, not parsed from strings.
+- **The simulator** has no real Apple Health data and may report no file-protection class; the real check is on the device.
+- **Free provisioning**: the device build expires after 7 days and the free tier may not allow background delivery (M18 will verify). Team id goes in git-ignored `Config/Local.xcconfig` (`DEVELOPMENT_TEAM`).
+
+### Running it on your phone (your steps)
+
+1. Put your team id in `ios/Config/Local.xcconfig` (see `Local.xcconfig.example`); add your Apple ID in Xcode; enable Developer Mode on the phone; trust the developer profile.
+2. The phone must reach `https://<host>:8443` and trust the POC CA (see "The simulator must trust the POC CA", same for a device profile).
+3. Build to the phone, sign in as the capture user, choose **Apple Health** on Home, approve the four read types.
+4. Check by **counts and structure only**: `Patient?identifier=<system>|poc-real` exists and `Observation?subject=<id>&_summary=count` grows. Do not paste values or screenshots.
+
 ## Launch arguments (UI tests and development)
 
 `--showOnboarding` always shows the onboarding; `--skipOnboarding` skips it.

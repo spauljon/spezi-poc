@@ -140,7 +140,7 @@ struct ObservationMapper: Sendable {
         let issued = try format(sample.issued, in: sample.timeZone, alwaysMillis: true)
         
         return FHIRObservation(
-            meta: FHIRMeta(source: metaSource),
+            meta: FHIRMeta(source: metaSource, tag: userEnteredTag(for: sample)),
             identifier: [FHIRIdentifier(system: identifierSystem, value: identifierValue)],
             status: "final",
             category: [FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.observationCategory, code: category.code, display: category.display)])],
@@ -152,6 +152,14 @@ struct ObservationMapper: Sendable {
             valueQuantity: value,
             device: deviceReference.map { FHIRReference(reference: $0) }
         )
+    }
+    
+    /// Provenance only (contract rule `userEntered`): a hand entry is stored as given and says so.
+    private func userEnteredTag(for sample: MetricSample) -> [FHIRTag]? {
+        guard sample.userEntered, let code = registry.dataQualityFlags["userEntered"] else {
+            return nil
+        }
+        return [FHIRTag(system: registry.systems.dataQualityFlag, code: code)]
     }
     
     private func format(_ date: Date, in timeZone: TimeZone, alwaysMillis: Bool = false) throws(MappingError) -> String {

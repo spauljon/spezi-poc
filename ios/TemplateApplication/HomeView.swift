@@ -6,12 +6,17 @@
 // SPDX-License-Identifier: MIT
 //
 
+import HealthKit
+import SpeziHealthKit
 import SwiftUI
 
 
 /// The app's home: what is configured and who is signed in, with nothing hidden. Capture itself arrives later.
 struct HomeView: View {
     @Environment(AuthService.self) private var auth
+    @Environment(SourceModel.self) private var sources
+    @Environment(SimulatorModel.self) private var simulator
+    @Environment(HealthKit.self) private var healthKit
     @AppStorage(StorageKeys.dataSource) private var stored = DataSource.synthetic
     
     @State private var checks: [ServerCheck] = []
@@ -19,20 +24,30 @@ struct HomeView: View {
     
     private let configuration = ServerConfiguration.load()
     
+    private var signedIn: Bool {
+        if case .signedIn = auth.state { return true }
+        return false
+    }
+    
+    private var gate: HealthKitGate {
+        HealthKitGate.evaluate(configuration: configuration, signedIn: signedIn, healthDataAvailable: HKHealthStore.isHealthDataAvailable())
+    }
+    
     private var source: DataSource {
-        DataSource.effective(stored)
+        sources.effective
+    }
+    
+    /// What decides whether collection runs: the stored choice and whether the gate currently allows it.
+    private struct Wish: Hashable {
+        var stored: DataSource
+        var allowed: Bool
     }
     
     
     var body: some View {
         NavigationStack {
             List {
-                Section("Data source") {
-                    Label(source.title, systemImage: "checkmark.circle.fill")
-                    Text(source.detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                dataSourceSection
                 
                 if source.showsSimulator {
                     Section("Simulator") {
@@ -80,9 +95,99 @@ struct HomeView: View {
                     auth.restore(configuration: configuration)
                 }
             }
+            // Collection runs exactly while Apple Health is both chosen and allowed; otherwise the bridge drops (and counts).
+            .task(id: Wish(stored: stored, allowed: gate.isAvailable)) {
+                sources.update(stored: stored, gate: gate)
+                let running = stored == .appleHealth && gate.isAvailable
+                await HealthKitBridge.shared.setEnabled(running)
+                if running {
+                    simulator.stop()
+                    await healthKit.triggerDataSourceCollection()
+                }
+                await sources.refreshCounters()
+            }
+            // The counters live in the bridge actor, which nothing observes: while Apple Health is in effect, read them
+            // again every couple of seconds so the screen shows what has arrived since the choice was made.
+            .task(id: source) {
+                guard source == .appleHealth else { return }
+                while !Task.isCancelled {
+                    await sources.refreshCounters()
+                    try? await Task.sleep(for: .seconds(2))
+                }
+            }
         }
     }
     
+    
+    @ViewBuilder private var dataSourceSection: some View {
+        Section("Data source") {
+            ForEach(DataSource.allCases) { option in
+                Button {
+                    Task { await choose(option) }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(option.title)
+                                .foregroundStyle(.primary)
+                            Text(option == .appleHealth ? appleHealthDetail : option.detail)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if source == option {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.tint)
+                                .accessibilityLabel("Selected")
+                        }
+                    }
+                }
+                .disabled(option == .appleHealth && !gate.isAvailable)
+                .accessibilityIdentifier("source-\(option.rawValue)")
+            }
+            if stored == .appleHealth, case .unavailable(let reason) = gate {
+                Label("Apple Health is paused. \(reason.message)", systemImage: "pause.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+            if let message = sources.message {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+            if source == .appleHealth {
+                LabeledContent("Received since app start", value: "\(sources.counters.accepted)")
+                    .accessibilityIdentifier("healthKitReceived")
+                if let last = sources.counters.lastReceivedAt {
+                    LabeledContent("Last received", value: last.formatted(date: .omitted, time: .standard))
+                }
+            }
+        }
+    }
+    
+    private var appleHealthDetail: String {
+        switch gate {
+        case .available:
+            "Your own measurements (heart rate, resting heart rate, HRV, sleep) from the last 7 days onwards, read-only, sent to your own server as a separate patient."
+        case .unavailable(let reason):
+            reason.message
+        }
+    }
+    
+    private func choose(_ option: DataSource) async {
+        sources.message = nil
+        switch option {
+        case .synthetic:
+            stored = .synthetic
+        case .appleHealth:
+            guard gate.isAvailable else { return }
+            do {
+                try await healthKit.askForAuthorization()
+                stored = .appleHealth
+            } catch {
+                sources.message = "Apple Health access could not be requested."
+            }
+        }
+    }
     
     @ViewBuilder private var accountSection: some View {
         Section("Account") {

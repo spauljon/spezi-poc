@@ -21,6 +21,8 @@ final class SyncModel {
     private(set) var rejections: [(key: String, reason: String)] = []
     /// Samples refused as already queued (a duplicate delivery, caught before it reached the server).
     private(set) var duplicatesDropped = 0
+    /// Apple Health samples that were deleted there and have not been applied to the server (see `SampleQueue`).
+    private(set) var deletionsNotApplied = 0
     /// While paused nothing is uploaded; the queue keeps filling. Also how the simulator emulates "offline" on demand.
     var isPaused = false {
         didSet { if !isPaused { kick() } }
@@ -84,7 +86,13 @@ final class SyncModel {
         wake?.yield()
     }
     
+    func recordDeletions(_ uuids: [String]) async {
+        _ = try? await queue.recordDeletions(uuids)
+        deletionsNotApplied = (try? await queue.deletionCount()) ?? deletionsNotApplied
+    }
+    
     func refreshCounts() async {
+        deletionsNotApplied = (try? await queue.deletionCount()) ?? 0
         if let engine {
             let latest = await engine.refresh()
             status.counts = latest.counts
