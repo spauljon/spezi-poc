@@ -516,13 +516,37 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ### Milestone 18: Background delivery and device mapping [ios/]
 
-**Goal:** New HealthKit data arrives without opening the app; sources are modeled as `Device`s.
+**Goal:** New HealthKit data arrives without opening the app; sources are modeled as `Device`s; and no sample can be lost between HealthKit and the local queue.
 
 **Depends on:** Milestone 17.
 
-**Tasks:** background delivery and observer queries, HKDevice -> `Device`, backfill windows, failure handling, battery/impact check.
+**Background (what M17 found, by reading SpeziHealthKit 1.4.2).** Collection is an anchored object query per sample type that HealthKit pushes to while the app is alive (`continueInBackground` is off). The library saves the new anchor as soon as `handleNewSamples` returns. Two consequences are M18's first tasks:
+- *Kill-time loss window:* our Standard hands a sample to the bridge's stream and returns; the SQLite write happens later in another task. A kill in between leaves the anchor advanced and the sample nowhere.
+- *Drop-while-closed loss:* when the gate closes (sign-out, token gone) the bridge drops and counts arrivals, but the collector keeps running and the anchor keeps advancing, so those samples never return.
 
-**Verify:** new samples show up within an expected window with the app closed; duplicate-free after repeated syncs.
+**Tasks (in this order):**
+1. **Entitlement check first (decision gate).** Establish whether background delivery (`com.apple.developer.healthkit.background-delivery`) can be signed with a free provisioning profile on the target device. Record the evidence. If it cannot, stop and bring you the choice: a paid Apple Developer account (an account and a cost), or foreground-only for the POC. Do not build the rest until decided.
+2. **Durable handoff.** `handleNewSamples` awaits the queue write (map, enqueue, commit) before it returns, so the anchor never advances past a sample that is not in the queue. Test: a failing/slow queue write must delay the return; a crash-style test proves a sample is either queued or redelivered.
+3. **Pause, do not drop.** When the gate closes, stop the collectors (the anchor stays), and resume them when it opens. The bridge's drop-and-count stays only as a backstop. Test with a positive control: samples that arrive while paused are delivered after resuming, none lost, none duplicated.
+4. **Background delivery.** `continueInBackground: true` for the four types: observer query plus `enableBackgroundDelivery`, with the completion handler called only after the durable handoff. A background wake-up must be able to upload what it queued within its time budget, or leave it safely queued.
+5. **Token and TLS in the background.** A wake-up with an expired access token refreshes once or leaves the items queued with a stated reason; it never uploads unauthenticated and never falls back to the synthetic patient. The data-file protection class chosen in M17 (`completeUntilFirstUserAuthentication`) is what lets this run with the phone locked; verify it on the device, not the simulator.
+6. **Device mapping.** Check the Watch's real `HKDevice` fields against the `Device` resource (name, manufacturer, model, hardware and software version) and the stable device key, so one Watch is one `Device` across software updates. Flag every assumption (cardinality of missing fields, what counts as "same device").
+7. **Backfill policy.** Replace the fixed 7-day window with a stated policy: first run, resume after a long gap, and a way to widen it deliberately. Re-delivery must stay harmless (conditional create on the sample's identifier).
+8. **Surface it.** Show "Received since app start" and a lifetime figure side by side with last background delivery time, so the screen cannot be misread (found in M17).
+9. **Battery and impact.** Measure wake-ups per day and upload cost over a day of wear; record the numbers.
+
+**Assumptions to flag in the README (to be reviewed):** the background-delivery frequency per type is set by iOS, not by the app; "within an expected window" is a measured range, not a guarantee; deletions stay recorded-not-applied (the writer role cannot update or delete, A11); real data still goes only to `poc-real`.
+
+**Risks and open decisions:**
+- Free provisioning may refuse the background entitlement (task 1); the answer may need your decision on a paid account.
+- Free-profile builds expire after 7 days; a lapsed build stops background delivery until reinstalled.
+- Background behaviour cannot be verified in the simulator.
+
+**Verify (counts and structure only; no real values in the repo, logs or this conversation):**
+- With the app closed and the phone locked, new Watch samples appear under `poc-real` within a measured window; record the observed range.
+- Repeating the sync (relaunch, forced re-delivery, anchor reset on a test build) leaves the server count unchanged.
+- Tests prove: no sample is lost at kill time, none is lost while the gate is closed, and a wake-up without a usable token uploads nothing.
+- Server counts per metric match the app's lifetime sent figure, and nothing real appears under `poc-0001`.
 
 ---
 
