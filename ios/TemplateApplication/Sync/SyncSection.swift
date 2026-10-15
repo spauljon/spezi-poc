@@ -24,9 +24,23 @@ struct SyncSection: View {
             if let attempt = sync.lastAttempt {
                 LabeledContent("Last upload attempt", value: attempt.at.formatted(date: .abbreviated, time: .standard))
                     .accessibilityIdentifier("syncLastAttempt")
-                Text("\(attempt.outcome); \(attempt.sent) sent; app was \(attempt.inBackground ? "in the background" : "open")")
+                Text(attempt.summary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if sync.attempts.count > 1 {
+                    DisclosureGroup("Recent upload attempts (\(sync.attempts.count))") {
+                        ForEach(Array(sync.attempts.enumerated()), id: \.offset) { _, entry in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.at.formatted(date: .abbreviated, time: .standard))
+                                    .font(.footnote)
+                                Text(entry.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("syncAttempts")
+                }
             }
             LabeledContent("Queued", value: "\(sync.status.counts.pending)")
                 .accessibilityIdentifier("syncQueued")
@@ -75,5 +89,14 @@ struct SyncSection: View {
         case .blocked(.forbidden): return "Not permitted"
         case .blocked(.configuration): return "Configuration problem"
         }
+    }
+}
+
+
+extension UploadAttempt {
+    /// One line: the outcome, how many went, where the app was, and how many identical attempts it stands for.
+    var summary: String {
+        let repeats = count > 1 ? "; \(count) times in a row, the last at this time" : ""
+        return "\(outcome); \(sent) sent; app was \(inBackground ? "in the background" : "open")\(repeats)"
     }
 }

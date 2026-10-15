@@ -85,8 +85,13 @@ final class SignInTests: XCTestCase {
             searches += 1
         }
         app.buttons["Check server"].tap()
-        // The results are below the fold, and a List does not render rows that are off screen.
-        app.swipeUp()
+        // The results are below the fold, and a List does not render rows that are off screen. The page grows as
+        // sections gain rows, so scroll until the first result is there rather than assuming a distance.
+        var scrolls = 0
+        while !app.staticTexts["Capability statement, no token"].exists && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+        }
         // Each row is a title plus a separate detail line ("HTTP 200, expected 200").
         func exists(_ text: String, timeout: TimeInterval = 5) -> Bool {
             app.staticTexts[text].waitForExistence(timeout: timeout)

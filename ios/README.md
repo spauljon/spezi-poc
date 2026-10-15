@@ -264,7 +264,7 @@ records.
 | Records before wiring | A background launch is quick: records that arrive before the bridge is wired are buffered and processed when it is. |
 | `HealthKitWindow` | The first window is a week, fixed once when Apple Health is first chosen and reused at every launch. Previously it was "seven days before this launch", which would skip data after a long gap. |
 | Background time for the upload | iOS can suspend the app moments after HealthKit's completion handler. `SyncModel.enqueueDurably` takes a `UIApplication` background-task assertion before the write and releases it when the drain that follows has finished (or on expiry), so a wake-up can upload what it queued instead of waiting for the next time the app is opened. Found as the likely cause of a 13:42 receive being stored at 13:50 on the device. |
-| Last upload attempt | Persisted: when, the outcome (`ok`, "Sign in to upload.", "not attempted: offline", "background time ran out", or the error), how many were sent, and whether the app was in the background. Shown in the Sync section. |
+| Upload attempt history | Persisted: the last 20 attempts, newest first, each with when, the outcome (`ok`, "Sign in to upload.", "not attempted: offline", "background time ran out", or the error), how many were sent, and whether the app was in the background. A run of identical nothing-sent attempts is folded into one entry with a count, so an idle night cannot push out the attempts that matter. Shown in the Sync section ("Recent upload attempts"). |
 | Counters | "Received since app start", "Received in total" (kept across launches) and "Last received" (date and time). Counts and a timestamp only, never a value. |
 
 ### Assumptions made in M18 (review these)

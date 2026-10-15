@@ -26,7 +26,8 @@ final class SyncModel {
     private(set) var deletionsNotApplied = 0
     /// The most recent time the app tried to upload, and how it went: kept across launches, so a background wake-up that
     /// ended in a failure (or never got as far as an attempt) is still readable the next time the app is opened.
-    private(set) var lastAttempt: UploadAttempt?
+    private(set) var attempts: [UploadAttempt] = []
+    var lastAttempt: UploadAttempt? { attempts.first }
     /// While paused nothing is uploaded; the queue keeps filling. Also how the simulator emulates "offline" on demand.
     var isPaused = false {
         didSet { if !isPaused { kick() } }
@@ -48,7 +49,7 @@ final class SyncModel {
     ///   - engine: `nil` when the app is not configured (the screen then says why).
     init(queue: SampleQueue, engine: SyncEngine?, unavailableReason: String? = nil, debounce: TimeInterval = 1, monitorNetwork: Bool = true, defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.lastAttempt = UploadAttempt.load(from: defaults)
+        self.attempts = UploadAttempt.loadAll(from: defaults)
         self.queue = queue
         self.engine = engine
         self.unavailableReason = unavailableReason
@@ -193,8 +194,8 @@ final class SyncModel {
     
     private func record(outcome: String, sent: Int) {
         let attempt = UploadAttempt(at: .now, outcome: outcome, sent: sent, inBackground: UIApplication.shared.applicationState != .active)
-        lastAttempt = attempt
-        attempt.save(to: defaults)
+        attempts = UploadAttempt.appending(attempt, to: attempts)
+        UploadAttempt.saveAll(attempts, to: defaults)
     }
     
     private func apply(_ result: SyncStatus) async {
@@ -213,21 +214,64 @@ final class SyncModel {
 
 
 /// One upload attempt: when, what came of it, and whether the app was in the background. No sample value is in here.
+/// A run of identical "nothing sent" results is one entry with a count, so an idle night cannot push out the
+/// attempts that matter.
 struct UploadAttempt: Codable, Equatable, Sendable {
     var at: Date
     var outcome: String
     var sent: Int
     var inBackground: Bool
+    /// How many consecutive identical, nothing-sent attempts this entry stands for (the last one is `at`).
+    var count = 1
     
-    private static let key = "sync.lastAttempt"
+    static let limit = 20
+    private static let key = "sync.attempts"
+    private static let legacyKey = "sync.lastAttempt"
     
-    static func load(from defaults: UserDefaults) -> UploadAttempt? {
-        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(UploadAttempt.self, from: $0) }
+    init(at: Date, outcome: String, sent: Int, inBackground: Bool, count: Int = 1) {
+        self.at = at
+        self.outcome = outcome
+        self.sent = sent
+        self.inBackground = inBackground
+        self.count = count
     }
     
-    func save(to defaults: UserDefaults) {
-        if let data = try? JSONEncoder().encode(self) {
-            defaults.set(data, forKey: Self.key)
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        at = try c.decode(Date.self, forKey: .at)
+        outcome = try c.decode(String.self, forKey: .outcome)
+        sent = try c.decode(Int.self, forKey: .sent)
+        inBackground = try c.decode(Bool.self, forKey: .inBackground)
+        count = try c.decodeIfPresent(Int.self, forKey: .count) ?? 1
+    }
+    
+    /// Newest first, at most `limit`. A nothing-sent attempt identical to the newest one is folded into it.
+    static func appending(_ attempt: UploadAttempt, to history: [UploadAttempt], limit: Int = UploadAttempt.limit) -> [UploadAttempt] {
+        var out = history
+        if let newest = out.first, newest.sent == 0, attempt.sent == 0,
+           newest.outcome == attempt.outcome, newest.inBackground == attempt.inBackground {
+            out[0] = UploadAttempt(at: attempt.at, outcome: attempt.outcome, sent: 0, inBackground: attempt.inBackground,
+                                   count: newest.count + attempt.count)
+        } else {
+            out.insert(attempt, at: 0)
+        }
+        return Array(out.prefix(limit))
+    }
+    
+    static func loadAll(from defaults: UserDefaults) -> [UploadAttempt] {
+        if let data = defaults.data(forKey: key), let list = try? JSONDecoder().decode([UploadAttempt].self, from: data) {
+            return list
+        }
+        // the single record an earlier build kept
+        if let data = defaults.data(forKey: legacyKey), let one = try? JSONDecoder().decode(UploadAttempt.self, from: data) {
+            return [one]
+        }
+        return []
+    }
+    
+    static func saveAll(_ attempts: [UploadAttempt], to defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(attempts) {
+            defaults.set(data, forKey: key)
         }
     }
 }

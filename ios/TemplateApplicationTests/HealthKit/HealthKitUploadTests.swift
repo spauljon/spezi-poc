@@ -203,27 +203,75 @@ struct NoLoggingTests {
 }
 
 
-@Suite("Last upload attempt")
+@Suite("Upload attempt history")
 struct UploadAttemptTests {
-    @Test("an attempt is stored and read back across a new preferences handle; a fresh store has none")
+    private func attempt(_ n: Int, _ outcome: String = "ok", sent: Int = 0, background: Bool = true) -> UploadAttempt {
+        UploadAttempt(at: Date(timeIntervalSince1970: 1_800_000_000 + Double(n) * 60), outcome: outcome, sent: sent, inBackground: background)
+    }
+    
+    @Test("newest first, and only the latest `limit` are kept")
+    func newestFirstAndBounded() {
+        var history: [UploadAttempt] = []
+        for n in 0..<5 { history = UploadAttempt.appending(attempt(n, "ok", sent: n + 1), to: history, limit: 3) }
+        #expect(history.map(\.sent) == [5, 4, 3])
+    }
+    
+    @Test("a run of identical nothing-sent attempts is one entry with a count, so an idle night cannot push out real ones")
+    func foldsIdleRuns() {
+        var history = [attempt(0, "Sign in to upload.", sent: 0)]
+        for n in 1...5 { history = UploadAttempt.appending(attempt(n, "Sign in to upload."), to: history) }
+        #expect(history.count == 1)
+        #expect(history[0].count == 6)
+        #expect(history[0].at == attempt(5).at, "the entry shows when the last of them happened")
+    }
+    
+    @Test("anything that differs, or that sent something, is its own entry (the control for the folding above)")
+    func doesNotFoldDifferences() {
+        var history = [attempt(0, "ok", sent: 0)]
+        history = UploadAttempt.appending(attempt(1, "ok", sent: 0, background: false), to: history)  // other app state
+        history = UploadAttempt.appending(attempt(2, "not attempted: offline"), to: history)          // other outcome
+        history = UploadAttempt.appending(attempt(3, "not attempted: offline", sent: 4), to: history) // sent something
+        #expect(history.count == 4)
+    }
+    
+    @Test("a failure inside a run of idle attempts is kept, not folded away")
+    func keepsTheInteresting() {
+        var history: [UploadAttempt] = []
+        for n in 0..<3 { history = UploadAttempt.appending(attempt(n, "ok"), to: history) }
+        history = UploadAttempt.appending(attempt(3, "Could not get an access token."), to: history)
+        for n in 4..<7 { history = UploadAttempt.appending(attempt(n, "ok"), to: history) }
+        #expect(history.map(\.outcome) == ["ok", "Could not get an access token.", "ok"])
+        #expect(history.map(\.count) == [3, 1, 3])
+    }
+    
+    @Test("history is stored and read back across a new preferences handle; a fresh store has none")
     func persists() {
         let suite = "attempt-tests-\(UUID().uuidString)"
         defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
-        let attempt = UploadAttempt(at: Date(timeIntervalSince1970: 1_800_000_000), outcome: "Sign in to upload.", sent: 0, inBackground: true)
-        attempt.save(to: UserDefaults(suiteName: suite)!)
-        #expect(UploadAttempt.load(from: UserDefaults(suiteName: suite)!) == attempt)
+        let history = [attempt(2, "ok", sent: 7), attempt(1, "Sign in to upload.")]
+        UploadAttempt.saveAll(history, to: UserDefaults(suiteName: suite)!)
+        #expect(UploadAttempt.loadAll(from: UserDefaults(suiteName: suite)!) == history)
         
         let other = "attempt-tests-\(UUID().uuidString)"
         defer { UserDefaults(suiteName: other)?.removePersistentDomain(forName: other) }
-        #expect(UploadAttempt.load(from: UserDefaults(suiteName: other)!) == nil)
+        #expect(UploadAttempt.loadAll(from: UserDefaults(suiteName: other)!).isEmpty)
     }
     
-    @Test("a stored value that is not an attempt is ignored, not a crash")
-    func garbage() {
+    @Test("the single record an earlier build kept is read as a one-entry history; garbage is ignored")
+    func legacyAndGarbage() throws {
         let suite = "attempt-tests-\(UUID().uuidString)"
         defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
         let defaults = UserDefaults(suiteName: suite)!
-        defaults.set(Data("not json".utf8), forKey: "sync.lastAttempt")
-        #expect(UploadAttempt.load(from: defaults) == nil)
+        let old = #"{"at":0,"outcome":"ok","sent":3,"inBackground":false}"#
+        defaults.set(Data(old.utf8), forKey: "sync.lastAttempt")
+        let loaded = UploadAttempt.loadAll(from: defaults)
+        #expect(loaded.count == 1)
+        #expect(loaded[0].sent == 3)
+        #expect(loaded[0].count == 1)
+        
+        defaults.set(Data("not json".utf8), forKey: "sync.attempts")
+        #expect(UploadAttempt.loadAll(from: defaults).first?.sent == 3, "a bad new record falls back to the old one")
+        defaults.removeObject(forKey: "sync.lastAttempt")
+        #expect(UploadAttempt.loadAll(from: defaults).isEmpty)
     }
 }
