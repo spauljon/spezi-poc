@@ -73,6 +73,8 @@ docker exec spezi-poc-keycloak bash -c '/opt/keycloak/bin/kcadm.sh get realms --
 
 ## Trusting the CA on a phone (iPhone)
 
+The whole sequence (Mac, phone, simulator, verify, undo) is in [docs/runbooks/tls-and-trust.md](../docs/runbooks/tls-and-trust.md); this section keeps the phone-specific detail.
+
 The CA certificate is `~/.poc-ca/ca.crt` (public; its key never leaves the Mac). It is name-constrained to `macpro16.local`. AirDrop it to the phone, open it and install the profile (Settings > Profile Downloaded), then enable full trust: Settings > General > About > Certificate Trust Settings > "Spezi POC Local CA". Test in a **new Private Browsing tab** (an old tab can hold a remembered exception): `https://macpro16.local:8444/ping` should show a large "IdP edge reachable" page with no warning.
 
 Two gotchas learned the hard way (2026-10-09):

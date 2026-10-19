@@ -29,4 +29,4 @@ make stack-up     # credentials, local CA and certificates, Oracle, HAPI, Keyclo
 make stack-verify # checks; any FAIL exits non-zero, SKIP lines mean a check did not run
 ```
 
-Endpoints: HAPI `https://macpro16.local:8443/fhir` (network-reachable since M4; bearer token required except `GET /fhir/metadata`); the IdP proxy `https://macpro16.local:8444` (the one network-reachable endpoint; only the public OIDC paths). Details: [hapi/README.md](hapi/README.md), [db/README.md](db/README.md), [idp/README.md](idp/README.md). To use a phone, install and trust the CA first (see idp/README.md).
+Endpoints: HAPI `https://macpro16.local:8443/fhir` (network-reachable since M4; bearer token required except `GET /fhir/metadata`); the IdP proxy `https://macpro16.local:8444` (the one network-reachable endpoint; only the public OIDC paths). Details: [hapi/README.md](hapi/README.md), [db/README.md](db/README.md), [idp/README.md](idp/README.md). To use a phone, install and trust the CA first: the full sequence (Mac, phone, simulator, verify, undo) is in [docs/runbooks/tls-and-trust.md](docs/runbooks/tls-and-trust.md).

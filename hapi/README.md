@@ -20,6 +20,8 @@ Runs in the root [compose.yaml](../compose.yaml), project `spezi-poc`, serving *
 
 ## TLS
 
+How to create the CA and make each device trust it, verify it and undo it: [docs/runbooks/tls-and-trust.md](../docs/runbooks/tls-and-trust.md).
+
 The CA certificate to trust on a device is `~/.poc-ca/ca.crt` (public, safe to share); its key `ca.key` never leaves `~/.poc-ca/` and is never mounted. Talking to HAPI from this machine before the name resolves publicly:
 
 ```bash
