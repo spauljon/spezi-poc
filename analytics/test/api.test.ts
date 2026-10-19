@@ -24,7 +24,7 @@ async function setup() {
 }
 
 const day = (patientId: string, metricId: string, d: string, v: number, n = 3): [{ patientId: string; metricId: string; day: string }, Rollup] =>
-  [{ patientId, metricId, day: d }, { patientId, metricId, day: d, unit: "/min", n, min: v - 5, median: v, max: v + 5 }];
+  [{ patientId, metricId, day: d }, { patientId, metricId, day: d, unit: "/min", n, min: v - 5, median: v, max: v + 5, nArtifact: 0, nLate: 0 }];
 
 test("bands: returns the stored rows for the range, in order, with their values", async () => {
   const { store, get } = await setup();
@@ -227,4 +227,14 @@ test("every 200 response conforms to the API description, and the description na
   assert.notDeepEqual(conforms({ metrics: "x" }, { $ref: "#/components/schemas/Metrics" }), []);
   assert.deepEqual(Object.keys(spec.paths).sort(),
     ["/v1/metrics", "/v1/patients/{patientId}/bands", "/v1/patients/{patientId}/sleep"]);
+});
+
+
+test("bands carry the flag counts, and the stored values are returned exactly as written", async () => {
+  const { store, get } = await setup();
+  const [w, r] = day("p1", "heartRate", "2026-10-02", 70);
+  await store.applyRollup(w, { ...r, nArtifact: 3, nLate: 5 });
+  const res = await get("/v1/patients/p1/bands?metric=heartRate&from=2026-10-01&to=2026-10-03");
+  const body = res.body as { bands: { artifactSuspected: number; lateArrival: number; max: number }[] };
+  assert.deepEqual(body.bands.map((b) => [b.artifactSuspected, b.lateArrival, b.max]), [[3, 5, 75]]);
 });

@@ -195,7 +195,8 @@ export class AnalyticApi {
     const rows = await this.o.reader.bands(patientId, metric.id, range.from, range.to);
     const pending = await this.o.reader.pendingCount(patientId, [metric.id], range.from, range.to);
     const bands = rows.map((r: StoredRollup) => ({
-      day: r.day, n: r.n, min: r.min, median: r.median, max: r.max, revision: r.revision,
+      day: r.day, n: r.n, min: r.min, median: r.median, max: r.max,
+      artifactSuspected: r.nArtifact, lateArrival: r.nLate, revision: r.revision,
     }));
     return reply(200, {
       patientId,

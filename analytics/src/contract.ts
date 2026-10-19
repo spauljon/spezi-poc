@@ -19,8 +19,16 @@ export interface SleepMetric {
   readonly unmapped: readonly string[];
 }
 
+/** The data-quality flags written into `Observation.meta.tag` (contract `systems.dataQualityFlag`, `dataQualityFlags`). */
+export interface QualityFlags {
+  readonly system: string;
+  readonly artifactSuspected: string;
+  readonly lateArrival: string;
+}
+
 export interface Contract {
   readonly version: string;
+  readonly flags: QualityFlags;
   readonly loincSystem: string;
   readonly ucumSystem: string;
   readonly quantityMetrics: readonly QuantityMetric[];
@@ -78,7 +86,8 @@ function parseQuantity(metric: RawMetric): QuantityMetric {
 export function loadContract(path: string = defaultContractPath): Contract {
   const raw = JSON.parse(readFileSync(path, "utf8")) as {
     contractVersion?: unknown;
-    systems?: { loinc?: unknown; ucum?: unknown };
+    systems?: { loinc?: unknown; ucum?: unknown; dataQualityFlag?: unknown };
+    dataQualityFlags?: { artifactSuspected?: unknown; lateArrival?: unknown };
     metrics?: RawMetric[];
   };
   const version = text(raw.contractVersion);
@@ -90,6 +99,14 @@ export function loadContract(path: string = defaultContractPath): Contract {
   if (!loincSystem || !ucumSystem) {
     throw new Error("contract has no LOINC or UCUM system");
   }
+  const flags: QualityFlags = {
+    system: text(raw.systems?.dataQualityFlag),
+    artifactSuspected: text(raw.dataQualityFlags?.artifactSuspected),
+    lateArrival: text(raw.dataQualityFlags?.lateArrival),
+  };
+  if (!flags.system || !flags.artifactSuspected || !flags.lateArrival) {
+    throw new Error("contract has no data-quality flags (contract 1.4.0 or later is required)");
+  }
   const metrics = raw.metrics ?? [];
   // an unknown kind is not rolled up
   const quantityMetrics = metrics.filter((m) => m.kind === "quantity").map(parseQuantity);
@@ -97,5 +114,5 @@ export function loadContract(path: string = defaultContractPath): Contract {
   if (quantityMetrics.length === 0) {
     throw new Error("contract has no quantity metrics");
   }
-  return { version, loincSystem, ucumSystem, quantityMetrics, sleep: sleepMetric ? parseSleep(sleepMetric) : null };
+  return { version, flags, loincSystem, ucumSystem, quantityMetrics, sleep: sleepMetric ? parseSleep(sleepMetric) : null };
 }

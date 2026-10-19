@@ -95,19 +95,20 @@ export class OracleStore implements Store, Reader {
         const updated = await this.connection.execute(
           `update daily_rollup
               set unit = :u, n = :n, min_value = :lo, median_value = :md, max_value = :hi,
-                  revision = revision + 1, updated_at = systimestamp
+                  n_artifact = :na, n_late = :nl, revision = revision + 1, updated_at = systimestamp
             where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')
-              and (unit <> :u or n <> :n or min_value <> :lo or median_value <> :md or max_value <> :hi)`,
-          { ...key, u: rollup.unit, n: rollup.n, lo: rollup.min, md: rollup.median, hi: rollup.max },
+              and (unit <> :u or n <> :n or min_value <> :lo or median_value <> :md or max_value <> :hi
+                   or n_artifact <> :na or n_late <> :nl)`,
+          { ...key, u: rollup.unit, n: rollup.n, lo: rollup.min, md: rollup.median, hi: rollup.max, na: rollup.nArtifact, nl: rollup.nLate },
         );
         changed = (updated.rowsAffected ?? 0) > 0;
         if (!changed) {
           const inserted = await this.connection.execute(
-            `insert into daily_rollup (patient_id, metric_id, day, unit, n, min_value, median_value, max_value)
-             select :p, :m, to_date(:d, 'YYYY-MM-DD'), :u, :n, :lo, :md, :hi from dual
+            `insert into daily_rollup (patient_id, metric_id, day, unit, n, min_value, median_value, max_value, n_artifact, n_late)
+             select :p, :m, to_date(:d, 'YYYY-MM-DD'), :u, :n, :lo, :md, :hi, :na, :nl from dual
               where not exists (select 1 from daily_rollup
                                  where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD'))`,
-            { ...key, u: rollup.unit, n: rollup.n, lo: rollup.min, md: rollup.median, hi: rollup.max },
+            { ...key, u: rollup.unit, n: rollup.n, lo: rollup.min, md: rollup.median, hi: rollup.max, na: rollup.nArtifact, nl: rollup.nLate },
           );
           changed = (inserted.rowsAffected ?? 0) > 0;
         }
@@ -156,10 +157,10 @@ export class OracleStore implements Store, Reader {
 
   private async selectRollups(where: string, binds: Record<string, unknown>): Promise<StoredRollup[]> {
     const result = await this.connection.execute<{
-      P: string; M: string; D: string; U: string; N: number; LO: number; MD: number; HI: number; R: number; UP: number;
+      P: string; M: string; D: string; U: string; N: number; LO: number; MD: number; HI: number; NA: number; NL: number; R: number; UP: number;
     }>(
       `select patient_id as p, metric_id as m, to_char(day, 'YYYY-MM-DD') as d, unit as u, n,
-              min_value as lo, median_value as md, max_value as hi, revision as r,
+              min_value as lo, median_value as md, max_value as hi, n_artifact as na, n_late as nl, revision as r,
               round((cast(sys_extract_utc(updated_at) as date) - date '1970-01-01') * 86400) * 1000 as up
          from daily_rollup
         where ${where}
@@ -169,7 +170,8 @@ export class OracleStore implements Store, Reader {
     );
     return (result.rows ?? []).map((r) => ({
       patientId: r.P, metricId: r.M, day: r.D, unit: r.U,
-      n: Number(r.N), min: Number(r.LO), median: Number(r.MD), max: Number(r.HI), revision: Number(r.R),
+      n: Number(r.N), min: Number(r.LO), median: Number(r.MD), max: Number(r.HI),
+      nArtifact: Number(r.NA), nLate: Number(r.NL), revision: Number(r.R),
       updatedAtMs: Number(r.UP),
     }));
   }

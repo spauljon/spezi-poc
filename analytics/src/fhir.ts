@@ -6,7 +6,7 @@ export interface ObservationLite {
   effectiveDateTime?: string;
   effectivePeriod?: { start?: string; end?: string };
   valueQuantity?: { value?: number; unit?: string; system?: string; code?: string };
-  meta?: { lastUpdated?: string };
+  meta?: { lastUpdated?: string; tag?: { system?: string; code?: string }[] };
 }
 
 export interface FhirSearch {

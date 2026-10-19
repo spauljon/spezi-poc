@@ -35,6 +35,18 @@ begin
          constraint daily_rollup_n_ck check (n > 0)
        )');
 
+  -- M19: how many of the day's samples carry the capture app's data-quality flags (counted from the stored meta.tag, never
+  -- inferred). The bands still describe every stored value, flagged ones included; these say how many of them are suspect.
+  -- Added by ALTER so an existing database gains them; ORA-01430 (column already there) is the only error tolerated.
+  begin
+    execute immediate 'alter table &owner..daily_rollup add (n_artifact number(10) default 0 not null, n_late number(10) default 0 not null)';
+  exception
+    when others then
+      if sqlcode != -1430 then
+        raise;
+      end if;
+  end;
+
   -- Windows that changed and are waiting to be recomputed. Written in the same transaction as the watermark advance,
   -- so a crash between "saw the change" and "recomputed it" loses nothing.
   ddl('create table &owner..rollup_touched (

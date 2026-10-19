@@ -58,3 +58,21 @@ test("an unsupported contract major version is refused", () => {
 test("a contract with a quantity metric lacking a unit is refused", () => {
   assert.throws(() => loadContract(fileURLToPath(new URL("fixtures/contract-no-unit.json", import.meta.url))), /lacks a code or unit/);
 });
+
+test("a contract without the data-quality flags is refused, and the same contract with them loads (the control)", () => {
+  const fixture = (name: string) => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url));
+  assert.throws(() => loadContract(fixture("contract-no-flags.json")), /data-quality flags/);
+  const ok = loadContract(fixture("contract-flags-ok.json"));
+  assert.deepEqual({ ...ok.flags }, { system: "http://example.org/flags", artifactSuspected: "a", lateArrival: "l" });
+});
+
+test("the worker's flag system and codes are exactly the contract's", () => {
+  const c = loadContract();
+  const file = JSON.parse(readFileSync(contractFile, "utf8")) as {
+    systems: { dataQualityFlag: string };
+    dataQualityFlags: { artifactSuspected: string; lateArrival: string };
+  };
+  assert.equal(c.flags.system, file.systems.dataQualityFlag);
+  assert.equal(c.flags.artifactSuspected, file.dataQualityFlags.artifactSuspected);
+  assert.equal(c.flags.lateArrival, file.dataQualityFlags.lateArrival);
+});

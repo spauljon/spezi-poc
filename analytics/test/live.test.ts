@@ -89,13 +89,15 @@ async function patientId(token: string): Promise<string> {
 }
 
 /** Uploads heart-rate samples as one transaction of conditional creates (what the capture app does). */
-async function upload(token: string, patient: string, tag: string, samples: { key: string; at: string; value: number }[]) {
+async function upload(token: string, patient: string, tag: string, samples: { key: string; at: string; value: number; flags?: string[] }[]) {
   const entry = samples.map((s) => {
     const identifier = `syn-live-${tag}-${s.key}`;
     return {
       fullUrl: `urn:uuid:${crypto.randomUUID()}`,
       resource: {
         resourceType: "Observation",
+        // the capture app's data-quality flags, as it writes them (contract rules; the worker only ever reads them)
+        ...(s.flags?.length ? { meta: { tag: s.flags.map((code) => ({ system: contract.flags.system, code })) } } : {}),
         identifier: [{ system: sampleSystem, value: identifier }],
         status: "final",
         category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "vital-signs" }] }],
@@ -345,8 +347,10 @@ test("live: the API serves what Oracle holds, over TLS, to clinicians only", { s
   const ok = await callApi(port, path, clinician);
   assert.equal(ok.status, 200);
   const stored = (await store.rollups(patient)).filter((r) => windows.some((w) => w.day === r.day));
-  const served = (ok.body as { bands: { day: string; n: number; min: number; median: number; max: number; revision: number }[] }).bands;
-  assert.deepEqual(served, stored.map((r) => ({ day: r.day, n: r.n, min: r.min, median: r.median, max: r.max, revision: r.revision })));
+  const served = (ok.body as { bands: { day: string; n: number; min: number; median: number; max: number; artifactSuspected: number; lateArrival: number; revision: number }[] }).bands;
+  assert.deepEqual(served, stored.map((r) => ({
+    day: r.day, n: r.n, min: r.min, median: r.median, max: r.max, artifactSuspected: r.nArtifact, lateArrival: r.nLate, revision: r.revision,
+  })));
   assert.deepEqual(served.map((b) => [b.day, b.n, b.min, b.median, b.max]), [[d0, 2, 58, 62, 66], [d1, 1, 71, 71, 71]]);
   const completeness = (ok.body as { completeness: { missingDays: string[]; workerWatermark: string | null; pendingWindows: number } }).completeness;
   assert.deepEqual(completeness.missingDays, []);
@@ -358,4 +362,46 @@ test("live: the API serves what Oracle holds, over TLS, to clinicians only", { s
   assert.equal((await callApi(port, path, await userToken("capture-user", "POC_CAPTURE_USER_PASSWORD"))).status, 403);
   assert.equal((await callApi(port, path, await credentials.token())).status, 401);
   assert.equal((await callApi(port, path, `${clinician.slice(0, -3)}AAA`)).status, 401); // signature damaged
+});
+
+
+test("live: flag counts equal the tags HAPI holds, through the worker, Oracle and the API", { skip: !live && "set POC_ANALYTICS_LIVE=1" }, async (t) => {
+  const capture = await captureToken();
+  const patient = await patientId(capture);
+  const tag = randomBytes(4).toString("hex");
+  const d0 = await freeDay(capture);
+  const windows: Window[] = [{ patientId: patient, metricId: "heartRate", day: d0 }];
+  const store = await OracleStore.connect({
+    user: required("ANALYTICS_DB_USER"), password: required("ANALYTICS_DB_PASSWORD"),
+    connectString: process.env["POC_ANALYTICS_CONNECT"] ?? "127.0.0.1:1522/ANALYTICSPDB",
+  });
+  const name = `live-flags-${tag}`;
+  t.after(async () => {
+    await store.purge(name, windows);
+    await store.close();
+  });
+
+  const f = contract.flags;
+  // one day, six samples: two artifacts (one also late), one late, one tagged by another system, one absurd but unflagged
+  const samples = [
+    { key: "a", at: `${d0}T08:00:00+00:00`, value: 60 },
+    { key: "b", at: `${d0}T09:00:00+00:00`, value: 285, flags: [f.artifactSuspected] },
+    { key: "c", at: `${d0}T10:00:00+00:00`, value: 290, flags: [f.artifactSuspected, f.lateArrival] },
+    { key: "d", at: `${d0}T11:00:00+00:00`, value: 70, flags: [f.lateArrival] },
+    { key: "e", at: `${d0}T12:00:00+00:00`, value: 400 }, // absurd, unflagged: never counted
+    { key: "f", at: `${d0}T13:00:00+00:00`, value: 72, flags: ["user-entered"] }, // another flag, not a quality count
+  ];
+  await store.recordTouched(name, [], Date.now() - 5 * 60_000);
+  await upload(capture, patient, tag, samples);
+  const credentials = new ClientCredentials(issuer, "analytics-worker", required("POC_WORKER_CLIENT_SECRET"));
+  const worker = new RollupWorker({ name, contract, store, fhir: new HapiClient(fhirBase, () => credentials.token()) });
+  await worker.runOnce();
+
+  const [row] = (await store.rollups(patient)).filter((r) => r.day === d0 && r.metricId === "heartRate");
+  assert.equal(row?.n, 6, "every stored value is in the day");
+  assert.equal(row?.max, 400, "the band still includes the suspect values");
+  assert.equal(row?.nArtifact, samples.filter((s) => s.flags?.includes(f.artifactSuspected)).length);
+  assert.equal(row?.nLate, samples.filter((s) => s.flags?.includes(f.lateArrival)).length);
+  assert.equal(row?.nArtifact, 2);
+  assert.equal(row?.nLate, 2);
 });

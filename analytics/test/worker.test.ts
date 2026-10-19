@@ -32,7 +32,7 @@ test("rolls up count, min, median and max per patient, metric and UTC day", asyn
   const byKey = new Map((await store.rollups()).map((r) => [`${r.patientId}|${r.metricId}|${r.day}`, r]));
   assert.deepEqual(
     withoutClock(byKey.get(`p1|heartRate|${TUE}`)),
-    { patientId: "p1", metricId: "heartRate", day: TUE, unit: heartRate.ucum, n: 3, min: 60, median: 70, max: 80, revision: 1 },
+    { patientId: "p1", metricId: "heartRate", day: TUE, unit: heartRate.ucum, n: 3, min: 60, median: 70, max: 80, nArtifact: 0, nLate: 0, revision: 1 },
   );
   assert.equal(byKey.get(`p1|heartRate|${WED}`)?.n, 1);
   assert.equal(byKey.get(`p1|hrvSdnn|${TUE}`)?.unit, hrv.ucum);
@@ -277,4 +277,60 @@ test("sleep stages of one patient never leak into another's night", async () => 
   const byPatient = new Map((await store.nights()).map((s) => [s.patientId, s]));
   assert.equal(byPatient.get("p1")!.asleepMin, 240);
   assert.equal(byPatient.get("p2")!.deepMin, 120);
+});
+
+
+// --- data-quality flags (M19): counted from the stored tag, never inferred from a value
+
+const flag = contract.flags;
+const tagFor = (code: string, system: string = flag.system) => [{ system, code }];
+
+test("flag counts come from the stored tags only, and the bands still include the flagged values", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(quantity("p1", heartRate, 60, `${TUE}T08:00:00+00:00`));
+  fhir.add(quantity("p1", heartRate, 70, `${TUE}T09:00:00+00:00`));
+  fhir.add(quantity("p1", heartRate, 280, `${TUE}T10:00:00+00:00`), undefined, tagFor(flag.artifactSuspected));
+  fhir.add(quantity("p1", heartRate, 72, `${TUE}T11:00:00+00:00`), undefined, tagFor(flag.lateArrival));
+  fhir.add(quantity("p1", heartRate, 281, `${TUE}T12:00:00+00:00`), undefined, [...tagFor(flag.artifactSuspected), ...tagFor(flag.lateArrival)]);
+  await worker.runOnce();
+  const [row] = await rows(store);
+  assert.equal(row?.n, 5, "a flagged value is stored and counted, not removed");
+  assert.equal(row?.max, 281, "the band includes the suspect value (the flags say how many there are)");
+  assert.equal(row?.nArtifact, 2);
+  assert.equal(row?.nLate, 2);
+});
+
+test("an implausible value with no tag is not counted: a flag is never inferred", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(quantity("p1", heartRate, 300, `${TUE}T08:00:00+00:00`)); // the control: absurd, and unflagged
+  await worker.runOnce();
+  const [row] = await rows(store);
+  assert.equal(row?.max, 300);
+  assert.equal(row?.nArtifact, 0);
+  assert.equal(row?.nLate, 0);
+});
+
+test("a tag with another system, or another code, is not a quality flag", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(quantity("p1", heartRate, 70, `${TUE}T08:00:00+00:00`), undefined, tagFor(flag.artifactSuspected, "http://example.org/other-system"));
+  fhir.add(quantity("p1", heartRate, 71, `${TUE}T09:00:00+00:00`), undefined, tagFor("user-entered"));
+  fhir.add(quantity("p1", heartRate, 72, `${TUE}T10:00:00+00:00`), undefined, tagFor(flag.artifactSuspected)); // the positive control
+  await worker.runOnce();
+  const [row] = await rows(store);
+  assert.equal(row?.nArtifact, 1);
+  assert.equal(row?.nLate, 0);
+});
+
+test("a flag arriving with a late sample changes the day's stored row and its revision", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(quantity("p1", heartRate, 70, `${TUE}T08:00:00+00:00`));
+  await worker.runOnce();
+  const before = (await rows(store))[0];
+  assert.equal(before?.nArtifact, 0);
+  fhir.serverNow += 60_000;
+  fhir.add(quantity("p1", heartRate, 285, `${TUE}T09:00:00+00:00`), undefined, tagFor(flag.artifactSuspected));
+  await worker.runOnce();
+  const after = (await rows(store))[0];
+  assert.equal(after?.nArtifact, 1);
+  assert.equal(after?.revision, (before?.revision ?? 0) + 1);
 });

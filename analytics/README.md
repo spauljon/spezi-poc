@@ -1,5 +1,7 @@
 # Analytics worker and API
 
+Operating the stack (start, logs, updating a service, resets, failures): [docs/runbooks/operations.md](../docs/runbooks/operations.md).
+
 Node.js (version pinned in the root `.nvmrc`; `nvm use`) and TypeScript. Aggregation worker and analytic API over Oracle 26ai. M9 built the worker and the store;
 the API arrives in M10/M11. Planned in [docs/implementation-plan.md](../docs/implementation-plan.md).
 
@@ -102,6 +104,16 @@ make analytics-api          # foreground; Ctrl-C stops
 - **A46 Limits.** At most 366 days per request; patient ids `[A-Za-z0-9.-]{1,64}`; no request body is read.
 - **A47 `missingDays` cannot distinguish** "no samples were taken" from "not delivered yet"; `pendingWindows` and
   `workerWatermark` are what let a reader judge freshness. Days are UTC (A6), so a clinic's local day is not a row.
+
+## Data-quality flag counts (M19)
+
+A rollup row also carries `n_artifact` and `n_late`: how many of the day's samples hold the **stored** `artifact-suspected` and `late-arrival` tags (contract `systems.dataQualityFlag` and `dataQualityFlags`). The API returns them per band as `artifactSuspected` and `lateArrival`.
+
+- **The bands still include every stored value**, flagged ones too: a flag is a suspicion, not a removal, and the counts say how many of the values are suspect.
+- **Counted from the tag only**, never inferred from a value; a tag in another system, or a different code, is not counted (tests, with positive controls). A flag arriving with a late sample changes the row and its revision.
+- **Schema:** added by `ALTER TABLE` in `sql/10-schema.sql` (ORA-01430 "column exists" is the only error tolerated), so an existing database gains the columns on the next init or `make analytics-migrate`. The running containers must be rebuilt to read them (see [docs/runbooks/operations.md](../docs/runbooks/operations.md)).
+- The contract loader refuses a contract without the flag system and codes; the fixtures isolate each refusal's reason.
+- Verified live: flagged Observations written to HAPI, worked through the worker and Oracle, and the API's counts equal an independent count of the tags.
 
 ## Deployment and schedule (M13a)
 

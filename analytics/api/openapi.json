@@ -97,10 +97,12 @@
         }
       },
       "Band": {
-        "type": "object", "required": ["day", "n", "min", "median", "max", "revision"],
+        "type": "object", "required": ["day", "n", "min", "median", "max", "artifactSuspected", "lateArrival", "revision"],
         "properties": {
           "day": { "type": "string", "format": "date" },
           "n": { "type": "integer" }, "min": { "type": "number" }, "median": { "type": "number" }, "max": { "type": "number" },
+          "artifactSuspected": { "type": "integer", "description": "How many of the day's samples carry the stored artifact-suspected flag. The min, median and max include them: a flag is a suspicion, not a removal" },
+          "lateArrival": { "type": "integer", "description": "How many of the day's samples carry the stored late-arrival flag" },
           "revision": { "type": "integer", "description": "Increases only when the values change" }
         }
       },

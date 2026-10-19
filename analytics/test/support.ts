@@ -17,8 +17,8 @@ export class FakeFhir implements FhirSearch {
   /** Server time used to stamp `meta.lastUpdated` on `add`. */
   serverNow = Date.parse("2026-10-12T12:00:00.000Z");
 
-  add(o: Omit<ObservationLite, "meta">, lastUpdatedMs: number = this.serverNow): void {
-    this.resources.push({ ...o, meta: { lastUpdated: new Date(lastUpdatedMs).toISOString() } });
+  add(o: Omit<ObservationLite, "meta">, lastUpdatedMs: number = this.serverNow, tag?: { system: string; code: string }[]): void {
+    this.resources.push({ ...o, meta: { lastUpdated: new Date(lastUpdatedMs).toISOString(), ...(tag ? { tag } : {}) } });
   }
 
   async *search(path: string): AsyncIterable<ObservationLite> {

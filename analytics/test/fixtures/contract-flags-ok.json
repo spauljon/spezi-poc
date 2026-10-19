@@ -1,0 +1,4 @@
+{ "contractVersion": "1.4.0",
+  "systems": { "loinc": "http://loinc.org", "ucum": "http://unitsofmeasure.org", "dataQualityFlag": "http://example.org/flags" },
+  "dataQualityFlags": { "artifactSuspected": "a", "lateArrival": "l" },
+  "metrics": [ { "id": "x", "kind": "quantity", "loinc": { "code": "1-1" }, "unit": { "ucum": "u" } } ] }

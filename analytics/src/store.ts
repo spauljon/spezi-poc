@@ -14,6 +14,10 @@ export interface Rollup extends Window {
   readonly min: number;
   readonly median: number;
   readonly max: number;
+  /** How many of the day's samples carry the artifact-suspected flag (stored tag; the bands include them). */
+  readonly nArtifact: number;
+  /** How many carry the late-arrival flag. */
+  readonly nLate: number;
 }
 
 export interface StoredRollup extends Rollup {
@@ -117,7 +121,8 @@ export class MemoryStore implements Store, Reader {
       return this.stored.delete(key);
     }
     if (existing?.unit === rollup.unit && existing.n === rollup.n && existing.min === rollup.min &&
-        existing.median === rollup.median && existing.max === rollup.max) {
+        existing.median === rollup.median && existing.max === rollup.max &&
+        existing.nArtifact === rollup.nArtifact && existing.nLate === rollup.nLate) {
       return false;
     }
     this.stored.set(key, { ...rollup, revision: (existing?.revision ?? 0) + 1, updatedAtMs: this.clock() });

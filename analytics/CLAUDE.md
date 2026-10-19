@@ -14,5 +14,6 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - Sleep logic is pure (`src/sleep.ts`); a contract sleep stage that module does not classify must fail the test, not be miscounted.
 - The API is loopback-only, TLS-only, GET-only and authenticates (signature, issuer, audience `poc-analytics`, role `clinician-reader`) before any routing. Widening the listener or the audience is a decision, not a convenience; document it in the root CLAUDE.md first.
 - The API description `api/openapi.json` is a contract: `test/api.test.ts` checks every response against it and the route list. Change both together.
+- Flag counts (M19) are read from the stored `meta.tag` only, using the contract's system and codes; never infer a flag from a value, and keep the bands inclusive of flagged samples (the counts say how many). A column added to the store goes in `sql/10-schema.sql` as an idempotent `ALTER`.
 - Milestones: M9-M11
 - Commit prefix: `analytics:`

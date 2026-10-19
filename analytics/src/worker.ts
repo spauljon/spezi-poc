@@ -224,12 +224,15 @@ export class RollupWorker {
       `Observation?${subjectParam(window.patientId)}` +
       `&${codeParam(contract.loincSystem, [metric.loincCode])}` +
       `&date=ge${window.day}T00:00:00Z&date=lt${nextDay(window.day)}T00:00:00Z` +
-      `&_count=${this.pageSize}&_elements=subject,code,effectiveDateTime,effectivePeriod,valueQuantity`;
+      `&_count=${this.pageSize}&_elements=meta,subject,code,effectiveDateTime,effectivePeriod,valueQuantity`;
 
     // Local re-checks matter: the server's `date` search on a period matches any overlap, and the unit and the day
     // are ours to enforce, not HAPI's.
     const seen = new Set<string>();
     const values: number[] = [];
+    let nArtifact = 0;
+    let nLate = 0;
+    const { flags } = contract;
     for await (const obs of fhir.search(path)) {
       if (seen.has(obs.id)) {
         continue;
@@ -248,11 +251,25 @@ export class RollupWorker {
         continue;
       }
       values.push(q.value);
+      // Flags are only ever READ from the stored tag (never inferred from the value): the system and codes are the contract's.
+      for (const tag of obs.meta?.tag ?? []) {
+        if (tag.system !== flags.system) {
+          continue;
+        }
+        if (tag.code === flags.artifactSuspected) {
+          nArtifact++;
+        } else if (tag.code === flags.lateArrival) {
+          nLate++;
+        }
+      }
     }
     const summary = summarize(values);
     return store.applyRollup(
       window,
-      summary && { ...window, unit: metric.ucum, n: summary.n, min: summary.min, median: summary.median, max: summary.max },
+      summary && {
+        ...window, unit: metric.ucum, n: summary.n, min: summary.min, median: summary.median, max: summary.max,
+        nArtifact, nLate,
+      },
     );
   }
 }
