@@ -1,0 +1,277 @@
+{
+  "contractVersion": "1.4.0",
+  "cases": [
+    {
+      "name": "heartRate-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 125.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "heartRate-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 30
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "heartRate-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 220
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "heartRate-just-below-min",
+      "note": "Just below the lower bound: artifact-suspected.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 29.9
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "heartRate-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 220.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "restingHeartRate-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 90.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "restingHeartRate-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 30
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "restingHeartRate-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 150
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "restingHeartRate-just-below-min",
+      "note": "Just below the lower bound: artifact-suspected.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 29.9
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "restingHeartRate-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 150.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "hrvSdnn-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "hrvSdnn",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 202.5
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "hrvSdnn-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "hrvSdnn",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 5
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "hrvSdnn-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "hrvSdnn",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 400
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "hrvSdnn-just-below-min",
+      "note": "Just below the lower bound: artifact-suspected.",
+      "input": {
+        "metric": "hrvSdnn",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 4.9
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "hrvSdnn-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "hrvSdnn",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 400.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "late-just-under-24h",
+      "note": "Issued 23 h 59 min 59 s after the end: not late.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-16T16:30:04Z",
+        "value": 70
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "late-exactly-24h",
+      "note": "Exactly 24 h after the end: not late (strictly more is late).",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-16T16:30:05Z",
+        "value": 70
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "late-just-over-24h",
+      "note": "One second over 24 h: late-arrival.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-16T16:30:06Z",
+        "value": 70
+      },
+      "expectedFlags": [
+        "late-arrival"
+      ]
+    },
+    {
+      "name": "late-uses-the-period-end",
+      "note": "A period is measured from its END, not its start.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-16T08:00:00Z",
+        "issued": "2026-01-17T07:59:59Z",
+        "value": 58
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "issued-before-end-is-not-late",
+      "note": "A day-long period issued before it ends (as the synthetic source does) is never late.",
+      "input": {
+        "metric": "restingHeartRate",
+        "end": "2026-01-16T08:00:00Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 58
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "artifact-and-late-together",
+      "note": "Both flags, listed in ascending code order.",
+      "input": {
+        "metric": "heartRate",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-20T00:00:00Z",
+        "value": 280
+      },
+      "expectedFlags": [
+        "artifact-suspected",
+        "late-arrival"
+      ]
+    },
+    {
+      "name": "sleep-is-never-an-artifact",
+      "note": "A sleep interval has no plausibleRange.",
+      "input": {
+        "metric": "sleepStage",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "stage": "asleepCore"
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "sleep-can-be-late",
+      "note": "Lateness applies to every metric.",
+      "input": {
+        "metric": "sleepStage",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-20T00:00:00Z",
+        "stage": "asleepCore"
+      },
+      "expectedFlags": [
+        "late-arrival"
+      ]
+    }
+  ]
+}

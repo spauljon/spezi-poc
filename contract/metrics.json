@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.3.0",
+  "contractVersion": "1.4.0",
   "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
   "fhirVersion": "4.0.1",
   "verification": {
@@ -32,12 +32,19 @@
     "lateArrival": "late-arrival",
     "userEntered": "user-entered"
   },
+  "qualityThresholds": {
+    "lateArrivalHours": 24
+  },
   "categories": {
     "vital-signs": { "code": "vital-signs", "display": "Vital Signs" },
     "activity": { "code": "activity", "display": "Activity" }
   },
   "rules": {
     "userEntered": "A sample that its source says was entered by hand (HealthKit: metadata HKMetadataKeyWasUserEntered true) carries meta.tag with system systems.dataQualityFlag and code dataQualityFlags.userEntered; any other sample carries no tag. It is provenance, not a defect: the value is stored and drawn as it is.",
+    "artifactSuspected": "A quantity sample whose value is strictly below the metric's plausibleRange.min or strictly above its plausibleRange.max carries meta.tag with system systems.dataQualityFlag and code dataQualityFlags.artifactSuspected. The value is stored exactly as given: never dropped, never altered. A value exactly on a bound is not flagged. A metric without a plausibleRange (sleep) is never flagged.",
+    "lateArrival": "A sample whose issued time is strictly more than qualityThresholds.lateArrivalHours after its effective end (effectiveDateTime, or effectivePeriod.end) carries meta.tag with code dataQualityFlags.lateArrival. Exactly at the threshold is not late. Data backfilled after a long offline period is late; that is true, not an error.",
+    "duplicateResolved": "A sample that the capture queue received more than once while the first copy was still waiting to upload carries meta.tag with code dataQualityFlags.duplicateResolved (one Observation results). A duplicate that arrives after the sample was already uploaded is absorbed by the server's conditional create and cannot be flagged: the capture role may not update (A31).",
+    "tagOrder": "meta.tag entries are listed in ascending order of code, so the same sample always serializes the same way.",
     "status": "final",
     "identifierValue": {
       "synthetic": "as given",
@@ -69,6 +76,7 @@
       "category": "vital-signs",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierHeartRate",
+      "plausibleRange": { "min": 30, "max": 220 },
       "claimsProfile": null
     },
     {
@@ -79,6 +87,7 @@
       "category": "vital-signs",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierRestingHeartRate",
+      "plausibleRange": { "min": 30, "max": 150 },
       "claimsProfile": null
     },
     {
@@ -89,6 +98,7 @@
       "category": "vital-signs",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+      "plausibleRange": { "min": 5, "max": 400 },
       "claimsProfile": null
     },
     {
@@ -117,7 +127,10 @@
     "A14": "Fraction rule (3 digits when non-zero) and the half-up 2-decimal sleep duration are choices of this contract, not of FHIR.",
     "A15": "Device.version entries carry only value and type.text ('hardware' or 'software'); no code system is invented for version types.",
     "A16": "HealthKit sample UUIDs are lowercased for identifier.value so that identity does not depend on which API produced the string.",
-    "A17": "Zero is rejected for every metric; no plausibility ranges are applied in v1 (artifact flagging is a later milestone).",
-    "A30": "Data-quality flags are Coding entries in Observation.meta.tag (FHIR data model A8) in the project-defined system systems.dataQualityFlag; the codes are dataQualityFlags. The system is this project's own, so there is no external terminology to verify it against. Ingest writes only user-entered (a provenance note: the value was typed in by hand); artifact-suspected, duplicate-resolved and late-arrival are written by nothing yet (M19). A reader displays a flag when it is present and never infers one (M15)."
+    "A17": "Zero is rejected for every metric. Plausibility ranges (plausibleRange) are not used to reject anything: an implausible value is stored as given and flagged (A32).",
+    "A30": "Data-quality flags are Coding entries in Observation.meta.tag (FHIR data model A8) in the project-defined system systems.dataQualityFlag; the codes are dataQualityFlags. The system is this project's own, so there is no external terminology to verify it against. The capture app writes all four at ingest (user-entered, artifact-suspected, late-arrival, duplicate-resolved) by the rules in rules; nothing else writes a flag, and a reader displays a flag when it is present and never infers one (M15).",
+    "A31": "Flags are written by the capture app only. The capture role cannot update an Observation, so a flag can only describe what the app knew when it first sent the sample: a duplicate that arrives after upload cannot be flagged, and a later correction of a flag is not possible. Flags written by a different client (or none) are possible; consumers must treat absence of a flag as unknown, not as verified-good.",
+    "A32": "plausibleRange minimum and maximum (heart rate 30 to 220 per minute, resting heart rate 30 to 150 per minute, HRV SDNN 5 to 400 ms) are clinical judgments chosen to catch only values that are implausible for a living person, not unusual ones; they are not from a standard. A flag is a suspicion, never a verdict.",
+    "A33": "lateArrival compares issued (the app's production time, stamped when the sample is mapped) with the sample's effective end. It does not use server receipt time, so a sample held in the offline queue is measured from when it was mapped, not from when it was uploaded."
   }
 }

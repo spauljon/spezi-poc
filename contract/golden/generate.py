@@ -24,6 +24,9 @@ CONTRACT = json.load(open(os.path.join(HERE, "..", "metrics.json")))
 SYS = CONTRACT["systems"]
 PATIENT = "example-patient"
 SYN_DEVICE_REF = "Device/example-synthetic-device"
+# The sample fields that become meta.tag entries (contract dataQualityFlags). userEntered is provenance; the other
+# three are quality flags the capture app evaluates (contract rules.artifactSuspected / lateArrival / duplicateResolved).
+FLAG_KEYS = ("userEntered", "artifactSuspected", "duplicateResolved", "lateArrival")
 
 
 def utc(s):
@@ -71,32 +74,37 @@ def observation(m, sample, code, display, value, unit, patient, device_ref):
         o["effectiveDateTime"] = fmt(start, tz)
     else:
         o["effectivePeriod"] = {"start": fmt(start, tz), "end": fmt(end, tz)}
-    if sample.get("userEntered"):
-        # provenance, not a defect (contract rules.userEntered): the value is stored as given
-        o["meta"]["tag"] = [{"system": SYS["dataQualityFlag"], "code": CONTRACT["dataQualityFlags"]["userEntered"]}]
+    codes = sorted(CONTRACT["dataQualityFlags"][key] for key in FLAG_KEYS if sample.get(key))
+    if codes:
+        # contract rules.tagOrder: ascending by code. Every flag is stored alongside the value, never instead of it.
+        o["meta"]["tag"] = [{"system": SYS["dataQualityFlag"], "code": code} for code in codes]
     if device_ref:
         o["device"] = {"reference": device_ref}
     return o
 
 
 def quantity_case(name, note, metric_id, value, start, end, issued="2026-01-15T16:31:00Z", tz="America/Los_Angeles",
-                  source="synthetic", sid="syn-000001", device_ref=SYN_DEVICE_REF, user_entered=False):
+                  source="synthetic", sid="syn-000001", device_ref=SYN_DEVICE_REF, user_entered=False, flags=()):
     m = metric(metric_id)
     sample = {"metric": metric_id, "value": value, "start": start, "end": end, "issued": issued, "timeZone": tz,
               "source": source, "id": sid}
     if user_entered:
         sample["userEntered"] = True
+    for key in flags:
+        sample[key] = True
     return {"name": name, "note": note, "patientId": PATIENT, "deviceReference": device_ref, "sample": sample,
             "expected": observation(m, sample, m["loinc"]["code"], m["loinc"]["display"], number(value), m["unit"], PATIENT, device_ref)}
 
 
 def sleep_case(name, note, stage, start, end, issued="2026-01-15T17:55:00Z", tz="America/Los_Angeles",
-               source="synthetic", sid="syn-sleep-0001", device_ref=SYN_DEVICE_REF, user_entered=False):
+               source="synthetic", sid="syn-sleep-0001", device_ref=SYN_DEVICE_REF, user_entered=False, flags=()):
     m = metric("sleepStage")
     sample = {"metric": "sleepStage", "stage": stage, "start": start, "end": end, "issued": issued, "timeZone": tz,
               "source": source, "id": sid}
     if user_entered:
         sample["userEntered"] = True
+    for key in flags:
+        sample[key] = True
     case = {"name": name, "note": note, "patientId": PATIENT, "deviceReference": device_ref, "sample": sample}
     if stage in m["unmapped"]:
         case["expectedOutcome"] = "unmapped"
@@ -161,6 +169,57 @@ def device_cases():
     ]
 
 
+def evaluate_flags(metric_id, value, end, issued):
+    """The quality flags the capture app must set for a sample (contract rules.artifactSuspected and rules.lateArrival).
+    duplicateResolved and userEntered are not decided by the sample's own values, so they are not here."""
+    flags = []
+    m = metric(metric_id)
+    bounds = m.get("plausibleRange")
+    if bounds is not None and value is not None and (value < bounds["min"] or value > bounds["max"]):
+        flags.append(CONTRACT["dataQualityFlags"]["artifactSuspected"])
+    late_seconds = CONTRACT["qualityThresholds"]["lateArrivalHours"] * 3600
+    if (utc(issued) - utc(end)).total_seconds() > late_seconds:
+        flags.append(CONTRACT["dataQualityFlags"]["lateArrival"])
+    return sorted(flags)
+
+
+def flag_case(name, note, metric_id, value, end, issued="2026-01-15T16:31:00Z"):
+    sample = {"metric": metric_id, "end": end, "issued": issued}
+    if value is not None:
+        sample["value"] = value
+    else:
+        sample["stage"] = "asleepCore"
+    return {"name": name, "note": note, "input": sample, "expectedFlags": evaluate_flags(metric_id, value, end, issued)}
+
+
+def flag_cases():
+    t = "2026-01-15T16:30:05Z"
+    cases = []
+    for mid in ("heartRate", "restingHeartRate", "hrvSdnn"):
+        r = metric(mid)["plausibleRange"]
+        lo, hi = r["min"], r["max"]
+        cases += [
+            flag_case("%s-inside" % mid, "Well inside the range: no flag.", mid, (lo + hi) / 2, t),
+            flag_case("%s-at-min-not-flagged" % mid, "Exactly on the lower bound is not flagged.", mid, lo, t),
+            flag_case("%s-at-max-not-flagged" % mid, "Exactly on the upper bound is not flagged.", mid, hi, t),
+            flag_case("%s-just-below-min" % mid, "Just below the lower bound: artifact-suspected.", mid, lo - 0.1, t),
+            flag_case("%s-just-above-max" % mid, "Just above the upper bound: artifact-suspected.", mid, hi + 0.1, t),
+        ]
+    cases += [
+        flag_case("late-just-under-24h", "Issued 23 h 59 min 59 s after the end: not late.", "heartRate", 70, t, issued="2026-01-16T16:30:04Z"),
+        flag_case("late-exactly-24h", "Exactly 24 h after the end: not late (strictly more is late).", "heartRate", 70, t, issued="2026-01-16T16:30:05Z"),
+        flag_case("late-just-over-24h", "One second over 24 h: late-arrival.", "heartRate", 70, t, issued="2026-01-16T16:30:06Z"),
+        flag_case("late-uses-the-period-end", "A period is measured from its END, not its start.", "restingHeartRate", 58,
+                  "2026-01-16T08:00:00Z", issued="2026-01-17T07:59:59Z"),
+        flag_case("issued-before-end-is-not-late", "A day-long period issued before it ends (as the synthetic source does) is never late.",
+                  "restingHeartRate", 58, "2026-01-16T08:00:00Z", issued="2026-01-15T16:31:00Z"),
+        flag_case("artifact-and-late-together", "Both flags, listed in ascending code order.", "heartRate", 280, t, issued="2026-01-20T00:00:00Z"),
+        flag_case("sleep-is-never-an-artifact", "A sleep interval has no plausibleRange.", "sleepStage", None, t),
+        flag_case("sleep-can-be-late", "Lateness applies to every metric.", "sleepStage", None, t, issued="2026-01-20T00:00:00Z"),
+    ]
+    return cases
+
+
 def build():
     la = "America/Los_Angeles"
     quantity = [
@@ -180,6 +239,18 @@ def build():
         quantity_case("heart-rate-healthkit-user-entered", "Typed in by hand in Apple Health: stored as given, tagged user-entered; "
                       "a hand entry has no device.", "heartRate", 80, "2026-01-15T16:30:00Z", "2026-01-15T16:30:00Z",
                       source="healthKit", sid="A1B2C3D4-0000-4000-8000-000000000001", device_ref=None, user_entered=True),
+        quantity_case("heart-rate-artifact-above-range", "An implausible spike is stored as given and tagged artifact-suspected.", "heartRate", 280,
+                      "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", sid="syn-000003", flags=("artifactSuspected",)),
+        quantity_case("heart-rate-late-arrival", "Received long after it was measured: tagged late-arrival.", "heartRate", 70,
+                      "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", issued="2026-01-18T00:00:00Z", sid="syn-000004", flags=("lateArrival",)),
+        quantity_case("heart-rate-duplicate-resolved", "Two deliveries met in the queue before upload: one Observation, tagged duplicate-resolved.",
+                      "heartRate", 70, "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", sid="syn-000005", flags=("duplicateResolved",)),
+        quantity_case("heart-rate-all-flags-sorted", "Every flag at once: tags in ascending code order, and the value untouched.", "heartRate", 281.5,
+                      "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", issued="2026-01-18T00:00:00Z", source="healthKit",
+                      sid="A1B2C3D4-0000-4000-8000-000000000003", device_ref=None, user_entered=True,
+                      flags=("lateArrival", "duplicateResolved", "artifactSuspected")),
+        quantity_case("hrv-sdnn-artifact-below-range", "HRV below its range: tagged.", "hrvSdnn", 3,
+                      "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", sid="syn-hrv-0002", flags=("artifactSuspected",)),
         quantity_case("resting-heart-rate-day-period", "Resting HR over a local day: LOINC 40443-4 and a period.", "restingHeartRate", 58,
                       "2026-01-15T08:00:00Z", "2026-01-16T08:00:00Z", sid="syn-rest-0001"),
         quantity_case("hrv-sdnn-instant", "HRV SDNN: LOINC 112429-6, UCUM ms.", "hrvSdnn", 48.3,
@@ -206,6 +277,8 @@ def build():
         sleep_case("sleep-user-entered", "A sleep interval entered by hand: the same tag, the same duration rule.", "asleepCore",
                    "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", source="healthKit", sid="A1B2C3D4-0000-4000-8000-000000000002",
                    device_ref=None, user_entered=True),
+        sleep_case("sleep-late-arrival", "A sleep interval can be late too.", "asleepDeep", "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z",
+                   issued="2026-01-18T00:00:00Z", sid="syn-sleep-0011", flags=("lateArrival",)),
         sleep_case("sleep-in-bed-is-unmapped", "inBed has no verified code: no Observation, and not an error.", "inBed", "2026-01-15T09:10:00Z", "2026-01-15T09:52:00Z", sid="syn-sleep-0006"),
         sleep_case("sleep-half-minute", "30 s is 0.5 min.", "asleepCore", "2026-01-15T09:10:00Z", "2026-01-15T09:10:30Z", sid="syn-sleep-0007"),
         sleep_case("sleep-one-second-rounds-half-up", "1 s is 0.01666... min, rounded to 0.02.", "asleepCore", "2026-01-15T09:10:00Z", "2026-01-15T09:10:01Z", sid="syn-sleep-0008"),
@@ -236,6 +309,7 @@ def build():
         "observations-sleep.json": {"contractVersion": CONTRACT["contractVersion"], "cases": sleep},
         "errors.json": {"contractVersion": CONTRACT["contractVersion"], "cases": errors},
         "devices.json": {"contractVersion": CONTRACT["contractVersion"], "cases": device_cases()},
+        "flags.json": {"contractVersion": CONTRACT["contractVersion"], "cases": flag_cases()},
     }
 
 
