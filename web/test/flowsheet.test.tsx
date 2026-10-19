@@ -221,4 +221,33 @@ describe("flowsheet", () => {
     expect(rowsText()).toHaveLength(25);
     expect(screen.getByText("Page 1 of 160")).toBeTruthy();
   });
+
+  it("shows each row's stored flags in words, 'none stored' when there are none, and never flags a value by how it looks", async () => {
+    const f = contract.dataQualityFlag;
+    const t = (n: number) => new Date(Date.parse(day(0)) + n * 60_000).toISOString();
+    const make = (n: number, value: number, tags: Array<{ system: string; code: string }> | undefined) => {
+      const o = obs("heartRate", value, t(n), t(n));
+      o.id = `flag-${n}`;
+      if (tags) o.meta = { ...o.meta, tag: tags };
+      return o;
+    };
+    mount([
+      make(0, 300, undefined), // absurd and unflagged: no flag appears
+      make(1, 72, [{ system: f.system, code: f.lateArrival }]),
+      make(2, 281, [{ system: f.system, code: f.artifactSuspected }, { system: f.system, code: f.lateArrival }]),
+      make(3, 70, [{ system: "http://example.org/other", code: f.artifactSuspected }]), // not our system: not a flag
+      make(4, 70, [{ system: f.system, code: "brand-new" }]),
+    ]);
+    await screen.findByText("Rows 1 to 5 of 5");
+    const byValue = (needle: string) => rowsText().find((r) => r.includes(needle)) ?? "";
+    expect(byValue("300")).toContain("none stored");
+    expect(byValue("300")).not.toMatch(/artifact suspected|late arrival/);
+    expect(byValue("72")).toContain("late arrival");
+    expect(byValue("281")).toContain("artifact suspected, late arrival");
+    const others = rowsText().filter((r) => r.includes("none stored"));
+    expect(others.length).toBe(2); // the absurd one and the other-system one
+    expect(rowsText().some((r) => r.includes('unrecognised flag "brand-new"'))).toBe(true);
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toContain("Flags");
+  });
 });
+

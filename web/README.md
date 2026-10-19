@@ -1,5 +1,7 @@
 # Clinician web app
 
+Operating the stack (start, logs, updating a service, resets, failures): [docs/runbooks/operations.md](../docs/runbooks/operations.md).
+
 React and TypeScript, built with Vite. M12 built the scaffold, sign-in and the patient banner; the flowsheet, trend,
 intraday and sleep views follow (M13 to M16; M14 trends is built). Planned in [docs/implementation-plan.md](../docs/implementation-plan.md).
 
@@ -267,6 +269,13 @@ on every field for all three, and the live test holds the web to it too.
 - **S9 Nothing polls.** *Refresh* re-reads; a night in progress is not updated.
 - **S10 The page lists what HAPI returned for the session's window,** excluding an interval that merely touches it
   (HAPI matches overlapping periods, so such an interval is returned and discarded here; there is a test).
+
+## What M19 adds: data-quality flags and an accessibility audit
+
+- **Flowsheet:** a **Flags** column with each Observation's stored flags in words (artifact suspected, late arrival, duplicate resolved, entered by hand), or *none stored*. A value is **never flagged by how it looks**; *none stored* does not mean checked (contract A31). A tag in another system, or an unknown code, is shown as unrecognised, never hidden.
+- **Trends:** each day carries the analytic API's counts of flagged values. A visible paragraph says how many values on how many days are flagged as suspected artifacts or late, and that **the range shown includes them**; the table twin has *Flagged* and *Late* columns; the arrow-key readout adds them for the day. The paragraph is its own element (the chart's text summary does not repeat it, so it is announced once). A band with missing, negative or fractional counts, or more flagged than samples, is refused as a malformed answer, not drawn.
+- **One helper** (`src/flags.ts`) reads flags from a resource's tags and words them; the intraday view uses it too.
+- **Accessibility audit** (`test/a11y-audit.ts`, no package): names for every control and tab-focusable element, table captions and header scopes, heading order, unique ids, nothing focusable inside `aria-hidden`, images with alt. Each rule has a positive control (a defect it must find, and the same markup repaired). It runs on the trends and flowsheet pages. **Not covered:** contrast, focus order on a real screen, a screen reader, and the intraday, sleep and banner pages (not yet audited). Those need a real browser and an interactive sign-in, which was not done.
 
 ## Data set switch (M17)
 

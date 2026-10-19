@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  PRESETS, TrendShapeError, buildChartData, compareMetrics, daysBetween, missingRanges, parseBands, presetRange,
+  PRESETS, TrendShapeError, buildChartData, compareMetrics, daysBetween, flagNotice, missingRanges, parseBands, presetRange,
   summarize, todayUtc, validateRange, type BandsResponse,
 } from "../src/trends/model.ts";
 import { buildPlot, daySplits, tickLabel, withAlpha } from "../src/trends/plot.ts";
@@ -9,7 +9,8 @@ const completeness = (over: object = {}) => ({
   requestedDays: 5, daysWithData: 3, missingDays: ["2026-10-02", "2026-10-04"], pendingWindows: 0,
   lastComputedAt: "2026-10-05T10:00:00.000Z", workerWatermark: "2026-10-05T10:00:10.000Z", generatedAt: "2026-10-05T10:00:20.000Z", ...over,
 });
-const band = (day: string, n = 1440, min = 50, median = 65, max = 120) => ({ day, n, min, median, max, revision: 1 });
+const band = (day: string, n = 1440, min = 50, median = 65, max = 120, artifactSuspected = 0, lateArrival = 0) =>
+  ({ day, n, min, median, max, artifactSuspected, lateArrival, revision: 1 });
 const raw = (over: object = {}) => ({
   patientId: "42",
   metric: { id: "heartRate", display: "Heart rate", unit: "/min" },
@@ -217,5 +218,54 @@ describe("the analytic service's metrics against the contract", () => {
     expect(compareMetrics([...api, { id: "steps", display: "Steps", unit: "{count}" }], contract)).toEqual([
       { id: "steps", problem: expect.stringMatching(/does not know/) },
     ]);
+  });
+});
+
+
+describe("data-quality flag counts", () => {
+  it("are read from the answer, kept per day, and shown as null on a day with no data", () => {
+    const r = parseBands(raw({ bands: [band("2026-10-01", 100, 50, 65, 120, 2, 5), band("2026-10-03"), band("2026-10-05", 10, 50, 65, 120, 0, 1)] }));
+    expect(r.bands.map((b) => [b.artifactSuspected, b.lateArrival])).toEqual([[2, 5], [0, 0], [0, 1]]);
+    const data = buildChartData(r);
+    expect(data.artifact).toEqual([2, null, 0, null, 0]);
+    expect(data.late).toEqual([5, null, 0, null, 1]);
+  });
+
+  it.each([
+    ["a missing count", { day: "2026-10-01", n: 3, min: 1, median: 2, max: 3, lateArrival: 0, revision: 1 }],
+    ["a negative count", band("2026-10-01", 3, 1, 2, 3, -1, 0)],
+    ["a fractional count", band("2026-10-01", 3, 1, 2, 3, 0, 1.5)],
+    ["more flagged samples than samples", band("2026-10-01", 3, 1, 2, 3, 4, 0)],
+  ])("a band with %s is refused, not drawn", (_name, bad) => {
+    expect(() => parseBands(raw({ bands: [bad] }))).toThrow(TrendShapeError);
+    // the control: the same band with sane counts is accepted
+    expect(() => parseBands(raw({ bands: [band("2026-10-01", 3, 1, 2, 3, 1, 1)] }))).not.toThrow();
+  });
+});
+
+describe("flagNotice", () => {
+  const data = (artifact: Array<number | null>, late: Array<number | null>) => ({ days: artifact.map((_, i) => `d${i}`), artifact, late });
+
+  it("is null when nothing was flagged, so a quiet range says nothing", () => {
+    expect(flagNotice(data([0, null, 0], [0, null, 0]))).toBeNull();
+  });
+
+  it("counts values and days, and says the range still includes them", () => {
+    const notice = flagNotice(data([2, 0, 1], [0, 0, 0]));
+    expect(notice).toContain("3 values on 2 days flagged as suspected artifacts");
+    expect(notice).toContain("included in the range shown");
+    expect(notice).not.toMatch(/late/);
+  });
+
+  it("says one value on one day in the singular, and mentions late arrivals separately", () => {
+    expect(flagNotice(data([1], [0]))).toContain("1 value on 1 day flagged as suspected artifacts");
+    expect(flagNotice(data([0], [4]))).toContain("4 samples on 1 day flagged as late arrivals");
+  });
+
+  it("the chart's text summary does not repeat it: the notice is its own paragraph, announced once", () => {
+    const metric = { id: "heartRate", display: "Heart rate", unit: "/min" };
+    const flagged = buildChartData(parseBands(raw({ bands: [band("2026-10-01", 100, 50, 65, 120, 2, 0), band("2026-10-03"), band("2026-10-05")] })));
+    expect(summarize(metric, flagged, "2026-10-01", "2026-10-05")).not.toContain("flagged");
+    expect(flagNotice(flagged)).toContain("flagged as suspected artifacts");
   });
 });

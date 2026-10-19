@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import type { WebConfig } from "../config.ts";
 import type { WebContract } from "../contract.ts";
 import { explainError, type Explained } from "../explain.ts";
 import { FhirClient } from "../fhir/client.ts";
 import type { Observation } from "../fhir/types.ts";
+import { flagLabel } from "../flags.ts";
 import { formatInstantUtc, formatValue } from "../format.ts";
 import {
   OBSERVATION_STATUSES, PAGE_SIZES, SORT_COLUMNS, buildSearch, defaultQuery, flowMetrics, validateQuery,
@@ -157,12 +158,15 @@ export function Flowsheet({ config, contract, patientId }: { config: WebConfig; 
                   </th>
                 ))}
                 <th scope="col">Source</th>
-                {SORT_COLUMNS.slice(3).map((c) => (
-                  <th key={c} scope="col" aria-sort={ariaSort(c)}>
-                    <button type="button" className="sort" onClick={() => sortBy(c)}>
-                      {HEADERS[c]} <span aria-hidden="true">{ariaSort(c) === "ascending" ? "▲" : ariaSort(c) === "descending" ? "▼" : "↕"}</span>
-                    </button>
-                  </th>
+                {SORT_COLUMNS.slice(3).map((c, i) => (
+                  <Fragment key={c}>
+                    <th scope="col" aria-sort={ariaSort(c)}>
+                      <button type="button" className="sort" onClick={() => sortBy(c)}>
+                        {HEADERS[c]} <span aria-hidden="true">{ariaSort(c) === "ascending" ? "▲" : ariaSort(c) === "descending" ? "▼" : "↕"}</span>
+                      </button>
+                    </th>
+                    {i === 0 && <th scope="col">Flags</th>}
+                  </Fragment>
                 ))}
               </tr>
             </thead>
@@ -182,6 +186,11 @@ export function Flowsheet({ config, contract, patientId }: { config: WebConfig; 
                   <td>
                     {r.status === "final" ? r.status : <strong><span aria-hidden="true">⚑ </span>{r.status}</strong>}
                   </td>
+                  <td>
+                    {r.flags.length === 0
+                      ? <span className="muted">none stored</span>
+                      : <strong><span aria-hidden="true">⚠ </span>{r.flags.map((code) => flagLabel(contract, code)).join(", ")}</strong>}
+                  </td>
                   <td>{r.received ? <time dateTime={r.received}>{formatInstantUtc(r.received)}</time> : "unknown"}</td>
                 </tr>
               ))}
@@ -197,7 +206,7 @@ export function Flowsheet({ config, contract, patientId }: { config: WebConfig; 
           <button type="button" disabled={query.page + 1 >= pages} onClick={() => setQuery((q) => ({ ...q, page: q.page + 1 }))}>Next</button>
         </nav>
       )}
-      <p className="muted small">Times are UTC. Status other than final is flagged, never hidden. Source can be filtered but not sorted (the server does not order it reliably).</p>
+      <p className="muted small">Times are UTC. Status other than final is flagged, never hidden. Flags are the data-quality tags the capture app stored with each value. A cell that says none stored does not mean the value was checked, and a value is never flagged here by how it looks. Source can be filtered but not sorted (the server does not order it reliably).</p>
     </section>
   );
 }

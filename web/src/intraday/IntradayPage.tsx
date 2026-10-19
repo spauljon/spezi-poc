@@ -1,3 +1,4 @@
+import { flagLabel as labelFlag } from "../flags.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider.tsx";
 import type { WebConfig } from "../config.ts";
@@ -76,14 +77,7 @@ export function IntradayPage({ config, contract, patientId, day, metric, range, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.fhirBase, accessToken, patientId, contract, day, metrics, reloads]);
 
-  const flagLabel = useCallback((code: string) => {
-    const f = contract.dataQualityFlag;
-    if (code === f.artifactSuspected) return "artifact suspected";
-    if (code === f.duplicateResolved) return "duplicate resolved";
-    if (code === f.lateArrival) return "late arrival";
-    if (code === f.userEntered) return "entered by hand, not measured by a device";
-    return `unrecognised flag "${code}"`;
-  }, [contract]);
+  const flagLabel = useCallback((code: string) => labelFlag(contract, code), [contract])
 
   const day0 = { start: bounds.start, end: bounds.end };
   const whole = isWholeDay(view, day0);

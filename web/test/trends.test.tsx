@@ -271,4 +271,27 @@ describe("reading a day without a pointer", () => {
     unmount();
     expect(FakeUPlot.instances.every((p) => p.destroyed)).toBe(true);
   });
+
+  it("says in words when a day holds values flagged as suspected artifacts, and counts them in the table", async () => {
+    const flagged = { ...data, heartRate: data.heartRate!.map((r, i) => (i === 0 ? { ...r, artifactSuspected: 3, lateArrival: 1 } : r)) };
+    mount({ analytics: flagged });
+    await waitFor(() => expect(charts()).toHaveLength(contract.quantityMetrics.length));
+    const card = chartFor("Heart rate");
+    await waitFor(() => expect(within(card).getByText(/flagged as suspected artifacts/)).toBeTruthy());
+    expect(card.querySelector(".trend-flags")?.textContent).toContain("3 values on 1 day flagged as suspected artifacts");
+    expect(card.querySelector(".trend-flags")?.textContent).toContain("1 sample on 1 day flagged as late arrivals");
+    const headers = within(card).getAllByRole("columnheader", { hidden: true }).map((h) => h.textContent);
+    expect(headers).toContain("Flagged");
+    expect(headers).toContain("Late");
+    // the other charts have no flags and say nothing (the control)
+    expect(chartFor("Heart rate variability SDNN [Time]").querySelector(".trend-flags")).toBeNull();
+  });
+
+  it("a range with no flags has no data-quality notice at all", async () => {
+    mount();
+    await waitFor(() => expect(charts()).toHaveLength(contract.quantityMetrics.length));
+    await waitFor(() => expect(within(chartFor("Heart rate")).getAllByRole("columnheader", { hidden: true }).length).toBeGreaterThan(0));
+    expect(document.querySelector(".trend-flags")).toBeNull();
+  });
 });
+

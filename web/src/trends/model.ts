@@ -14,6 +14,10 @@ export interface Band {
   readonly min: number;
   readonly median: number;
   readonly max: number;
+  /** How many of the day's samples carry the stored artifact-suspected flag (the min, median and max include them). */
+  readonly artifactSuspected: number;
+  /** How many carry the stored late-arrival flag. */
+  readonly lateArrival: number;
   readonly revision: number;
 }
 
@@ -51,11 +55,14 @@ export class TrendShapeError extends Error {
 }
 
 /** What a band looks like before it is validated. */
-interface RawBand { day: unknown; n: unknown; min: unknown; median: unknown; max: unknown; revision: unknown }
+interface RawBand {
+  day: unknown; n: unknown; min: unknown; median: unknown; max: unknown; artifactSuspected: unknown; lateArrival: unknown; revision: unknown;
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const count = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
 
 /**
  * Validates an API answer rather than casting it: a response that is not the documented shape is an error the user
@@ -79,9 +86,18 @@ export function parseBands(raw: unknown): BandsResponse {
     if (!isDay(b.day) || !finite(b.n) || !finite(b.min) || !finite(b.median) || !finite(b.max) || !finite(b.revision)) {
       throw new TrendShapeError("a band is malformed.");
     }
+    if (!count(b.artifactSuspected) || !count(b.lateArrival)) {
+      throw new TrendShapeError("a band's flag counts are missing or not whole numbers.");
+    }
+    if (b.artifactSuspected > b.n || b.lateArrival > b.n) {
+      throw new TrendShapeError("a band counts more flagged samples than samples.");
+    }
     if (b.day < from || b.day > to) throw new TrendShapeError("a band lies outside the requested range.");
     if (b.min > b.median || b.median > b.max) throw new TrendShapeError("a band is out of order (lowest, median, highest).");
-    return { day: b.day, n: b.n, min: b.min, median: b.median, max: b.max, revision: b.revision };
+    return {
+      day: b.day, n: b.n, min: b.min, median: b.median, max: b.max,
+      artifactSuspected: b.artifactSuspected, lateArrival: b.lateArrival, revision: b.revision,
+    };
   });
   const days = parsed.map((b) => b.day);
   if (new Set(days).size !== days.length) throw new TrendShapeError("a day appears twice.");
@@ -154,6 +170,9 @@ export interface ChartData {
   readonly min: ReadonlyArray<number | null>;
   readonly median: ReadonlyArray<number | null>;
   readonly max: ReadonlyArray<number | null>;
+  /** Per day: samples flagged as suspected artifacts, and samples flagged late (`null` on a day with no data). */
+  readonly artifact: ReadonlyArray<number | null>;
+  readonly late: ReadonlyArray<number | null>;
   /** Indices of days with data whose neighbours both have none: a line has nothing to join, so they need a marker. */
   readonly isolated: readonly number[];
   readonly missing: readonly string[];
@@ -180,6 +199,8 @@ export function buildChartData(response: Pick<BandsResponse, "from" | "to" | "ba
     min: pick((b) => b.min),
     median,
     max: pick((b) => b.max),
+    artifact: pick((b) => b.artifactSuspected),
+    late: pick((b) => b.lateArrival),
     isolated,
     missing: days.filter((d) => !byDay.has(d)),
     pointsOnly: present.length > 0 && present.every((b) => b.n === 1),
@@ -212,6 +233,25 @@ export function missingRanges(missing: readonly string[]): string[] {
 const fmt = (v: number): string => String(Math.round(v * 10) / 10);
 export const formatValue = fmt;
 
+/**
+ * One sentence on stored data-quality flags in the range, or `null` when none were stored. It says what the range
+ * includes: a flag is a suspicion that travels with the value, and the min, median and max still contain it.
+ */
+export function flagNotice(data: Pick<ChartData, "artifact" | "late" | "days">): string | null {
+  const artifactDays = data.artifact.filter((v) => v !== null && v > 0).length;
+  const lateDays = data.late.filter((v) => v !== null && v > 0).length;
+  const parts: string[] = [];
+  if (artifactDays > 0) {
+    const total = data.artifact.reduce<number>((a, v) => a + (v ?? 0), 0);
+    parts.push(`${total} ${total === 1 ? "value" : "values"} on ${artifactDays} ${artifactDays === 1 ? "day" : "days"} flagged as suspected artifacts (included in the range shown)`);
+  }
+  if (lateDays > 0) {
+    const total = data.late.reduce<number>((a, v) => a + (v ?? 0), 0);
+    parts.push(`${total} ${total === 1 ? "sample" : "samples"} on ${lateDays} ${lateDays === 1 ? "day" : "days"} flagged as late arrivals`);
+  }
+  return parts.length === 0 ? null : `${parts.join("; ")}.`;
+}
+
 /** The screen-reader text for a chart: what is plotted, the range, the extremes, and what is missing, in words. */
 export function summarize(metric: MetricInfo, data: ChartData, from: string, to: string): string {
   const withData = data.days.length - data.missing.length;
@@ -237,6 +277,7 @@ export function summarize(metric: MetricInfo, data: ChartData, from: string, to:
   } else {
     parts.push("Every day has data.");
   }
+  // data-quality flags are announced once, by their own paragraph (`flagNotice`), not repeated here
   return parts.join(" ");
 }
 

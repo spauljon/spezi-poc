@@ -116,6 +116,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .trend-key.slot-5 { background: var(--viz-5); } .trend-key.slot-6 { background: var(--viz-6); }
 .trend-key.slot-7 { background: var(--viz-7); } .trend-key.slot-8 { background: var(--viz-8); }
 .trend-summary { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
+.trend-flags { font-size: 0.85rem; margin: 0 0 0.5rem; border-left: 4px solid var(--accent); padding-left: 0.5rem; }
 .trend-plot { min-height: 190px; border-radius: 6px; }
 .trend-plot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .trend-readout { min-height: 1.4em; margin: 0.4rem 0; font-variant-numeric: tabular-nums; }

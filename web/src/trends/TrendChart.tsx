@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { formatValue, summarize, type ChartData, type MetricInfo } from "./model.ts";
+import { flagNotice, formatValue, summarize, type ChartData, type MetricInfo } from "./model.ts";
 import { loadChartLibrary } from "./library.ts";
 import { buildPlot, dayAt, type ChartTheme } from "./plot.ts";
 
@@ -45,6 +45,16 @@ function useColourScheme(): string {
   return scheme;
 }
 
+/** ", of which 2 flagged as suspected artifacts and 1 late" for one day, or nothing. */
+function flagsOf(data: ChartData, i: number): string {
+  const bits: string[] = [];
+  const artifact = data.artifact[i] ?? 0;
+  const late = data.late[i] ?? 0;
+  if (artifact > 0) bits.push(`${artifact} flagged as suspected ${artifact === 1 ? "artifact" : "artifacts"}`);
+  if (late > 0) bits.push(`${late} flagged late`);
+  return bits.length === 0 ? "" : `, of which ${bits.join(" and ")}`;
+}
+
 export function TrendChart({ metric, data, from, to, slot, drillHref, busy = false }: TrendChartProps) {
   const headingId = useId();
   const plotRef = useRef<HTMLDivElement>(null);
@@ -54,6 +64,7 @@ export function TrendChart({ metric, data, from, to, slot, drillHref, busy = fal
   const [drawFailed, setDrawFailed] = useState(false);
   const scheme = useColourScheme();
   const summary = useMemo(() => summarize(metric, data, from, to), [metric, data, from, to]);
+  const notice = useMemo(() => flagNotice(data), [data]);
 
   useEffect(() => {
     const host = plotRef.current;
@@ -128,6 +139,7 @@ export function TrendChart({ metric, data, from, to, slot, drillHref, busy = fal
         {metric.display} <span className="unit">({metric.unit})</span>
       </h3>
       <p className="trend-summary">{summary}</p>
+      {notice && <p className="trend-flags"><span aria-hidden="true">⚠ </span><strong>Data quality:</strong> {notice}</p>}
       <div
         className="trend-plot"
         tabIndex={0}
@@ -148,21 +160,21 @@ export function TrendChart({ metric, data, from, to, slot, drillHref, busy = fal
             ? `${day}: no data (a gap, not an estimate).`
             : data.pointsOnly
               ? `${day}: ${formatValue(med)} ${metric.unit}.`
-              : `${day}: median ${formatValue(med)}, range ${formatValue(data.min[idx]!)} to ${formatValue(data.max[idx]!)} ${metric.unit}, from ${data.n[idx]} samples.`}
+              : `${day}: median ${formatValue(med)}, range ${formatValue(data.min[idx]!)} to ${formatValue(data.max[idx]!)} ${metric.unit}, from ${data.n[idx]} samples${flagsOf(data, idx)}.`}
       </p>
       <details className="trend-table">
         <summary>Table view</summary>
         <table className="values">
           <caption className="sr-only">{`${metric.display} by UTC day`}</caption>
           <thead>
-            <tr><th scope="col">Day (UTC)</th><th scope="col">Samples</th><th scope="col">Min</th><th scope="col">Median</th><th scope="col">Max</th><th scope="col">Intraday</th></tr>
+            <tr><th scope="col">Day (UTC)</th><th scope="col">Samples</th><th scope="col">Min</th><th scope="col">Median</th><th scope="col">Max</th><th scope="col">Flagged</th><th scope="col">Late</th><th scope="col">Intraday</th></tr>
           </thead>
           <tbody>
             {data.days.map((d, i) => {
               const m = data.median[i];
               if (m === null || m === undefined) {
                 return (
-                  <tr key={d} className="no-data"><th scope="row">{d}</th><td colSpan={5}>No data</td></tr>
+                  <tr key={d} className="no-data"><th scope="row">{d}</th><td colSpan={7}>No data</td></tr>
                 );
               }
               return (
@@ -172,6 +184,8 @@ export function TrendChart({ metric, data, from, to, slot, drillHref, busy = fal
                   <td className="num">{formatValue(data.min[i]!)}</td>
                   <td className="num">{formatValue(m)}</td>
                   <td className="num">{formatValue(data.max[i]!)}</td>
+                  <td className="num">{data.artifact[i]! > 0 ? <strong><span aria-hidden="true">⚠ </span>{data.artifact[i]}</strong> : data.artifact[i]}</td>
+                  <td className="num">{data.late[i]}</td>
                   <td><a href={drillHref(d)}>Intraday</a></td>
                 </tr>
               );

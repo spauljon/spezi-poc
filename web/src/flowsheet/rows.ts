@@ -2,6 +2,7 @@ import type { SourceKind } from "../banner/model.ts";
 import { sourceKind } from "../banner/model.ts";
 import type { WebContract } from "../contract.ts";
 import type { Observation } from "../fhir/types.ts";
+import { qualityFlagsOf } from "../flags.ts";
 import { flowMetrics } from "./query.ts";
 
 export interface FlowRow {
@@ -19,6 +20,8 @@ export interface FlowRow {
   readonly unitMismatch: string | null;
   readonly source: SourceKind;
   readonly status: string;
+  /** The data-quality flags the Observation stored (contract flag system), in stored order. Empty means none stored. */
+  readonly flags: readonly string[];
   readonly received: string | null;
 }
 
@@ -39,6 +42,7 @@ export function toRow(o: Observation, contract: WebContract): FlowRow {
     unitMismatch: metric && ownUnit !== "" && ownUnit !== metric.unit ? ownUnit : null,
     source: sourceKind(o.meta, contract),
     status: o.status ?? "unknown",
+    flags: qualityFlagsOf(o.meta, contract),
     received: o.meta?.lastUpdated ?? null,
   };
 }

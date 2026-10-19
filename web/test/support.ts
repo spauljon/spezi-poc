@@ -63,7 +63,9 @@ export function sleepObs(code: string, lastUpdated: string): Observation {
 }
 
 /** One day of a metric as the analytic API serves it. */
-export interface BandRow { day: string; n: number; min: number; median: number; max: number; revision?: number }
+export interface BandRow {
+  day: string; n: number; min: number; median: number; max: number; artifactSuspected?: number; lateArrival?: number; revision?: number;
+}
 
 const DAYMS = 86_400_000;
 const eachDay = (from: string, to: string): string[] => {
@@ -129,7 +131,7 @@ export function analyticsAnswer(
     from,
     to,
     dayDefinition: "UTC calendar day of the sample's instant",
-    bands: rows.map((r) => ({ revision: 1, ...r })),
+    bands: rows.map((r) => ({ artifactSuspected: 0, lateArrival: 0, revision: 1, ...r })),
     completeness: {
       requestedDays: days.length,
       daysWithData: rows.length,
