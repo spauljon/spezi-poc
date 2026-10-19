@@ -65,6 +65,11 @@ struct TemplateApplication: App {
             .environment(simulator)
             .environment(sync)
             .environment(source)
+            // Signing in resumes an upload that was blocked on it: nothing else would wake the engine (found in M20 on a
+            // phone that had queued 1,677 samples while the certificate was untrusted).
+            .onChange(of: auth.state) { _, state in
+                if case .signedIn = state { sync.userSignedIn() }
+            }
             .testingSetup()
             .spezi(appDelegate)
         }

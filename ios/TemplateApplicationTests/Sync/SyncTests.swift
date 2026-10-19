@@ -509,3 +509,80 @@ struct QueueDuplicateFlagTests {
         #expect(!decoded.artifactSuspected && !decoded.lateArrival && !decoded.duplicateResolved && !decoded.userEntered)
     }
 }
+
+
+
+// MARK: - signing in resumes a blocked upload
+
+/// A token source whose answer the test changes: signed out until told otherwise.
+private final class SignInSwitch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var on = false
+    var isSignedIn: Bool {
+        get { lock.withLock { on } }
+        set { lock.withLock { on = newValue } }
+    }
+}
+
+@Suite("Signing in resumes the upload")
+@MainActor
+struct SignInResumeTests {
+    private func eventually(_ condition: () -> Bool) async throws {
+        for _ in 0..<150 where !condition() {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+    
+    private func isolatedDefaults() -> UserDefaults {
+        let name = "signin-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+    
+    @Test("blocked on sign-in, the queue stays put when only the token appears, and uploads once the sign-in is announced")
+    func resumes() async throws {
+        let session = SignInSwitch()
+        let h = try await harness(token: { () async throws(AuthError) -> String in
+            guard session.isSignedIn else { throw .signedOut }
+            return "tok"
+        })
+        _ = try await h.queue.enqueue(items(5))
+        let model = SyncModel(queue: h.queue, engine: h.engine, debounce: 0, monitorNetwork: false, defaults: isolatedDefaults())
+        
+        try await eventually { model.status.phase == .blocked(.signInRequired) }
+        #expect(model.status.phase == .blocked(.signInRequired))
+        #expect(model.status.counts.pending == 5 && model.status.counts.sent == 0)
+        
+        // the control: a token that merely becomes available wakes nothing (this is the defect being fixed)
+        session.isSignedIn = true
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(model.status.counts.sent == 0 && model.status.phase == .blocked(.signInRequired), "nothing wakes the engine by itself")
+        
+        model.userSignedIn()
+        try await eventually { model.status.counts.sent == 5 }
+        #expect(model.status.counts.sent == 5 && model.status.counts.pending == 0)
+        #expect(model.status.phase == .idle)
+    }
+    
+    @Test("signing in also clears a backoff that was running")
+    func clearsBackoff() async throws {
+        let session = SignInSwitch()
+        session.isSignedIn = true
+        let h = try await harness(token: { () async throws(AuthError) -> String in "tok" })
+        await h.server.configure(failNetwork: 1)
+        _ = try await h.queue.enqueue(items(3))
+        let model = SyncModel(queue: h.queue, engine: h.engine, debounce: 0, monitorNetwork: false, defaults: isolatedDefaults())
+        try await eventually {
+            if case .waiting = model.status.phase { return true }
+            return false
+        }
+        guard case .waiting = model.status.phase else {
+            Issue.record("expected the engine to be backing off after a network failure")
+            return
+        }
+        model.userSignedIn()
+        try await eventually { model.status.counts.sent == 3 }
+        #expect(model.status.counts.sent == 3, "the retry happened now, not after the backoff")
+    }
+}

@@ -112,6 +112,13 @@ final class SyncModel {
         flagger?.applied(to: sample) ?? sample
     }
     
+    /// The user signed in. An upload that was blocked on "Sign in required" has nothing else that would wake it (a new
+    /// sample, the network returning and the backoff timer are the other triggers), so the queue would sit there with a
+    /// stale state until one of them happened. Wake it now, and let anything that was waiting out a backoff go too.
+    func userSignedIn() {
+        syncNow()
+    }
+    
     /// "Sync now": retry everything immediately, including items waiting out a backoff.
     func syncNow() {
         Task {
