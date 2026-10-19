@@ -1,5 +1,7 @@
 # POC Oracle (db/)
 
+Operating the stack (start, logs, updating a service, resets, failures): [docs/runbooks/operations.md](../docs/runbooks/operations.md).
+
 The POC's own Oracle Database Free container (`container-registry.oracle.com/database/free:23.26.0.0-arm64`), independent of the governance project's Oracle. One container database with three pluggable databases:
 
 | PDB            | Schema owner (no login) | Application user | Purpose                                              |
