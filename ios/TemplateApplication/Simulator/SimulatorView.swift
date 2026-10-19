@@ -18,6 +18,13 @@ struct SimulatorView: View {
     private static let speedChoices: [(String, Double)] = [("Real time", 1), ("60x", 60), ("600x", 600), ("3600x", 3600)]
     private static let startChoices: [(String, Int)] = [("Now", 0), ("1 day ago", 1), ("7 days ago", 7), ("14 days ago", 14), ("30 days ago", 30)]
     
+    /// The app flags a sample as a late arrival only beyond the contract's threshold (24 h at the time of writing), so the
+    /// stepper says so: a delay below it is not flagged.
+    private var lateSuffix: String {
+        guard let hours = (try? MetricRegistry.load())?.qualityThresholds.lateArrivalHours else { return "" }
+        return " (flagged after \(Int(hours)) h)"
+    }
+    
     var body: some View {
         @Bindable var model = model
         
@@ -37,7 +44,7 @@ struct SimulatorView: View {
                 if let preset = model.preset {
                     Text(preset.summary)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.readableSecondary)
                 }
             } header: {
                 Text("Scenario")
@@ -57,13 +64,13 @@ struct SimulatorView: View {
                 Stepper("Gaps per day: \(Int(model.config.gaps.perDay))", value: $model.config.gaps.perDay, in: 0...12, step: 1)
                 Stepper("Gap length: \(Int(model.config.gaps.meanMinutes)) min", value: $model.config.gaps.meanMinutes, in: 0...180, step: 5)
                 LabeledSlider(title: "Late samples", value: $model.config.late.fraction, range: 0...1, format: "%.0f%%", scale: 100)
-                Stepper("Late by up to \(Int(model.config.late.maxDelay / 3600)) h", value: Binding(
+                Stepper("Late by up to \(Int(model.config.late.maxDelay / 3600)) h\(lateSuffix)", value: Binding(
                     get: { model.config.late.maxDelay / 3600 },
                     set: {
                         model.config.late.maxDelay = $0 * 3600
                         model.config.late.minDelay = min(model.config.late.minDelay, $0 * 3600)
                     }
-                ), in: 0...24, step: 1)
+                ), in: 0...72, step: 1)
                 LabeledSlider(title: "Duplicates", value: $model.config.duplicateFraction, range: 0...0.5, format: "%.0f%%", scale: 100)
                 LabeledSlider(title: "Artifacts", value: $model.config.artifactFraction, range: 0...0.2, format: "%.0f%%", scale: 100)
             }
@@ -109,7 +116,7 @@ struct SimulatorView: View {
             Section("Latest samples") {
                 if model.recent.isEmpty {
                     Text("Nothing emitted yet.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.readableSecondary)
                 }
                 ForEach(model.recent) { sample in
                     VStack(alignment: .leading, spacing: 2) {
@@ -120,7 +127,7 @@ struct SimulatorView: View {
                         }
                         Text(sample.measured)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.readableSecondary)
                         if !sample.badges.isEmpty {
                             // Text, not colour alone: the anomaly is named.
                             Text(sample.badges.joined(separator: ", "))
@@ -155,7 +162,7 @@ private struct LabeledSlider: View {
                 Text(title)
                 Spacer()
                 Text(String(format: format, value * scale))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.readableSecondary)
             }
             Slider(value: $value, in: range)
                 .accessibilityLabel(title)

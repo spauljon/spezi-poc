@@ -38,9 +38,10 @@ final class OnboardingTests: XCTestCase {
         // Source selection: synthetic is selected; Apple Health exists but cannot be chosen.
         XCTAssertTrue(app.staticTexts["Data source"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Synthetic"].exists || app.staticTexts["Synthetic"].exists)
-        let appleHealth = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Apple Health'")).firstMatch
-        XCTAssertTrue(appleHealth.exists)
-        XCTAssertFalse(appleHealth.isEnabled)
+        // An unavailable choice is text with its reason, not a dimmed button: it exists, and it cannot be tapped as a control.
+        let appleHealthText = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Apple Health'")).firstMatch
+        XCTAssertTrue(appleHealthText.exists)
+        XCTAssertFalse(app.buttons.containing(NSPredicate(format: "label CONTAINS 'Apple Health'")).firstMatch.exists)
         app.buttons["Continue"].tap()
         
         // Home.

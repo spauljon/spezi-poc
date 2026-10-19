@@ -38,6 +38,9 @@ trap 'rm -rf "$dd"' EXIT
 
 only=(-only-testing:TemplateApplicationTests)
 $ui && only+=(-only-testing:TemplateApplicationUITests)
+# POC_IOS_ONLY narrows a run while iterating, for example POC_IOS_ONLY=TemplateApplicationUITests/AccessibilityTests (the script still
+# fails if that matched nothing).
+[ -n "${POC_IOS_ONLY:-}" ] && only=(-only-testing:"$POC_IOS_ONLY")
 
 echo "ios: testing on simulator $dest ($($ui && echo 'unit + UI' || echo 'unit'))"
 cd "$root/ios"
@@ -67,7 +70,15 @@ while kill -0 "$pid" 2> /dev/null; do
   if [ "$now" != "$last" ]; then last=$now; quiet=0; else quiet=$((quiet + 5)); fi
   # The run is over once xcodebuild prints its verdict, or Swift Testing its run summary (xcodebuild can then fail to
   # exit after a failed test); give it a short grace period, then stop it.
-  if grep -q -E '\*\* TEST (SUCCEEDED|FAILED) \*\*|Test run with [0-9]+ tests? in [0-9]+ suites? (passed|failed)' "$log" && [ "$quiet" -ge 20 ]; then
+  # Swift Testing's summary is NOT the end of a run that also has UI tests: they run after it and are quiet while they
+  # drive the app, so stopping on it silently cut a UI test off (found in M19: 3 of 4 UI tests ran). With UI tests, wait
+  # for xcodebuild's own verdict; the summary is only a sign of completion for a unit-test-only run.
+  if $ui; then
+    done_pattern='\*\* TEST (SUCCEEDED|FAILED) \*\*'
+  else
+    done_pattern='\*\* TEST (SUCCEEDED|FAILED) \*\*|Test run with [0-9]+ tests? in [0-9]+ suites? (passed|failed)'
+  fi
+  if grep -q -E "$done_pattern" "$log" && [ "$quiet" -ge 20 ]; then
     kill "$pid" 2> /dev/null || true; break
   fi
   if [ "$quiet" -ge "$stall" ]; then
@@ -93,6 +104,13 @@ swift_testing=$(echo "$out" | grep -E 'Test run with [0-9]+ tests? .*passed' | t
 n_swift=$(echo "$swift_testing" | sed -E 's/.*Test run with ([0-9]+) tests?.*/\1/')
 case "$n_swift" in ''|*[!0-9]*) n_swift=0 ;; esac
 n_xctest=$({ echo "$out" | grep -E "Test Case .* passed" || true; } | wc -l | tr -d ' ')
+if [ -n "${POC_IOS_ONLY:-}" ]; then
+  # A narrowed run: it passes only if the filter matched at least one test of either kind.
+  if [ $((n_swift + n_xctest)) -lt 1 ]; then echo "ios: FAILED: POC_IOS_ONLY=$POC_IOS_ONLY matched no tests" >&2; exit 1; fi
+  n_skipped=$({ echo "$out" | grep -E "Test Case .* skipped" || true; } | wc -l | tr -d ' ')
+  echo "ios: narrowed run ($POC_IOS_ONLY): $n_swift unit tests and $n_xctest UI test(s) passed, $n_skipped skipped"
+  exit 0
+fi
 if [ "$n_swift" -lt 1 ]; then echo "ios: FAILED: no Swift Testing unit tests ran (check the filter)" >&2; exit 1; fi
 if $ui && [ "$n_xctest" -lt 1 ]; then echo "ios: FAILED: no UI tests ran" >&2; exit 1; fi
 n_skipped=$({ echo "$out" | grep -E "Test Case .* skipped" || true; } | wc -l | tr -d ' ')

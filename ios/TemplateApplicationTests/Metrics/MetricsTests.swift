@@ -79,7 +79,10 @@ private func sample(from object: [String: Any]) throws -> MetricSample {
         timeZone: try #require(TimeZone(identifier: zoneName), "unknown time zone \(zoneName)"),
         source: try #require(SampleSource(rawValue: sourceName), "unknown source \(sourceName)"),
         id: try field("id", in: object),
-        userEntered: (object["userEntered"] as? Bool) ?? false
+        userEntered: (object["userEntered"] as? Bool) ?? false,
+        artifactSuspected: (object["artifactSuspected"] as? Bool) ?? false,
+        lateArrival: (object["lateArrival"] as? Bool) ?? false,
+        duplicateResolved: (object["duplicateResolved"] as? Bool) ?? false
     )
 }
 

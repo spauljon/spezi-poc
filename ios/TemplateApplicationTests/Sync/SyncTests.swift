@@ -453,3 +453,59 @@ private actor Counter {
         return "synthetic-token-\(n)"
     }
 }
+
+
+// MARK: - duplicates that meet in the queue
+
+@Suite("Queue: a duplicate is flagged on the copy that is still waiting")
+struct QueueDuplicateFlagTests {
+    private func pendingItem(_ queue: SampleQueue) async throws -> QueuedItem {
+        let batch = try await queue.nextBatch(limit: 10, now: .distantFuture)
+        return try #require(batch.first?.item)
+    }
+    
+    @Test("a second delivery while the first is pending marks the surviving copy duplicate-resolved, once")
+    func flagsPendingCopy() async throws {
+        let queue = try SampleQueue(path: nil)
+        let first = try await queue.enqueue([heartRate("dup-1")])
+        #expect(first.added == 1 && first.known == 0)
+        #expect(try await pendingItem(queue).sample.duplicateResolved == false, "the control: one delivery is not a duplicate")
+        
+        let second = try await queue.enqueue([heartRate("dup-1")])
+        #expect(second.added == 0 && second.known == 1, "still one row")
+        #expect(try await pendingItem(queue).sample.duplicateResolved)
+        
+        // a third delivery changes nothing more
+        _ = try await queue.enqueue([heartRate("dup-1")])
+        let batch = try await queue.nextBatch(limit: 10, now: .distantFuture)
+        #expect(batch.count == 1 && batch[0].item.sample.duplicateResolved)
+    }
+    
+    @Test("a duplicate that arrives after the first copy was uploaded changes nothing (it cannot be flagged)")
+    func afterUploadNothingChanges() async throws {
+        let queue = try SampleQueue(path: nil)
+        let item = heartRate("dup-2")
+        _ = try await queue.enqueue([item])
+        try await queue.markSent([item.key])
+        let again = try await queue.enqueue([heartRate("dup-2")])
+        #expect(again.added == 0 && again.known == 1)
+        #expect(try await queue.nextBatch(limit: 10, now: .distantFuture).isEmpty, "the sent row stays sent")
+    }
+    
+    @Test("only the duplicated sample is flagged, not its neighbours")
+    func neighboursUntouched() async throws {
+        let queue = try SampleQueue(path: nil)
+        _ = try await queue.enqueue([heartRate("a", at: 0), heartRate("b", at: 5)])
+        _ = try await queue.enqueue([heartRate("b", at: 5)])
+        let batch = try await queue.nextBatch(limit: 10, now: .distantFuture)
+        let flags = Dictionary(uniqueKeysWithValues: batch.map { ($0.item.sample.id, $0.item.sample.duplicateResolved) })
+        #expect(flags == ["a": false, "b": true])
+    }
+    
+    @Test("a queued row written before the flags existed still decodes, with every flag false")
+    func oldRowsDecode() throws {
+        let old = #"{"measurement":{"quantity":{"_0":"heartRate","_1":72}},"start":0,"end":0,"issued":0,"timeZone":{"identifier":"UTC"},"source":"synthetic","id":"old"}"#
+        let decoded = try JSONDecoder().decode(MetricSample.self, from: Data(old.utf8))
+        #expect(!decoded.artifactSuspected && !decoded.lateArrival && !decoded.duplicateResolved && !decoded.userEntered)
+    }
+}

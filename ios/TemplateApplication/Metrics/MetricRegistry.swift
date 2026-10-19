@@ -46,6 +46,24 @@ struct MetricRegistry: Sendable {
         let unmapped: [String]?
         /// The HealthKit identifier this metric is read from (for example `HKQuantityTypeIdentifierHeartRate`).
         let healthKit: String?
+        /// Values strictly outside this range are flagged `artifact-suspected` (never dropped). Sleep has none.
+        let plausibleRange: PlausibleRange?
+    }
+    
+    /// The bounds of a plausible value for a metric (contract `plausibleRange`; a clinical judgment, assumption A32).
+    struct PlausibleRange: Decodable, Equatable, Sendable {
+        let lower: Double
+        let upper: Double
+        
+        private enum CodingKeys: String, CodingKey {
+            case lower = "min"
+            case upper = "max"
+        }
+    }
+    
+    struct QualityThresholds: Decodable, Equatable, Sendable {
+        /// A sample issued more than this many hours after it ended is `late-arrival`.
+        let lateArrivalHours: Double
     }
     
     struct Systems: Decodable, Equatable, Sendable {
@@ -82,6 +100,7 @@ struct MetricRegistry: Sendable {
         let categories: [String: Coding]
         let deviceKey: DeviceKey
         let dataQualityFlags: [String: String]
+        let qualityThresholds: QualityThresholds
         let metrics: [Metric]
     }
     
@@ -92,6 +111,7 @@ struct MetricRegistry: Sendable {
     let deviceKey: DeviceKey
     /// The flag codes by name (`artifactSuspected`, `userEntered`, ...).
     let dataQualityFlags: [String: String]
+    let qualityThresholds: QualityThresholds
     private let metricsByID: [String: Metric]
     
     
@@ -129,10 +149,19 @@ struct MetricRegistry: Sendable {
         systems = file.systems
         categories = file.categories
         deviceKey = file.deviceKey
-        guard file.dataQualityFlags["userEntered"] != nil else {
-            throw .inconsistent("contract has no userEntered data-quality flag (contract 1.3.0 or later is required)")
+        for key in ["userEntered", "artifactSuspected", "duplicateResolved", "lateArrival"] where file.dataQualityFlags[key] == nil {
+            throw .inconsistent("contract has no \(key) data-quality flag (contract 1.4.0 or later is required)")
+        }
+        guard file.qualityThresholds.lateArrivalHours > 0 else {
+            throw .inconsistent("lateArrivalHours must be positive")
+        }
+        for id in MetricID.allCases {
+            if let range = byID[id.rawValue]?.plausibleRange, !(range.lower < range.upper) {
+                throw .inconsistent("\(id.rawValue): plausibleRange must have min below max")
+            }
         }
         dataQualityFlags = file.dataQualityFlags
+        qualityThresholds = file.qualityThresholds
         metricsByID = byID
     }
     

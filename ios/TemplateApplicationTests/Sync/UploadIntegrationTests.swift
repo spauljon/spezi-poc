@@ -116,6 +116,77 @@ struct UploadIntegrationTests {
                             patientSystem: server.registry.systems.identifier.patient))
     }
     
+    /// The generator's injected faults, through the app's own flagger, queue and upload, read back from HAPI: every
+    /// stored tag must be exactly what ground truth says. This is the end-to-end check for data-quality flags.
+    @Test func injectedFaultsAreFlaggedOnTheServerExactlyAsGroundTruthSays() async throws {
+        let server = try await connect()
+        let patient = try await server.patientID()
+        let tag = String(UUID().uuidString.prefix(8)).lowercased()
+        let start = Date(timeIntervalSince1970: Double(Int.random(in: 978_307_200..<1_420_070_400) / 3600 * 3600))
+        
+        var config = SyntheticConfig()
+        config.seed = UInt64.random(in: 1..<UInt64.max)
+        config.metrics = [.heartRate, .hrv]
+        config.heartRateCadence = 60
+        config.artifactFraction = 0.1
+        config.duplicateFraction = 0.1
+        config.late = .init(fraction: 0.3, minDelay: 3600, maxDelay: 40 * 3600)
+        let emissions = SyntheticGenerator(config: config).emissions(deliveredIn: start..<start.addingTimeInterval(2 * 3600))
+        #expect(emissions.count > 100)
+        
+        // ids are made unique to this run, so no other run's data can be mistaken for this one's
+        func runID(_ id: String) -> String { "\(id)-\(tag)" }
+        var occurrences: [String: Int] = [:]
+        for emission in emissions { occurrences[runID(emission.sample.id), default: 0] += 1 }
+        
+        // a read-back window wide enough for samples measured up to 40 h before delivery; it must be empty to begin with
+        let low = start.addingTimeInterval(-3 * 86_400), high = start.addingTimeInterval(3 * 3600)
+        #expect(try await server.count(patient: patient, from: low, to: high) == 0, "the window must be free (the control)")
+        
+        let flagger = QualityFlagger(registry: server.registry)
+        let items = emissions.map { emission -> QueuedItem in
+            var sample = emission.sample
+            sample.id = runID(sample.id)
+            return QueuedItem(sample: flagger.applied(to: sample), device: .synthetic)
+        }
+        let queue = try SampleQueue(path: nil)
+        _ = try await queue.enqueue(items)   // one transaction: a duplicate meets its still-pending first copy
+        let outcome = await engine(server, queue: queue).drain()
+        #expect(outcome.phase == .idle && outcome.counts.pending == 0 && outcome.counts.rejected == 0)
+        
+        // read back what the server stored: the tags per identifier
+        let formatter = ISO8601DateFormatter()
+        let search = "Observation?subject=Patient/\(patient)&date=ge\(formatter.string(from: low))&date=lt\(formatter.string(from: high))"
+            + "&_elements=identifier,meta&_count=1000"
+        let bundle = try await server.get(search)
+        var stored: [String: [String]] = [:]
+        for entry in bundle["entry"] as? [[String: Any]] ?? [] {
+            guard let resource = entry["resource"] as? [String: Any],
+                  let identifier = (resource["identifier"] as? [[String: Any]])?.first?["value"] as? String else { continue }
+            let tags = ((resource["meta"] as? [String: Any])?["tag"] as? [[String: Any]] ?? [])
+                .filter { $0["system"] as? String == server.registry.systems.dataQualityFlag }
+                .compactMap { $0["code"] as? String }
+            stored[identifier] = tags
+        }
+        #expect(stored.count == occurrences.count, "one Observation per distinct sample")
+        
+        let code = { (key: String) in server.registry.dataQualityFlags[key] ?? "?" }
+        var artifacts = 0, late = 0, duplicates = 0
+        var seen = Set<String>()
+        for emission in emissions {
+            let id = runID(emission.sample.id)
+            guard seen.insert(id).inserted else { continue }
+            var expected: [String] = []
+            if emission.injected.contains(.artifact) { expected.append(code("artifactSuspected")); artifacts += 1 }
+            if (occurrences[id] ?? 0) > 1 { expected.append(code("duplicateResolved")); duplicates += 1 }
+            if emission.sample.issued.timeIntervalSince(emission.sample.end) > 24 * 3600 { expected.append(code("lateArrival")); late += 1 }
+            #expect(stored[id]?.sorted() == expected.sorted(), "\(emission.sample.id): server has \(stored[id] ?? []), ground truth says \(expected)")
+        }
+        // the run must have exercised every kind, or "all matched" would be vacuous
+        #expect(artifacts > 0 && late > 0 && duplicates > 0, "artifacts \(artifacts), late \(late), duplicates \(duplicates)")
+        #expect(stored.values.contains { $0.isEmpty }, "and some samples carry no flag at all (the control)")
+    }
+    
     @Test func uploadsResendsAndSurvivesAnOutageWithoutDuplicates() async throws {
         let server = try await connect()
         let patient = try await server.patientID()

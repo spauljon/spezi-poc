@@ -156,6 +156,8 @@ create/read rules, so one disallowed entry refuses the whole Bundle); see `hapi/
 
 ### The simulator must trust the POC CA
 
+The full trust sequence for every device is in [docs/runbooks/tls-and-trust.md](../docs/runbooks/tls-and-trust.md).
+
 The simulator's keychain is its own, so it does not trust the POC CA until told to. Without that, sign-in fails with
 "The certificate for this server is invalid" (shown by the app; this is how the trust step was verified).
 
@@ -208,7 +210,7 @@ xcodebuild -project TemplateApplication.xcodeproj -scheme TemplateApplication \
   -destination 'generic/platform=iOS Simulator' -skipMacroValidation -skipPackagePluginValidation build
 ```
 
-From the repo root: `make test-ios` runs the 27 unit tests and `make test-ios-ui` adds the 2 UI tests
+From the repo root: `POC_IOS_ONLY=<target/suite>` narrows a run while iterating (for example `TemplateApplicationUITests/AccessibilityTests`); it still fails if nothing matched. `make test-ios` runs the 27 unit tests and `make test-ios-ui` adds the 2 UI tests
 ([scripts/ios-test.sh](../scripts/ios-test.sh): picks the first available iPhone simulator, or `$POC_IOS_SIMULATOR`;
 fails if no tests ran or xcodebuild stalls; reports skipped tests). It SKIPs loudly on a host without macOS and Xcode.
 
@@ -277,6 +279,35 @@ records.
 - **Device identity includes the software version** (M6 key rule): a watchOS update creates a new `Device`, so each measurement keeps the software it was taken with. This is a provenance choice; say if you would rather one Watch be one `Device`.
 - **Open finding (not changed):** a sample with no `HKDevice` takes its device name from the source app's name, but the `Device.deviceName` type is `model-name`. `other` (or `user-friendly-name`) would be more honest. It changes the contract (1.4.0, generator, golden, iOS and any consumer) so it is yours to decide.
 - **Entitlement evidence** (task 1): the signed build's entitlements and the embedded profile both include background delivery on a free profile (checked with `codesign` and the profile's contents), expiring 2026-10-21. That shows signing works; whether iOS actually wakes the app is what the device measurement shows.
+
+## Data-quality flags (M19)
+
+The app sets the four flags of the contract (`user-entered`, `artifact-suspected`, `late-arrival`, `duplicate-resolved`) as `Observation.meta.tag`, listed in ascending code order. A flag sits **beside** the value: nothing is dropped or altered.
+
+| Piece | What it does |
+|---|---|
+| `QualityFlagger` | Pure: reads `plausibleRange` per metric and `qualityThresholds.lateArrivalHours` from the contract. A value strictly outside its range is an artifact; `issued` strictly more than 24 h after the sample's end is late. Applied in `SyncModel` to **every** sample entering the queue, synthetic and HealthKit alike (never in a source). |
+| `SampleQueue.enqueue` | A second delivery that meets its first copy while that is still waiting marks the surviving copy `duplicate-resolved`, once. |
+| `ObservationMapper` | Emits the tags; the independent Python generator writes the expected ones (`golden/observations-*.json`, and `golden/flags.json` for the evaluation with both sides of every boundary). |
+
+Tested against the generator's **ground truth**: every injected artifact is flagged and nothing else is, late delivery beyond 24 h is flagged and shorter is not, a clean stream has no false positive; mutations of the two comparisons are caught by the golden boundary cases. On the live stack (`make test-ios-integration`) injected faults are uploaded through the real path and the **stored** tags equal ground truth exactly, with every kind present and unflagged samples as the control.
+
+### Assumptions made in M19 (review these)
+
+- **Plausible ranges are clinical judgments** (contract A32): heart rate 30 to 220, resting 30 to 150, HRV SDNN 5 to 400 ms. A flag is a suspicion, not a verdict.
+- **Late is measured from `issued`** (stamped when the app maps the sample), not from server receipt (A33). A first 7-day backfill is therefore flagged late, which is true: it was not available in near-real-time.
+- **A duplicate that arrives after the first copy was uploaded cannot be flagged** (A31): the capture role cannot update, and the server's conditional create absorbs it.
+- **Absence of a flag means none stored**, not "checked and good". Flags from another client are possible.
+- **The simulator's "Late by up to" now goes to 72 h** (it stopped at 24 h, so it could never produce a flagged late sample), and its label states the threshold ("flagged after 24 h"). A separate explanatory text was tried and removed: at the bottom edge of the audited view it measured as failed contrast whatever its colour. Presets are unchanged (tests rely on them), so the presets themselves never exceed 6 h.
+
+## Accessibility (M19)
+
+Checked with Xcode's built-in audit (no package), on the onboarding screens, Home and the simulator screen.
+
+- **Fixed:** the accent colour (iOS blue was borderline on white) is now a darker blue in light mode and a lighter one in dark mode (about 7:1 and 9:1); our own secondary text uses `Color.readableSecondary` (the primary colour at 72%) because iOS's `.secondary` is about 3.3:1 on white, under the 4.5:1 that small text needs; an unavailable data-source choice is **plain text with its reason** (`SourceRow`), no longer a dimmed button whose reason was the hardest thing on the screen to read.
+- **Remaining, and what it is:** the audit still reports a few borderline contrast results (the template's onboarding tiles and system list section headers, both drawn in iOS's own gray) and five Dynamic Type results on system-styled list rows. The audit gives **no element** for most of them, so those causes are inferred, not confirmed. The app sets **no fixed font size** anywhere (a test scans for it, with a positive control).
+- **`AccessibilityTests` is a ratchet:** a contrast result of "failed" is never accepted, and no screen may report more borderline results than its recorded baseline. A mutation (lowering the secondary text's opacity) was caught.
+- **Not done:** VoiceOver and Voice Control by hand, Dynamic Type at the largest sizes by eye, and any of it on a physical device.
 
 ## Launch arguments (UI tests and development)
 

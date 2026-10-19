@@ -140,7 +140,7 @@ struct ObservationMapper: Sendable {
         let issued = try format(sample.issued, in: sample.timeZone, alwaysMillis: true)
         
         return FHIRObservation(
-            meta: FHIRMeta(source: metaSource, tag: userEnteredTag(for: sample)),
+            meta: FHIRMeta(source: metaSource, tag: qualityTags(for: sample)),
             identifier: [FHIRIdentifier(system: identifierSystem, value: identifierValue)],
             status: "final",
             category: [FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.observationCategory, code: category.code, display: category.display)])],
@@ -154,12 +154,18 @@ struct ObservationMapper: Sendable {
         )
     }
     
-    /// Provenance only (contract rule `userEntered`): a hand entry is stored as given and says so.
-    private func userEnteredTag(for sample: MetricSample) -> [FHIRTag]? {
-        guard sample.userEntered, let code = registry.dataQualityFlags["userEntered"] else {
+    /// The flags a sample carries (contract rules `userEntered`, `artifactSuspected`, `lateArrival`, `duplicateResolved`),
+    /// listed in ascending order of code (rule `tagOrder`). A flag sits beside the value; it never replaces or alters it.
+    private func qualityTags(for sample: MetricSample) -> [FHIRTag]? {
+        let present: [(Bool, String)] = [
+            (sample.userEntered, "userEntered"), (sample.artifactSuspected, "artifactSuspected"),
+            (sample.duplicateResolved, "duplicateResolved"), (sample.lateArrival, "lateArrival"),
+        ]
+        let codes = present.compactMap { flag, key in flag ? registry.dataQualityFlags[key] : nil }.sorted()
+        guard !codes.isEmpty else {
             return nil
         }
-        return [FHIRTag(system: registry.systems.dataQualityFlag, code: code)]
+        return codes.map { FHIRTag(system: registry.systems.dataQualityFlag, code: $0) }
     }
     
     private func format(_ date: Date, in timeZone: TimeZone, alwaysMillis: Bool = false) throws(MappingError) -> String {

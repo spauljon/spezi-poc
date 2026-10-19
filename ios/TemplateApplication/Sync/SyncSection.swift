@@ -26,7 +26,7 @@ struct SyncSection: View {
                     .accessibilityIdentifier("syncLastAttempt")
                 Text(attempt.summary)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.readableSecondary)
                 if sync.attempts.count > 1 {
                     DisclosureGroup("Recent upload attempts (\(sync.attempts.count))") {
                         ForEach(Array(sync.attempts.enumerated()), id: \.offset) { _, entry in
@@ -35,7 +35,7 @@ struct SyncSection: View {
                                     .font(.footnote)
                                 Text(entry.summary)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.readableSecondary)
                             }
                         }
                     }
@@ -68,7 +68,7 @@ struct SyncSection: View {
             ForEach(Array(sync.rejections.enumerated()), id: \.offset) { _, rejection in
                 Text("\(rejection.key): \(rejection.reason)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.readableSecondary)
             }
             Toggle("Pause upload", isOn: $sync.isPaused)
                 .accessibilityIdentifier("syncPause")

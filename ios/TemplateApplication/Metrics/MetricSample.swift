@@ -64,11 +64,17 @@ struct MetricSample: Equatable, Codable, Sendable {
     /// The source says this value was typed in by hand (HealthKit: `HKMetadataKeyWasUserEntered`). Provenance, not a
     /// defect: it is stored as given and carries a `user-entered` tag (contract rule `userEntered`).
     var userEntered = false
+    /// The value is outside the metric's plausible range (contract rule `artifactSuspected`). Stored as given.
+    var artifactSuspected = false
+    /// Issued more than the contract's threshold after the sample ended (contract rule `lateArrival`).
+    var lateArrival = false
+    /// Two deliveries of this sample met in the queue before upload (contract rule `duplicateResolved`).
+    var duplicateResolved = false
 }
 
 
 extension MetricSample {
-    /// Rows already in the upload queue were written before `userEntered` existed: a missing key reads as `false`.
+    /// Rows already in the upload queue were written before the flags existed: a missing key reads as `false`.
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         measurement = try c.decode(Measurement.self, forKey: .measurement)
@@ -79,5 +85,8 @@ extension MetricSample {
         source = try c.decode(SampleSource.self, forKey: .source)
         id = try c.decode(String.self, forKey: .id)
         userEntered = try c.decodeIfPresent(Bool.self, forKey: .userEntered) ?? false
+        artifactSuspected = try c.decodeIfPresent(Bool.self, forKey: .artifactSuspected) ?? false
+        lateArrival = try c.decodeIfPresent(Bool.self, forKey: .lateArrival) ?? false
+        duplicateResolved = try c.decodeIfPresent(Bool.self, forKey: .duplicateResolved) ?? false
     }
 }

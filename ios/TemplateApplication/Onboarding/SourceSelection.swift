@@ -24,29 +24,15 @@ struct SourceSelection: View {
             Text("Data source")
                 .font(.largeTitle.bold())
             Text("Choose where measurements come from.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.readableSecondary)
             
             List(DataSource.allCases) { source in
-                Button {
+                SourceRow(
+                    title: source.title, detail: source.detail, isSelected: DataSource.effective(stored) == source,
+                    isEnabled: source.isAvailable
+                ) {
                     stored = source
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(source.title)
-                                .font(.headline)
-                            Text(source.detail)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if DataSource.effective(stored) == source {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.tint)
-                                .accessibilityLabel("Selected")
-                        }
-                    }
                 }
-                .disabled(!source.isAvailable)
             }
             .listStyle(.plain)
             

@@ -128,7 +128,11 @@ actor SampleQueue {
                 bind(statement, 1, text: item.key)
                 bind(statement, 2, blob: payload)
                 guard sqlite3_step(statement) == SQLITE_DONE else { throw QueueError.sql(message()) }
-                added += Int(sqlite3_changes(db))
+                if sqlite3_changes(db) > 0 {
+                    added += 1
+                } else {
+                    try flagDuplicate(key: item.key)
+                }
             }
             try exec("COMMIT")
         } catch {
@@ -136,6 +140,30 @@ actor SampleQueue {
             throw error
         }
         return (added, items.count - added)
+    }
+    
+    /// A second delivery met the first while it was still waiting: record that on the surviving copy (contract rule
+    /// `duplicateResolved`). Once the first copy has been uploaded the flag can no longer be added (the capture role
+    /// cannot update, assumption A31), so a late duplicate is simply absorbed.
+    private func flagDuplicate(key: String) throws(QueueError) {
+        let select = try prepare("SELECT payload FROM queue WHERE key = ?1 AND state = 0")
+        defer { sqlite3_finalize(select) }
+        bind(select, 1, text: key)
+        guard sqlite3_step(select) == SQLITE_ROW, let bytes = sqlite3_column_blob(select, 0) else { return }
+        let data = Data(bytes: bytes, count: Int(sqlite3_column_bytes(select, 0)))
+        var existing: QueuedItem
+        do {
+            existing = try decoder.decode(QueuedItem.self, from: data)
+        } catch {
+            throw QueueError.sql("A queued payload could not be decoded.")
+        }
+        guard !existing.sample.duplicateResolved else { return }
+        existing.sample.duplicateResolved = true
+        let update = try prepare("UPDATE queue SET payload = ?2 WHERE key = ?1 AND state = 0")
+        defer { sqlite3_finalize(update) }
+        bind(update, 1, text: key)
+        bind(update, 2, blob: try encode(existing))
+        guard sqlite3_step(update) == SQLITE_DONE else { throw QueueError.sql(message()) }
     }
     
     /// Remembers that HealthKit reported these samples deleted. The server is NOT changed: marking an Observation

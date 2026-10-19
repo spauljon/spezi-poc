@@ -43,12 +43,16 @@ final class SyncModel {
     @ObservationIgnored private var monitor: NWPathMonitor?
     @ObservationIgnored private var backgroundTask = UIBackgroundTaskIdentifier.invalid
     @ObservationIgnored private let defaults: UserDefaults
+    /// Sets the data-quality flags (contract rules) on every sample as it enters the queue. `nil` in tests that do not
+    /// exercise flagging; the live app always has one.
+    @ObservationIgnored private let flagger: QualityFlagger?
     
     
     /// - Parameters:
     ///   - engine: `nil` when the app is not configured (the screen then says why).
-    init(queue: SampleQueue, engine: SyncEngine?, unavailableReason: String? = nil, debounce: TimeInterval = 1, monitorNetwork: Bool = true, defaults: UserDefaults = .standard) {
+    init(queue: SampleQueue, engine: SyncEngine?, unavailableReason: String? = nil, debounce: TimeInterval = 1, monitorNetwork: Bool = true, defaults: UserDefaults = .standard, flagger: QualityFlagger? = nil) {
         self.defaults = defaults
+        self.flagger = flagger
         self.attempts = UploadAttempt.loadAll(from: defaults)
         self.queue = queue
         self.engine = engine
@@ -75,7 +79,7 @@ final class SyncModel {
     
     func enqueue(_ ingested: [IngestedSample], device: DeviceDescriptor) {
         Task {
-            if let result = try? await queue.enqueue(ingested.map { QueuedItem(sample: $0.sample, device: device) }) {
+            if let result = try? await queue.enqueue(ingested.map { QueuedItem(sample: flagged($0.sample), device: device) }) {
                 duplicatesDropped += result.known
             }
             await refreshCounts()
@@ -91,7 +95,7 @@ final class SyncModel {
         // follows has finished (ended in the loop below, or by expiry).
         beginBackgroundWork()
         do {
-            let result = try await queue.enqueue(ingested.map { QueuedItem(sample: $0.sample, device: $0.device ?? fallbackDevice) })
+            let result = try await queue.enqueue(ingested.map { QueuedItem(sample: flagged($0.sample), device: $0.device ?? fallbackDevice) })
             duplicatesDropped += result.known
         } catch {
             endBackgroundWork()
@@ -102,6 +106,10 @@ final class SyncModel {
             kick()
         }
         return true
+    }
+    
+    private func flagged(_ sample: MetricSample) -> MetricSample {
+        flagger?.applied(to: sample) ?? sample
     }
     
     /// "Sync now": retry everything immediately, including items waiting out a backoff.

@@ -78,7 +78,7 @@ struct HomeView: View {
                                 Text(check.label)
                                 Text(describe(check))
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.readableSecondary)
                             } icon: {
                                 Image(systemName: check.passed ? "checkmark.circle.fill" : "xmark.octagon.fill")
                                     .foregroundStyle(check.passed ? .green : .red)
@@ -124,26 +124,12 @@ struct HomeView: View {
     @ViewBuilder private var dataSourceSection: some View {
         Section("Data source") {
             ForEach(DataSource.allCases) { option in
-                Button {
+                SourceRow(
+                    title: option.title, detail: option == .appleHealth ? appleHealthDetail : option.detail,
+                    isSelected: source == option, isEnabled: !(option == .appleHealth && !gate.isAvailable)
+                ) {
                     Task { await choose(option) }
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(option.title)
-                                .foregroundStyle(.primary)
-                            Text(option == .appleHealth ? appleHealthDetail : option.detail)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if source == option {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.tint)
-                                .accessibilityLabel("Selected")
-                        }
-                    }
                 }
-                .disabled(option == .appleHealth && !gate.isAvailable)
                 .accessibilityIdentifier("source-\(option.rawValue)")
             }
             if stored == .appleHealth, case .unavailable(let reason) = gate {

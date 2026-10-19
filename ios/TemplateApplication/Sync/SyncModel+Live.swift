@@ -42,7 +42,7 @@ extension SyncModel {
                 patientIdentifier: configuration.patientIdentifier,
                 patientSystem: registry.systems.identifier.patient,
                 healthKitPatientIdentifier: configuration.healthKitPatientIdentifier))
-        return SyncModel(queue: queue, engine: engine)
+        return SyncModel(queue: queue, engine: engine, flagger: QualityFlagger(registry: registry))
     }
     
     private static func queueFilePath() throws -> String {
