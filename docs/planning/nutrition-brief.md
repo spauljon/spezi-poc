@@ -2,6 +2,10 @@
 
 Extends [fhir-data-model.md](fhir-data-model.md) (which stays authoritative for everything already built). Written 2026-10-16 with the developer's decisions of that day. Planning only: no application code until the developer has reviewed this and the M20 to M23 entries in [../implementation-plan.md](../implementation-plan.md).
 
+## Status
+
+**M20 built and verified (2026-10-19):** the contract (1.5.0), the golden fixtures, the iOS mapping, the source-application Device and a synthetic meal generator, with the live searches below. Not built: the HealthKit collectors and retraction (M21), daily totals (M22), the web view (M23). Differences from the plan below: the domain coding carries a `display` ("Nutrition") from the contract; the three nutrient custom codes carry the display in `code.text`, not in the coding; the intake metrics are `kind: "intake"` in the contract so existing consumers (analytics, web) ignore them until M22 and M23; a negative intake is refused with its own error (`negativeValue`).
+
 ## Goal
 
 Read dietary data that MyFitnessPal (MFP) writes to Apple Health, carry it through the same pipeline as the existing metrics (iOS ingest, HAPI FHIR, analytics, clinician web), and show **daily totals**. The data is the developer's own HealthKit data: the real-data rules of the root CLAUDE.md apply unchanged (own HAPI only, TLS and token, never in the repo, logs, fixtures or conversation).
@@ -151,7 +155,7 @@ MFP organises a day into meals and snacks and writes that into each sample's met
 
 **R5 does not settle this.** Its `NutritionIntake` has no meal-type element either (see the forward mapping): the nearest standard pieces are a `Timing` on `consumedItem.schedule` with the `EventTiming` codes breakfast, lunch and dinner (no snack), a parent intake linked by `partOf`, or an extension. A later R5 projection needs a rule for meal type and loses "snack" unless an extension carries it.
 
-**Search:** `category=<system>|nutrition` returns every nutrition Observation without listing nine codes; `category=<system>|lunch` selects a meal. **[UNVERIFIED]** that HAPI 7.6.0 handles multi-entry category searches in this configuration; M20's verify step covers it.
+**Search:** `category=<system>|nutrition` returns every nutrition Observation without listing nine codes; `category=<system>|lunch` selects a meal. **Verified on HAPI 7.6.0 on 2026-10-19** (`contract/verify-hapi.py`): a search on one of several `category` entries, on both together, on the custom nutrient code and on a Device's second identifier all answer correctly, each with a zero-result control.
 
 ## Alternatives considered: R5 `NutritionIntake`
 

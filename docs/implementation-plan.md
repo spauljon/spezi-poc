@@ -577,6 +577,64 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 ---
 
+### Milestone 20: Nutrition contract and mapping [contract/, ios/]
+
+**Goal:** The eight nutrition metrics exist in the contract and map to FHIR correctly, proven on synthetic data, before any real source is touched. Design in [docs/planning/nutrition-brief.md](planning/nutrition-brief.md).
+
+**Depends on:** Milestone 19. **Environment:** the stack rebuilt (see the brief's prerequisite section).
+
+**Tasks:**
+1. `contract/metrics.json` 1.5.0 (additive; M19 took 1.4.0 for the data-quality flag rules): eight quantity metrics (energy `kcal`; protein, carbohydrate, fat, fiber, sugar `g`; sodium `mg`; water `mL`), the LOINC codes the brief lists, the new `nutrient` code system with `fiber`, `sugar`, `sodium`, category `activity`, their HealthKit identifiers; assumptions N1 to N11 added to `assumptions`; the terminology checks (LOINC existence, UCUM validity) recorded in `verification` with their date and source. Each nutrient also gets a `plausibleRange` (a clinical judgment, flagged like A32) so the M19 flagging applies to nutrition; for example an energy value above a stated per-entry ceiling is `artifact-suspected`, never dropped.
+2. **Source application as a `Device` (decision D6):** `HealthKitRecord` gains the source's bundle identifier; for a sample with no `HKDevice` the Device is named by the source app's display name (name type `other`, replacing `model-name`), carries the bundle identifier as a second identifier (`.../identifier/app-bundle-id`), and is keyed by it (a new key algorithm in the contract; the five-field key for Watch and iPhone Devices is unchanged; a blank bundle identifier falls back to the old rule). In the contract, the independent generator, the golden fixtures and the iOS mapper in one commit; a test shows two display names with one bundle id give one key.
+   **Category and meal type (decision D5, decided):** `systems.observationDomain` (`nutrition`) and `systems.mealType` with their code tables, an optional `mealType` on the sample mapped to a second `category` entry (omitted when absent), nutrition Observations carry no HL7 `activity`; the generator and goldens cover present, absent and disagreeing labels. Verify that HAPI 7.6.0 answers `category=<system>|nutrition` and `|lunch` searches (assumption in the brief).
+3. `contract/golden/generate.py` (independent implementation) and golden fixtures for every nutrient, including zero values, a custom-coded one and an edit (a retraction).
+4. iOS: registry and mapper read the new metrics; `HealthKitRecord.unit` gains the units; the synthetic source gains a meal generator (entries, edits, deletions, a day with none) with a measured test and a mutation for each fault. No HealthKit collector yet.
+
+**Verify:** `make test-contract` and the iOS unit tests pass; a mapper change that needs a different golden means one of the two implementations is wrong; the generator output uploads to the rebuilt stack under the synthetic patient and reads back identical.
+
+**Status (2026-10-19):** built and verified; **awaiting your review** (not committed). Contract **1.5.0**: eight `intake` metrics, the domain and meal-type systems, zero allowed for intakes, per-entry plausible ranges, the source-application Device (D6), and the checker with a control for every refusal. Independent generator: 34 observation cases (the eight nutrients with and without meals, zeros, a flagged one), 12 devices (a renamed app keeps its key), 6 refusals (a negative intake), 55 flag evaluations (nutrient boundaries) and 11 meal-label cases. iOS: 197 unit tests (new: intake units converted from kJ, mg, oz and L; meal-label resolution including two disagreeing keys; the source-application key; ten measured tests of the new **meal generator** (eight nutrients at one instant, fixed meal roles with contract labels, skipped days, zeros, edits, deletions, artifacts, determinism)); the accessibility ratchet and the simulator UI test pass; a live test uploads generated meals through the real path and reads them back. **Mutations caught:** zero allowed, the bundle-identifier key and case-insensitive meal matching; six generator faults (seven tests). **Live on HAPI 7.6.0:** `contract/verify-hapi.py` accepts all 45 golden Observations and the Devices, and the searches the design relies on all answer, each with a zero-result control. Analytics (91) and web (282) tests still pass: both ignore `kind: intake`. **Findings:** (1) a literal `|` in a query string is rejected by the servlet container (HTTP 400), so searches must percent-encode it; (2) the brief's multi-entry category search assumption is now verified; (3) my first mutation run was misread because my `grep` anchored on a character some failure lines do not start with; all six mutations were in fact caught; (4) **my M19 docs commit had deleted the M20 to M23 sections from this plan** (its replacement ran from the M19 heading to the next section, and they sat between): restored from the commit that added them, with the later edits re-applied. (5) **found on your phone after the build:** signing in did not resume an upload that was blocked on "Sign in required" (1,677 samples sat queued with a stale state, because nothing woke the engine except a new sample, "Sync now", un-pausing or the network returning); fixed with `SyncModel.userSignedIn()` called when the auth state becomes signed in, with two tests (one with a control that a token merely appearing wakes nothing) and a mutation caught. Earlier runbook text implied this already worked. **Not built:** the HealthKit collectors and the structure probe (M21), retraction (M21), daily totals (M22), the web view (M23).
+
+---
+
+### Milestone 21: Nutrition ingest and retraction [ios/, hapi/]
+
+**Goal:** MFP's entries reach HAPI under `poc-real`, and an edited or deleted entry is retracted instead of double counted.
+
+**Depends on:** Milestone 20.
+
+**Tasks:**
+0. **Structure probe (read-only, on the device, your own data):** report **counts and key names only, never values or food names**: how many samples share an instant, distinct times per day, which metadata key names are present (are `meal` and `Meal` always both there, is there a per-entry id, is a time zone written), and whether samples belong to a `food` correlation. It settles N5, N6 and N7 and the meal-type labels' shape before M22 and M23 build on them. Remove or keep it behind a debug switch afterwards.
+1. **First, verify** that HAPI 7.6.0 accepts conditional JSON Patch by identifier in this configuration (assumption N11); record the result before building on it.
+2. `hapi/ext`: the narrow rule of the brief (the capture role may `PATCH` an Observation's `status` to `entered-in-error`, only that, only its own source), with negative controls for `PUT`, `DELETE`, another path or value, another resource type, and a positive control for the exact retraction.
+3. iOS: collectors for the eight types behind the existing acknowledged handoff, the authorization request, the fixed window; the data-source screen shows nutrition counts.
+4. iOS: apply the recorded deletions as retractions (all metrics, not only nutrition), with the queue handling a sample deleted before upload and a retry for a failed retraction; the "deleted, not applied" line becomes "retracted" and "pending".
+
+**Verify (counts and structure only; no real values anywhere):** on the device, a new MFP entry appears under `poc-real` with the right codes and units; editing it leaves one `entered-in-error` and one `final`; the HAPI tests show each refusal for its stated reason.
+
+---
+
+### Milestone 22: Nutrition daily totals [analytics/]
+
+**Goal:** Daily totals per nutrient, correct under edits, with "no entries" distinct from zero.
+
+**Depends on:** Milestone 21.
+
+**Tasks:** the daily-totals store and worker (day as recorded, `entered-in-error` excluded, touched-window recompute with a revision; an optional meal dimension (D5)), the API endpoint with completeness, and tests against an independent computation including an evening entry, a retraction, a zero value and a day with no data.
+
+**Verify:** the API's totals equal an independent sum read straight from the FHIR Observations on the live stack (synthetic first, then your real data by totals only).
+
+---
+
+### Milestone 23: Nutrition view [web/]
+
+**Goal:** A clinician can see daily energy and macronutrients, with gaps shown as gaps.
+
+**Depends on:** Milestone 22.
+
+**Tasks:** the Nutrition view (chart, table twin, text summary, arrow-key readout, a by-meal breakdown (D5)), "day as recorded" labelling, estimates labelled as estimates, the data-set switch honoured; verified on a real canvas.
+
+**Verify:** the view agrees with the API and the FHIR data; a retracted entry disappears from the totals; checked in a real browser.
+
 ## Data Model Integration
 
 | Entity | FHIR Resource | Milestone | Notes |

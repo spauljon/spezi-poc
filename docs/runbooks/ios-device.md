@@ -39,7 +39,7 @@ iOS decides when to wake the app. Measured on 2026-10-14: wake-ups about every 4
 |---|---|---|
 | Certificate invalid on sign-in | the phone does not trust this CA | Certificate Trust Settings switch, or reinstall the profile after a rebuild |
 | Apple Health row is plain text, not a button | not signed in, server not https, or no separate patient configured; the reason is written under it | sign in; check `Config/Defaults.xcconfig` |
-| Queue grows, attempts say "Sign in to upload." | signed out; samples are **held**, nothing is uploaded | sign in |
+| Queue grows, attempts say "Sign in to upload." | signed out; samples are **held**, nothing is uploaded | sign in. Since M20 this also resumes the upload by itself; on an earlier build the state stayed "Sign in required" until you tapped **Sync now** |
 | Attempts say "not attempted: offline" | no network | restore the network; no data is lost |
 | Server count lower than Uploaded | impossible unless the server was reset | the volume was erased: delete and reinstall the app |
 | App will not open | the 7-day profile expired | rebuild from Xcode |

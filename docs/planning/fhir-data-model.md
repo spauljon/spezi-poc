@@ -18,7 +18,7 @@
 | Data sources     | HealthKit (Apple Watch / iPhone) and a synthetic device, behind one ingest interface                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Aggregates       | NOT stored in FHIR. Computed server-side into a separate analytic store (Oracle). See "Analytic projection".                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-> **Nutrition (planned, M20 to M23):** dietary metrics read from Apple Health are specified separately in [nutrition-brief.md](nutrition-brief.md). Nothing in this file changes until M20 amends the contract.
+> **Nutrition (M20, contract 1.5.0):** dietary intake is part of this model (below). The reasoning, alternatives (including R5 `NutritionIntake`) and open items are in [nutrition-brief.md](nutrition-brief.md); contract assumptions A34 to A41 hold the detail.
 
 ## Conformance summary (read this first)
 
@@ -29,6 +29,7 @@
 | Resting heart rate | `Observation` | Base R4 `Observation` + category `vital-signs` | n/a. The core `heartrate` profile also fixes `code` to 8867-4, so 40443-4 does not claim it. |
 | HRV (SDNN) | `Observation` | Base R4 `Observation` + category `vital-signs` | n/a. See assumption A3. |
 | Sleep stage intervals | `Observation` | Base R4 `Observation` + category `activity` | n/a. See assumption A5. |
+| Dietary intake (eight nutrients) | `Observation` | Base R4 `Observation`; categories from the project's own `observation-domain` and `meal-type` systems | n/a. One per nutrient per food entry. See "Observation: dietary intake" and the nutrition brief. |
 | Source device | `Device` | Base R4 `Device` | n/a |
 
 ## Decision: not conforming to US Core
@@ -160,6 +161,53 @@ Stage mapping (every row below is an assumption, A4 and A5):
 }
 ```
 
+### Observation: dietary intake (eight nutrients)
+
+One `Observation` per nutrient per food entry (FHIR R4 has no food-intake resource; `NutritionIntake` exists only from R5, see the brief). Same shape as the heart-rate Observation (`identifier` for dedup, `status` `final`, `effectiveDateTime` with offset, `issued`, `valueQuantity`, `device`, `meta.source`), with these differences:
+
+| Field | Notes |
+|---|---|
+| `category` | **Separate entries, not one concept with several codings** (a `CodeableConcept`'s codings are translations of one concept): first the domain, `{observation-domain, nutrition}`; then, **only when the source supplied a meal**, `{meal-type, breakfast / lunch / dinner / snack / other}` with `text` holding the label as written. HL7's `observation-category` is not used (it has no dietary code). Never depend on an entry's position. |
+| `code` | LOINC where a code exists; otherwise the project's `nutrient` system with the display in `text` (table below) |
+| `valueQuantity` | UCUM; **zero is a valid value** (a food can contain none of a nutrient); negative is refused; a missing nutrient is simply absent |
+| `device` | the **source application** (no `HKDevice`): see Device below |
+| `meta.tag` | the data-quality flags as for every metric; a value outside its per-entry `plausibleRange` is `artifact-suspected`, stored as given |
+
+| Nutrient | `code` | Unit (UCUM) | Notes |
+|---|---|---|---|
+| Energy | LOINC `9052-2` Calorie intake total | `kcal` | LOINC's property is an energy rate, not an amount (A35) |
+| Protein | LOINC `9079-5` Protein intake Estimated | `g` | *Estimated* because the figures come from a food database |
+| Carbohydrate | LOINC `9059-7` Carbohydrate intake Estimated | `g` | |
+| Total fat | LOINC `9066-2` Fat intake Estimated | `g` | |
+| Water | LOINC `8984-7` Fluid intake Estimated | `mL` | wider than water (A36) |
+| Fiber | `nutrient|fiber` | `g` | no per-entry LOINC code (A37) |
+| Sugar | `nutrient|sugar` | `g` | no usable LOINC code (A37) |
+| Sodium | `nutrient|sodium` | `mg` | LOINC's sodium intake is in mmol; not converted (A37) |
+
+**Sample (synthetic):**
+
+```json
+{
+  "resourceType": "Observation",
+  "identifier": [{ "system": "http://blueysoft.com/fhir/identifier/healthkit-sample", "value": "b0000000-0000-4000-8000-000000000008" }],
+  "status": "final",
+  "category": [
+    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain", "code": "nutrition", "display": "Nutrition" }] },
+    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/meal-type", "code": "lunch" }], "text": "Lunch" }
+  ],
+  "code": { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/nutrient", "code": "sodium" }], "text": "Dietary sodium" },
+  "subject": { "reference": "Patient/example-patient" },
+  "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+  "issued": "2026-01-15T11:31:00.000-08:00",
+  "valueQuantity": { "value": 620, "unit": "mg", "system": "http://unitsofmeasure.org", "code": "mg" },
+  "device": { "reference": "Device/example-app" }
+}
+```
+
+**Searches verified on HAPI 7.6.0** (M20, `contract/verify-hapi.py`, each with a zero-result control): `category=<domain>|nutrition`, `category=<meal-type>|lunch`, both `category` parameters together, `code=<nutrient>|fiber`, `code=http://loinc.org|9052-2`, and `Device?identifier=<app-bundle-id>|<id>`. A literal `|` in a query string must be percent-encoded (the servlet container answers 400 otherwise).
+
+**Not yet built:** retraction of an edited or deleted entry (M21), daily totals by day as recorded (M22), the clinician view (M23).
+
 ### Device: the source
 
 | Field | Value |
@@ -178,6 +226,8 @@ Stage mapping (every row below is an assumption, A4 and A5):
 | `version` | BackboneElement | Software/hardware versions, if present |
 | `patient` | Reference | `Patient/{id}` |
 | `type` | CodeableConcept | **[UNVERIFIED]** no SNOMED code chosen for device type; leave out in v1 and mark source kind in a custom code (see Custom Code Systems). |
+
+**Source application (D6, M20).** A sample with **no `HKDevice`** (all MyFitnessPal data) comes from an application, and its Device is described by that application: `deviceName` = the display name with type **`other`** (no `DeviceNameType` code covers a software brand; `user-friendly-name` is the nearest); `identifier` = the device key **and** a second identifier, `app-bundle-id`, holding the app's reverse-DNS bundle identifier; no manufacturer, model or version. The key is **derived from the bundle identifier** (SHA-256 over `app`, U+001F and the identifier), so one app is one Device under any display name; without a bundle identifier the earlier name-only key rule applies. A Device made by the earlier rule is not merged with the new one (accepted: a Device's identity is its key, and the capture role cannot update).
 
 ### Provenance: not used
 
@@ -198,7 +248,9 @@ Not tracked: which mapping-registry version produced the data. If a mapping late
 |---|---|---|---|---|
 | `Observation` | `code` | LOINC `http://loinc.org` | required (heart rate, by profile); extensible elsewhere | All codes above **[verified]** except as noted |
 | `Observation` | `category` | `http://terminology.hl7.org/CodeSystem/observation-category` | preferred | `vital-signs`, `activity` |
-| `Observation` | `valueQuantity.system/code` | UCUM `http://unitsofmeasure.org` | required | `/min`, `ms`, `min` |
+| `Observation` | `valueQuantity.system/code` | UCUM `http://unitsofmeasure.org` | required | `/min`, `ms`, `min`, `kcal`, `g`, `mg`, `mL` |
+| `Observation` | `category` (dietary intake) | Custom `observation-domain` and `meal-type` systems | n/a | separate entries; HL7's set has no dietary category |
+| `Observation` | `code` (fiber, sugar, sodium) | Custom `nutrient` system | n/a | no per-entry LOINC code |
 | `Observation` | `meta.tag` | Custom data-quality CodeSystem | n/a | A8 |
 | `Device` | `type` | none in v1 | n/a | |
 
@@ -212,12 +264,16 @@ Namespace: `http://blueysoft.com/fhir` (decided). Form: `http://blueysoft.com/fh
 |---|---|---|
 | Data quality flag | `http://blueysoft.com/fhir/CodeSystem/data-quality-flag` | `artifact-suspected`, `duplicate-resolved`, `late-arrival` |
 | Source kind | `http://blueysoft.com/fhir/CodeSystem/source-kind` | `healthkit`, `synthetic` |
+| Observation domain | `http://blueysoft.com/fhir/CodeSystem/observation-domain` | what kind of data: a taxonomy of the form `vital-signs`, `laboratory`, `daily-activity-summary`, `workout`, `nutrition`; only `nutrition` is used so far |
+| Meal type | `http://blueysoft.com/fhir/CodeSystem/meal-type` | `breakfast`, `lunch`, `dinner`, `snack`, `other` |
+| Nutrient | `http://blueysoft.com/fhir/CodeSystem/nutrient` | `fiber`, `sugar`, `sodium` (the nutrients with no per-entry LOINC code) |
 
 | Identifier system | URI |
 |---|---|
 | HealthKit sample UUID | `http://blueysoft.com/fhir/identifier/healthkit-sample` |
 | Synthetic sample id | `http://blueysoft.com/fhir/identifier/synthetic-sample` |
 | Device key | `http://blueysoft.com/fhir/identifier/device-key` |
+| App bundle identifier | `http://blueysoft.com/fhir/identifier/app-bundle-id` |
 
 ## Resource Relationships
 
@@ -303,6 +359,7 @@ Edition limits for CPU, RAM and data size should be checked for your specific Or
 | A11 | Deleted HealthKit samples map to `status=entered-in-error` on the existing Observation (found by identifier), not hard delete. | Audit trail vs. clean data; HAPI delete semantics. |
 | A12 | Namespace `http://blueysoft.com/fhir` is a domain the developer controls (not independently verified). It uses `http`, and string identity is permanent. | Changing it later means rewriting every stored `identifier.system` and `code.system`. |
 | A13 | HAPI validates `meta.profile` claims only if request validation is enabled. Whether to enable it belongs to the HAPI TLS/auth project. **[UNVERIFIED]** for 7.6.0 configuration. | Profile claims are only as good as validation. |
+| A14 | **Dietary intake** (M20): the decisions and the unverified points are in the nutrition brief (N1 to N12) and the contract's assumptions A34 to A41: energy's LOINC property is a rate; water maps to fluid intake; fiber, sugar and sodium use custom codes; the meal-label normalization is a guess at how sources name meals; zero is valid; a source application is a Device keyed by bundle identifier. | Terminology fidelity and interoperability of nutrition data. |
 
 ## Implementation notes
 
