@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "cases": [
     {
       "name": "heartRate-inside",
@@ -173,6 +173,374 @@
         "end": "2026-01-15T16:30:05Z",
         "issued": "2026-01-15T16:31:00Z",
         "value": 400.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietaryEnergy-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietaryEnergy",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 3000.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryEnergy-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietaryEnergy",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryEnergy-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietaryEnergy",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 6000
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryEnergy-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietaryEnergy",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 6000.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietaryProtein-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietaryProtein",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 200.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryProtein-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietaryProtein",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryProtein-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietaryProtein",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 400
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryProtein-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietaryProtein",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 400.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietaryCarbohydrates-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietaryCarbohydrates",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 500.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryCarbohydrates-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietaryCarbohydrates",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryCarbohydrates-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietaryCarbohydrates",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 1000
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryCarbohydrates-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietaryCarbohydrates",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 1000.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietaryFat-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietaryFat",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 250.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryFat-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietaryFat",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryFat-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietaryFat",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 500
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryFat-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietaryFat",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 500.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietaryFiber-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietaryFiber",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 100.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryFiber-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietaryFiber",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryFiber-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietaryFiber",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 200
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryFiber-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietaryFiber",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 200.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietarySugar-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietarySugar",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 500.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietarySugar-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietarySugar",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietarySugar-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietarySugar",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 1000
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietarySugar-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietarySugar",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 1000.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietarySodium-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietarySodium",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 15000.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietarySodium-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietarySodium",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietarySodium-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietarySodium",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 30000
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietarySodium-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietarySodium",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 30000.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "dietaryWater-inside",
+      "note": "Well inside the range: no flag.",
+      "input": {
+        "metric": "dietaryWater",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 3000.0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryWater-at-min-not-flagged",
+      "note": "Exactly on the lower bound is not flagged.",
+      "input": {
+        "metric": "dietaryWater",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 0
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryWater-at-max-not-flagged",
+      "note": "Exactly on the upper bound is not flagged.",
+      "input": {
+        "metric": "dietaryWater",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 6000
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "dietaryWater-just-above-max",
+      "note": "Just above the upper bound: artifact-suspected.",
+      "input": {
+        "metric": "dietaryWater",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 6000.1
       },
       "expectedFlags": [
         "artifact-suspected"

@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "cases": [
     {
       "name": "heart-rate-instant",
@@ -805,6 +805,1047 @@
         "effectiveDateTime": "2026-01-15T08:30:05-08:00",
         "device": {
           "reference": "Device/example-synthetic-device"
+        }
+      }
+    },
+    {
+      "name": "dietary-energy-with-meal",
+      "note": "Energy, LOINC 9052-2, UCUM kcal, domain nutrition plus a separate lunch entry.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": 450,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000001",
+        "meal": {
+          "code": "lunch",
+          "label": "Lunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "lunch"
+              }
+            ],
+            "text": "Lunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9052-2",
+              "display": "Calorie intake total"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 450,
+          "unit": "kcal",
+          "system": "http://unitsofmeasure.org",
+          "code": "kcal"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-protein",
+      "note": "Protein, LOINC 9079-5 'Estimated', grams.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryProtein",
+        "value": 31.5,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000002",
+        "meal": {
+          "code": "breakfast",
+          "label": "Breakfast"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000002"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "breakfast"
+              }
+            ],
+            "text": "Breakfast"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9079-5",
+              "display": "Protein intake Estimated"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 31.5,
+          "unit": "g",
+          "system": "http://unitsofmeasure.org",
+          "code": "g"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-carbohydrates",
+      "note": "Carbohydrate, LOINC 9059-7.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryCarbohydrates",
+        "value": 62,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000003",
+        "meal": {
+          "code": "dinner",
+          "label": "Dinner"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000003"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "dinner"
+              }
+            ],
+            "text": "Dinner"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9059-7",
+              "display": "Carbohydrate intake Estimated"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 62,
+          "unit": "g",
+          "system": "http://unitsofmeasure.org",
+          "code": "g"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-fat",
+      "note": "Total fat, LOINC 9066-2.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryFat",
+        "value": 14.2,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000004",
+        "meal": {
+          "code": "snack",
+          "label": "Snacks"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000004"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "snack"
+              }
+            ],
+            "text": "Snacks"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9066-2",
+              "display": "Fat intake Estimated"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 14.2,
+          "unit": "g",
+          "system": "http://unitsofmeasure.org",
+          "code": "g"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-water",
+      "note": "Water maps to LOINC 8984-7 Fluid intake, in mL.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryWater",
+        "value": 250,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000005"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000005"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8984-7",
+              "display": "Fluid intake Estimated"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 250,
+          "unit": "mL",
+          "system": "http://unitsofmeasure.org",
+          "code": "mL"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-fiber-custom-code",
+      "note": "Fiber has no per-entry LOINC code: the project's nutrient system, code in text.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryFiber",
+        "value": 7.5,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000006",
+        "meal": {
+          "code": "lunch",
+          "label": "Lunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000006"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "lunch"
+              }
+            ],
+            "text": "Lunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/nutrient",
+              "code": "fiber"
+            }
+          ],
+          "text": "Dietary fiber"
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 7.5,
+          "unit": "g",
+          "system": "http://unitsofmeasure.org",
+          "code": "g"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-sugar-custom-code",
+      "note": "Sugar, custom code.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietarySugar",
+        "value": 22,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000007"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000007"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/nutrient",
+              "code": "sugar"
+            }
+          ],
+          "text": "Dietary sugar"
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 22,
+          "unit": "g",
+          "system": "http://unitsofmeasure.org",
+          "code": "g"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-sodium-custom-code-mg",
+      "note": "Sodium stays in mg under the custom code (no mmol conversion).",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietarySodium",
+        "value": 620,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000008",
+        "meal": {
+          "code": "lunch",
+          "label": "Lunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000008"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "lunch"
+              }
+            ],
+            "text": "Lunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/nutrient",
+              "code": "sodium"
+            }
+          ],
+          "text": "Dietary sodium"
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 620,
+          "unit": "mg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-sodium-zero-is-stored",
+      "note": "Zero is a valid intake (a food with no sodium): stored as given, never refused.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietarySodium",
+        "value": 0,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-000000000009",
+        "meal": {
+          "code": "lunch",
+          "label": "Lunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-000000000009"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "lunch"
+              }
+            ],
+            "text": "Lunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/nutrient",
+              "code": "sodium"
+            }
+          ],
+          "text": "Dietary sodium"
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 0,
+          "unit": "mg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-energy-zero-is-stored",
+      "note": "Zero energy (water, black coffee): stored.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": 0,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-00000000000a"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-00000000000a"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9052-2",
+              "display": "Calorie intake total"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 0,
+          "unit": "kcal",
+          "system": "http://unitsofmeasure.org",
+          "code": "kcal"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-energy-no-meal-has-one-category",
+      "note": "No meal label: one category entry, never an invented meal.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": 120,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-00000000000b"
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-00000000000b"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9052-2",
+              "display": "Calorie intake total"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 120,
+          "unit": "kcal",
+          "system": "http://unitsofmeasure.org",
+          "code": "kcal"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-energy-meal-other-keeps-label",
+      "note": "An unknown meal name is the code other and keeps its label in text.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": 300,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-00000000000c",
+        "meal": {
+          "code": "other",
+          "label": "Brunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit"
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-00000000000c"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "other"
+              }
+            ],
+            "text": "Brunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9052-2",
+              "display": "Calorie intake total"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 300,
+          "unit": "kcal",
+          "system": "http://unitsofmeasure.org",
+          "code": "kcal"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-energy-artifact",
+      "note": "A figure no single entry could carry is stored as given and tagged artifact-suspected.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": 7000,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-00000000000d",
+        "artifactSuspected": true,
+        "meal": {
+          "code": "lunch",
+          "label": "Lunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit",
+          "tag": [
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
+              "code": "artifact-suspected"
+            }
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-00000000000d"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "lunch"
+              }
+            ],
+            "text": "Lunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9052-2",
+              "display": "Calorie intake total"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 7000,
+          "unit": "kcal",
+          "system": "http://unitsofmeasure.org",
+          "code": "kcal"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
+        }
+      }
+    },
+    {
+      "name": "dietary-energy-all-flags-sorted",
+      "note": "Every flag with a meal: tags in ascending code order, value untouched.",
+      "patientId": "example-patient",
+      "deviceReference": "Device/example-app",
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": 7000.5,
+        "start": "2026-01-15T19:30:00Z",
+        "end": "2026-01-15T19:30:00Z",
+        "issued": "2026-01-15T19:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "B0000000-0000-4000-8000-00000000000e",
+        "userEntered": true,
+        "lateArrival": true,
+        "duplicateResolved": true,
+        "artifactSuspected": true,
+        "meal": {
+          "code": "lunch",
+          "label": "Lunch"
+        }
+      },
+      "expected": {
+        "resourceType": "Observation",
+        "meta": {
+          "source": "http://blueysoft.com/fhir/capture-app/healthkit",
+          "tag": [
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
+              "code": "artifact-suspected"
+            },
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
+              "code": "duplicate-resolved"
+            },
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
+              "code": "late-arrival"
+            },
+            {
+              "system": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
+              "code": "user-entered"
+            }
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/healthkit-sample",
+            "value": "b0000000-0000-4000-8000-00000000000e"
+          }
+        ],
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+                "code": "nutrition",
+                "display": "Nutrition"
+              }
+            ]
+          },
+          {
+            "coding": [
+              {
+                "system": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+                "code": "lunch"
+              }
+            ],
+            "text": "Lunch"
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9052-2",
+              "display": "Calorie intake total"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/example-patient"
+        },
+        "issued": "2026-01-15T11:31:00.000-08:00",
+        "valueQuantity": {
+          "value": 7000.5,
+          "unit": "kcal",
+          "system": "http://unitsofmeasure.org",
+          "code": "kcal"
+        },
+        "effectiveDateTime": "2026-01-15T11:30:00-08:00",
+        "device": {
+          "reference": "Device/example-app"
         }
       }
     },

@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "cases": [
     {
       "name": "error-zero-value",
@@ -34,6 +34,23 @@
         "id": "syn-err-2"
       },
       "expectedError": "nonPositiveValue"
+    },
+    {
+      "name": "error-negative-intake",
+      "note": "A negative intake is always refused, even though zero is allowed (the control: zero is stored).",
+      "patientId": "example-patient",
+      "deviceReference": null,
+      "sample": {
+        "metric": "dietaryEnergy",
+        "value": -1,
+        "start": "2026-01-15T16:30:05Z",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "timeZone": "America/Los_Angeles",
+        "source": "healthKit",
+        "id": "syn-err-neg"
+      },
+      "expectedError": "negativeValue"
     },
     {
       "name": "error-end-before-start",

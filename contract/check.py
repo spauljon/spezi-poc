@@ -50,6 +50,29 @@ def loinc_valid(code):
     return (10 - total % 10) % 10 == int(m.group(2))
 
 
+def intake_problems(m, c):
+    """What is wrong with an intake metric's contract entry (nothing, for a good one). Pure, so the checker can be shown to
+    accept a good entry and to refuse each kind of bad one."""
+    out = []
+    has_loinc, custom = m.get("loinc"), m.get("customCode")
+    if bool(has_loinc) == bool(custom):
+        out.append("needs exactly one of loinc and customCode")
+    if custom and (custom.get("system") not in c["systems"] or not custom.get("code") or not custom.get("display")):
+        out.append("customCode needs a system that exists in systems, a code and a display")
+    if m.get("domain") not in c.get("domains", {}):
+        out.append("domain is not defined")
+    if m.get("zeroAllowed") is not True:
+        out.append("an intake metric must allow zero (a food can contain none of a nutrient)")
+    r = m.get("plausibleRange") or {}
+    if not (isinstance(r.get("min"), (int, float)) and isinstance(r.get("max"), (int, float)) and r["min"] < r["max"]):
+        out.append("plausibleRange needs min below max")
+    elif m.get("zeroAllowed") and not (r["min"] <= 0 <= r["max"]):
+        out.append("zero must lie inside plausibleRange")
+    if m.get("category") is not None:
+        out.append("an intake metric uses a domain, not an HL7 category")
+    return out
+
+
 def main():
     c = json.load(open(CONTRACT))
 
@@ -60,19 +83,45 @@ def main():
     check(not loinc_valid("8867-5") and not loinc_valid("93831-7"), "check-digit control: mistyped codes are rejected",
           "check-digit algorithm accepts a wrong code: the checker is vacuous")
 
+    good_intake = {"loinc": {"code": "9052-2", "display": "x"}, "domain": "nutrition", "zeroAllowed": True, "plausibleRange": {"min": 0, "max": 10}}
+    check(intake_problems(good_intake, c) == [], "intake control: a good entry is accepted", "intake checker refuses a good entry: the checker is broken")
+    for name, mutate, expected in [
+        ("both loinc and customCode", lambda m: m.update(customCode={"system": "nutrient", "code": "a", "display": "b"}), "exactly one"),
+        ("neither code", lambda m: m.pop("loinc"), "exactly one"),
+        ("an unknown domain", lambda m: m.update(domain="nope"), "domain is not defined"),
+        ("zero not allowed", lambda m: m.update(zeroAllowed=False), "must allow zero"),
+        ("an inverted range", lambda m: m.update(plausibleRange={"min": 10, "max": 0}), "min below max"),
+        ("a range that excludes zero", lambda m: m.update(plausibleRange={"min": 1, "max": 10}), "zero must lie"),
+        ("an HL7 category", lambda m: m.update(category="vital-signs"), "domain, not an HL7 category"),
+    ]:
+        bad_entry = json.loads(json.dumps(good_intake))
+        mutate(bad_entry)
+        check(any(expected in p for p in intake_problems(bad_entry, c)), "intake control: %s is refused" % name,
+              "intake checker accepts %s: the checker is vacuous" % name)
+
     # --- structure
     check(re.fullmatch(r"\d+\.\d+\.\d+", c.get("contractVersion", "")) is not None, "contractVersion is semver (%s)" % c.get("contractVersion"), "contractVersion missing or not semver")
     ids = [m["id"] for m in c["metrics"]]
     check(len(ids) == len(set(ids)), "metric ids are unique: " + ", ".join(ids), "duplicate metric ids")
     codes = []
+    custom = []
     for m in c["metrics"]:
-        check(m["category"] in c["categories"], "%s: category %s is defined" % (m["id"], m["category"]), "%s: unknown category %s" % (m["id"], m["category"]))
+        if m["kind"] == "intake":
+            problems = intake_problems(m, c)
+            check(problems == [], "%s: intake entry is well formed" % m["id"], "%s: %s" % (m["id"], "; ".join(problems)))
+        else:
+            check(m["category"] in c["categories"], "%s: category %s is defined" % (m["id"], m["category"]), "%s: unknown category %s" % (m["id"], m["category"]))
         check(m["unit"]["display"] == m["unit"]["ucum"], "%s: unit display equals the UCUM code (%s)" % (m["id"], m["unit"]["ucum"]),
               "%s: unit display %r differs from UCUM code %r" % (m["id"], m["unit"]["display"], m["unit"]["ucum"]))
         check(m["unit"]["ucum"] != "beats/min", "%s: not the invalid UCUM 'beats/min'" % m["id"], "%s uses 'beats/min', which UCUM rejects" % m["id"])
         check(m.get("claimsProfile") is None, "%s: makes no meta.profile claim (spec: Conformance)" % m["id"], "%s claims a profile" % m["id"])
         if m["kind"] == "quantity":
             codes.append(m["loinc"]["code"])
+        elif m["kind"] == "intake":
+            if m.get("loinc"):
+                codes.append(m["loinc"]["code"])
+            else:
+                custom.append((m["customCode"]["system"], m["customCode"]["code"]))
         else:
             check(set(m["stages"]).isdisjoint(m["unmapped"]), "sleep: a stage is mapped or unmapped, never both", "sleep: a stage is both mapped and unmapped")
             expected = {"asleepCore", "asleepDeep", "asleepREM", "asleepUnspecified", "awake", "inBed"}
@@ -81,6 +130,13 @@ def main():
     check(len(codes) == len(set(codes)), "no LOINC code is used twice", "a LOINC code is used by two mappings")
     for code in codes:
         check(loinc_valid(code), "LOINC %s has a valid check digit" % code, "LOINC %s fails its check digit (typo?)" % code)
+    check(len(custom) == len(set(custom)), "no custom code is used twice", "a custom code is used by two metrics")
+    for system in ("observationDomain", "mealType", "nutrient"):
+        check(c["systems"][system].startswith("http://blueysoft.com/fhir/CodeSystem/"), "system %s is in the decided namespace" % system, "system %s is outside the namespace" % system)
+    check(set(c["mealTypes"]) >= {"breakfast", "lunch", "dinner", "snack", "other"} and all(k == v["code"] for k, v in c["mealTypes"].items()),
+          "meal types include breakfast, lunch, dinner, snack and other, each keyed by its code", "meal types are incomplete or mis-keyed")
+    check(all(v in c["mealTypes"] and k == k.lower() for k, v in c["mealTypeAliases"].items()), "every meal-type alias is lowercase and points at a defined code",
+          "a meal-type alias is not lowercase or points at an undefined code")
     for url in c["systems"]["identifier"].values():
         check(url.startswith("http://blueysoft.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % url.rsplit("/", 1)[-1], "identifier system outside the namespace: " + url)
 

@@ -54,8 +54,30 @@ def metric(metric_id):
     return next(m for m in CONTRACT["metrics"] if m["id"] == metric_id)
 
 
-def observation(m, sample, code, display, value, unit, patient, device_ref):
+def code_concept(m, coding=None):
+    """Observation.code (contract rules.intakeCode): LOINC coding, else the custom coding with its display as text."""
+    if coding is not None:
+        return {"coding": [{"system": SYS["loinc"], "code": coding["code"], "display": coding["display"]}]}
+    if m.get("loinc"):
+        return {"coding": [{"system": SYS["loinc"], "code": m["loinc"]["code"], "display": m["loinc"]["display"]}]}
+    custom = m["customCode"]
+    return {"coding": [{"system": SYS[custom["system"]], "code": custom["code"]}], "text": custom["display"]}
+
+
+def categories(m, sample):
+    """Observation.category (contract rules.domain and rules.mealType): the domain is one entry, the meal a separate one."""
+    if m["kind"] == "intake":
+        domain = CONTRACT["domains"][m["domain"]]
+        out = [{"coding": [{"system": SYS["observationDomain"], "code": domain["code"], "display": domain["display"]}]}]
+        meal = sample.get("meal")
+        if meal:
+            out.append({"coding": [{"system": SYS["mealType"], "code": meal["code"]}], "text": meal["label"]})
+        return out
     category = CONTRACT["categories"][m["category"]]
+    return [{"coding": [{"system": SYS["observationCategory"], "code": category["code"], "display": category["display"]}]}]
+
+
+def observation(m, sample, code_cc, value, unit, patient, device_ref):
     start, end = utc(sample["start"]), utc(sample["end"])
     tz = sample["timeZone"]
     o = {
@@ -64,8 +86,8 @@ def observation(m, sample, code, display, value, unit, patient, device_ref):
         "identifier": [{"system": SYS["identifier"][sample["source"]],
                         "value": sample["id"].lower() if sample["source"] == "healthKit" else sample["id"]}],
         "status": CONTRACT["rules"]["status"],
-        "category": [{"coding": [{"system": SYS["observationCategory"], "code": category["code"], "display": category["display"]}]}],
-        "code": {"coding": [{"system": SYS["loinc"], "code": code, "display": display}]},
+        "category": categories(m, sample),
+        "code": code_cc,
         "subject": {"reference": "Patient/" + patient},
         "issued": fmt(utc(sample["issued"]), tz, always_millis=True),
         "valueQuantity": {"value": value, "unit": unit["display"], "system": SYS["ucum"], "code": unit["ucum"]},
@@ -84,7 +106,7 @@ def observation(m, sample, code, display, value, unit, patient, device_ref):
 
 
 def quantity_case(name, note, metric_id, value, start, end, issued="2026-01-15T16:31:00Z", tz="America/Los_Angeles",
-                  source="synthetic", sid="syn-000001", device_ref=SYN_DEVICE_REF, user_entered=False, flags=()):
+                  source="synthetic", sid="syn-000001", device_ref=SYN_DEVICE_REF, user_entered=False, flags=(), meal=None):
     m = metric(metric_id)
     sample = {"metric": metric_id, "value": value, "start": start, "end": end, "issued": issued, "timeZone": tz,
               "source": source, "id": sid}
@@ -92,8 +114,10 @@ def quantity_case(name, note, metric_id, value, start, end, issued="2026-01-15T1
         sample["userEntered"] = True
     for key in flags:
         sample[key] = True
+    if meal:
+        sample["meal"] = meal
     return {"name": name, "note": note, "patientId": PATIENT, "deviceReference": device_ref, "sample": sample,
-            "expected": observation(m, sample, m["loinc"]["code"], m["loinc"]["display"], number(value), m["unit"], PATIENT, device_ref)}
+            "expected": observation(m, sample, code_concept(m), number(value), m["unit"], PATIENT, device_ref)}
 
 
 def sleep_case(name, note, stage, start, end, issued="2026-01-15T17:55:00Z", tz="America/Los_Angeles",
@@ -112,7 +136,7 @@ def sleep_case(name, note, stage, start, end, issued="2026-01-15T17:55:00Z", tz=
     stage_code = m["stages"][stage]
     seconds = (utc(end) - utc(start)).total_seconds()
     minutes = (Decimal(str(seconds)) / Decimal(60)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    case["expected"] = observation(m, sample, stage_code["code"], stage_code["display"], number(minutes), m["unit"], PATIENT, device_ref)
+    case["expected"] = observation(m, sample, code_concept(m, stage_code), number(minutes), m["unit"], PATIENT, device_ref)
     return case
 
 
@@ -147,6 +171,28 @@ def device_cases():
         r["patient"] = {"reference": "Patient/" + PATIENT}
         return r
 
+    def app_key(bundle):
+        return hashlib.sha256(("app" + "\u001f" + bundle.strip()).encode("utf-8")).hexdigest()
+
+    def app_device(d):
+        """A source application (contract deviceKey.appSource*): keyed by its bundle identifier when it has one."""
+        bundle = (d.get("bundleIdentifier") or "").strip()
+        name = (d.get("name") or "").strip()
+        identifiers = [{"system": SYS["identifier"]["deviceKey"], "value": app_key(bundle) if bundle else hk_key({"name": name})}]
+        if bundle:
+            identifiers.append({"system": SYS["identifier"]["appBundleId"], "value": bundle})
+        r = {"resourceType": "Device", "identifier": identifiers, "status": "active"}
+        if name:
+            r["deviceName"] = [{"name": name, "type": CONTRACT["deviceKey"]["appSourceNameType"]}]
+        r["patient"] = {"reference": "Patient/" + PATIENT}
+        return r
+
+    def app_case(name, note, descriptor):
+        d = {"kind": "sourceApp", **descriptor}
+        bundle = (descriptor.get("bundleIdentifier") or "").strip()
+        key = app_key(bundle) if bundle else hk_key({"name": (descriptor.get("name") or "").strip()})
+        return {"name": name, "note": note, "patientId": PATIENT, "descriptor": d, "expectedKey": key, "expected": app_device(descriptor)}
+
     watch = {"name": "Apple Watch", "manufacturer": "Apple Inc.", "model": "Watch7,1", "hardwareVersion": "Watch7,1", "softwareVersion": "11.2"}
     padded = {"name": "  Apple Watch ", "manufacturer": "Apple Inc.", "model": "Watch7,1", "hardwareVersion": "Watch7,1", "softwareVersion": "11.2"}
     minimal = {"name": "Some Sensor"}
@@ -166,6 +212,82 @@ def device_cases():
          "patientId": PATIENT, "descriptor": {"kind": "healthKit", **minimal}, "expectedKey": hk_key(minimal), "expected": hk_device(minimal)},
         {"name": "device-healthkit-empty", "note": "No field present: refused (it would collide with every other unknown device).",
          "patientId": PATIENT, "descriptor": {"kind": "healthKit"}, "expectedError": "emptyDeviceDescriptor"},
+        app_case("device-app-source-full", "A source app with a bundle identifier: keyed by it, with two identifiers and a name of type other.",
+                 {"name": "Example Nutrition App", "bundleIdentifier": "com.example.nutritionapp"}),
+        app_case("device-app-source-renamed", "The same bundle identifier under another display name: the SAME key (one app, one Device).",
+                 {"name": "Example Nutrition", "bundleIdentifier": "com.example.nutritionapp"}),
+        app_case("device-app-source-padded-bundle", "Whitespace around the bundle identifier is trimmed: the same key again.",
+                 {"name": "Example Nutrition App", "bundleIdentifier": "  com.example.nutritionapp "}),
+        app_case("device-app-source-no-name", "A bundle identifier alone: keyed by it, and no deviceName.", {"bundleIdentifier": "com.example.nutritionapp"}),
+        app_case("device-app-source-no-bundle", "No bundle identifier: the old name-only key rule, a name of type other, no bundle identifier.",
+                 {"name": "Some App"}),
+        app_case("device-app-source-blank-bundle", "A blank bundle identifier is no bundle identifier: the name-only rule.",
+                 {"name": "Some App", "bundleIdentifier": "   "}),
+        {"name": "device-app-source-empty", "note": "Neither a name nor a bundle identifier: refused.", "patientId": PATIENT,
+         "descriptor": {"kind": "sourceApp"}, "expectedError": "emptyDeviceDescriptor"},
+    ]
+
+
+def normalize_meal(label):
+    """contract rules.mealType: trimmed, case-insensitive, a code or an alias, else other; no label, no meal."""
+    if label is None:
+        return None
+    text = label.strip()
+    if not text:
+        return None
+    key = text.lower()
+    code = key if key in CONTRACT["mealTypes"] else CONTRACT["mealTypeAliases"].get(key, "other")
+    return {"code": code, "label": text}
+
+
+def meal_cases():
+    labels = [
+        ("meal-breakfast", "Breakfast", "A code's own name, capitalised."), ("meal-lunch-lowercase", "lunch", "Case does not matter."),
+        ("meal-dinner-padded", "  Dinner ", "Whitespace is trimmed, and the trimmed label is kept."), ("meal-snack", "Snack", "snack."),
+        ("meal-snacks-alias", "Snacks", "The plural is an alias of snack; the label keeps the source's wording."),
+        ("meal-other-keeps-label", "Brunch", "An unknown label is 'other', and the label is kept."),
+        ("meal-numbered", "Meal 1", "A numbered meal name is 'other' too."), ("meal-explicit-other", "Other", "other maps to itself."),
+        ("meal-empty", "", "An empty label is no meal."), ("meal-blank", "   ", "A blank label is no meal, never an invented one."),
+        ("meal-absent", None, "No label at all is no meal."),
+    ]
+    return [{"name": n, "note": note, "label": label, "expected": normalize_meal(label)} for n, label, note in labels]
+
+
+def intake_cases():
+    """The eight intake metrics (contract kind intake). A source app has no HKDevice, so they carry an app Device."""
+    t = "2026-01-15T19:30:00Z"            # 11:30 in Los Angeles
+    issued = "2026-01-15T19:31:00Z"
+    app = dict(source="healthKit", device_ref="Device/example-app", issued=issued)
+
+    def case(name, note, metric_id, value, uuid, meal=None, **extra):
+        return quantity_case(name, note, metric_id, value, t, t, sid=uuid, meal=meal, **{**app, **extra})
+
+    lunch = {"code": "lunch", "label": "Lunch"}
+    return [
+        case("dietary-energy-with-meal", "Energy, LOINC 9052-2, UCUM kcal, domain nutrition plus a separate lunch entry.", "dietaryEnergy", 450,
+             "B0000000-0000-4000-8000-000000000001", lunch),
+        case("dietary-protein", "Protein, LOINC 9079-5 'Estimated', grams.", "dietaryProtein", 31.5, "B0000000-0000-4000-8000-000000000002",
+             {"code": "breakfast", "label": "Breakfast"}),
+        case("dietary-carbohydrates", "Carbohydrate, LOINC 9059-7.", "dietaryCarbohydrates", 62, "B0000000-0000-4000-8000-000000000003",
+             {"code": "dinner", "label": "Dinner"}),
+        case("dietary-fat", "Total fat, LOINC 9066-2.", "dietaryFat", 14.2, "B0000000-0000-4000-8000-000000000004", {"code": "snack", "label": "Snacks"}),
+        case("dietary-water", "Water maps to LOINC 8984-7 Fluid intake, in mL.", "dietaryWater", 250, "B0000000-0000-4000-8000-000000000005"),
+        case("dietary-fiber-custom-code", "Fiber has no per-entry LOINC code: the project's nutrient system, code in text.", "dietaryFiber", 7.5,
+             "B0000000-0000-4000-8000-000000000006", lunch),
+        case("dietary-sugar-custom-code", "Sugar, custom code.", "dietarySugar", 22, "B0000000-0000-4000-8000-000000000007"),
+        case("dietary-sodium-custom-code-mg", "Sodium stays in mg under the custom code (no mmol conversion).", "dietarySodium", 620,
+             "B0000000-0000-4000-8000-000000000008", lunch),
+        case("dietary-sodium-zero-is-stored", "Zero is a valid intake (a food with no sodium): stored as given, never refused.", "dietarySodium", 0,
+             "B0000000-0000-4000-8000-000000000009", lunch),
+        case("dietary-energy-zero-is-stored", "Zero energy (water, black coffee): stored.", "dietaryEnergy", 0, "B0000000-0000-4000-8000-00000000000a"),
+        case("dietary-energy-no-meal-has-one-category", "No meal label: one category entry, never an invented meal.", "dietaryEnergy", 120,
+             "B0000000-0000-4000-8000-00000000000b"),
+        case("dietary-energy-meal-other-keeps-label", "An unknown meal name is the code other and keeps its label in text.", "dietaryEnergy", 300,
+             "B0000000-0000-4000-8000-00000000000c", {"code": "other", "label": "Brunch"}),
+        case("dietary-energy-artifact", "A figure no single entry could carry is stored as given and tagged artifact-suspected.", "dietaryEnergy", 7000,
+             "B0000000-0000-4000-8000-00000000000d", lunch, flags=("artifactSuspected",)),
+        case("dietary-energy-all-flags-sorted", "Every flag with a meal: tags in ascending code order, value untouched.", "dietaryEnergy", 7000.5,
+             "B0000000-0000-4000-8000-00000000000e", lunch, user_entered=True, flags=("lateArrival", "duplicateResolved", "artifactSuspected")),
     ]
 
 
@@ -195,16 +317,18 @@ def flag_case(name, note, metric_id, value, end, issued="2026-01-15T16:31:00Z"):
 def flag_cases():
     t = "2026-01-15T16:30:05Z"
     cases = []
-    for mid in ("heartRate", "restingHeartRate", "hrvSdnn"):
+    for mid in [m["id"] for m in CONTRACT["metrics"] if m.get("plausibleRange")]:
         r = metric(mid)["plausibleRange"]
         lo, hi = r["min"], r["max"]
         cases += [
             flag_case("%s-inside" % mid, "Well inside the range: no flag.", mid, (lo + hi) / 2, t),
             flag_case("%s-at-min-not-flagged" % mid, "Exactly on the lower bound is not flagged.", mid, lo, t),
             flag_case("%s-at-max-not-flagged" % mid, "Exactly on the upper bound is not flagged.", mid, hi, t),
-            flag_case("%s-just-below-min" % mid, "Just below the lower bound: artifact-suspected.", mid, lo - 0.1, t),
-            flag_case("%s-just-above-max" % mid, "Just above the upper bound: artifact-suspected.", mid, hi + 0.1, t),
         ]
+        if metric(mid)["kind"] != "intake":
+            # an intake metric's lower bound is zero and a negative value is refused before it could be flagged
+            cases.append(flag_case("%s-just-below-min" % mid, "Just below the lower bound: artifact-suspected.", mid, lo - 0.1, t))
+        cases.append(flag_case("%s-just-above-max" % mid, "Just above the upper bound: artifact-suspected.", mid, hi + 0.1, t))
     cases += [
         flag_case("late-just-under-24h", "Issued 23 h 59 min 59 s after the end: not late.", "heartRate", 70, t, issued="2026-01-16T16:30:04Z"),
         flag_case("late-exactly-24h", "Exactly 24 h after the end: not late (strictly more is late).", "heartRate", 70, t, issued="2026-01-16T16:30:05Z"),
@@ -251,6 +375,7 @@ def build():
                       flags=("lateArrival", "duplicateResolved", "artifactSuspected")),
         quantity_case("hrv-sdnn-artifact-below-range", "HRV below its range: tagged.", "hrvSdnn", 3,
                       "2026-01-15T16:30:05Z", "2026-01-15T16:30:05Z", sid="syn-hrv-0002", flags=("artifactSuspected",)),
+        *intake_cases(),
         quantity_case("resting-heart-rate-day-period", "Resting HR over a local day: LOINC 40443-4 and a period.", "restingHeartRate", 58,
                       "2026-01-15T08:00:00Z", "2026-01-16T08:00:00Z", sid="syn-rest-0001"),
         quantity_case("hrv-sdnn-instant", "HRV SDNN: LOINC 112429-6, UCUM ms.", "hrvSdnn", 48.3,
@@ -294,6 +419,9 @@ def build():
         error_case("error-negative-value", "Negative values are refused.",
                    {"metric": "hrvSdnn", "value": -5, "start": "2026-01-15T16:30:05Z", "end": "2026-01-15T16:30:05Z",
                     "issued": "2026-01-15T16:31:00Z", "timeZone": la, "source": "synthetic", "id": "syn-err-2"}, "nonPositiveValue"),
+        error_case("error-negative-intake", "A negative intake is always refused, even though zero is allowed (the control: zero is stored).",
+                   {"metric": "dietaryEnergy", "value": -1, "start": "2026-01-15T16:30:05Z", "end": "2026-01-15T16:30:05Z",
+                    "issued": "2026-01-15T16:31:00Z", "timeZone": la, "source": "healthKit", "id": "syn-err-neg"}, "negativeValue"),
         error_case("error-end-before-start", "An interval that ends before it starts is refused.",
                    {"metric": "heartRate", "value": 72, "start": "2026-01-15T16:30:45Z", "end": "2026-01-15T16:30:00Z",
                     "issued": "2026-01-15T16:31:00Z", "timeZone": la, "source": "synthetic", "id": "syn-err-3"}, "endBeforeStart"),
@@ -310,6 +438,7 @@ def build():
         "errors.json": {"contractVersion": CONTRACT["contractVersion"], "cases": errors},
         "devices.json": {"contractVersion": CONTRACT["contractVersion"], "cases": device_cases()},
         "flags.json": {"contractVersion": CONTRACT["contractVersion"], "cases": flag_cases()},
+        "meals.json": {"contractVersion": CONTRACT["contractVersion"], "cases": meal_cases()},
     }
 
 

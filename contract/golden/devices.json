@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "cases": [
     {
       "name": "device-synthetic",
@@ -162,6 +162,203 @@
       "patientId": "example-patient",
       "descriptor": {
         "kind": "healthKit"
+      },
+      "expectedError": "emptyDeviceDescriptor"
+    },
+    {
+      "name": "device-app-source-full",
+      "note": "A source app with a bundle identifier: keyed by it, with two identifiers and a name of type other.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp",
+        "name": "Example Nutrition App",
+        "bundleIdentifier": "com.example.nutritionapp"
+      },
+      "expectedKey": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
+          },
+          {
+            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "deviceName": [
+          {
+            "name": "Example Nutrition App",
+            "type": "other"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-app-source-renamed",
+      "note": "The same bundle identifier under another display name: the SAME key (one app, one Device).",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp",
+        "name": "Example Nutrition",
+        "bundleIdentifier": "com.example.nutritionapp"
+      },
+      "expectedKey": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
+          },
+          {
+            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "deviceName": [
+          {
+            "name": "Example Nutrition",
+            "type": "other"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-app-source-padded-bundle",
+      "note": "Whitespace around the bundle identifier is trimmed: the same key again.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp",
+        "name": "Example Nutrition App",
+        "bundleIdentifier": "  com.example.nutritionapp "
+      },
+      "expectedKey": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
+          },
+          {
+            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "deviceName": [
+          {
+            "name": "Example Nutrition App",
+            "type": "other"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-app-source-no-name",
+      "note": "A bundle identifier alone: keyed by it, and no deviceName.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp",
+        "bundleIdentifier": "com.example.nutritionapp"
+      },
+      "expectedKey": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
+          },
+          {
+            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-app-source-no-bundle",
+      "note": "No bundle identifier: the old name-only key rule, a name of type other, no bundle identifier.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp",
+        "name": "Some App"
+      },
+      "expectedKey": "a1fa35703a77afbe08131a2b25bbe61d7f0368c0650344cfd482e857f0c51c7f",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "a1fa35703a77afbe08131a2b25bbe61d7f0368c0650344cfd482e857f0c51c7f"
+          }
+        ],
+        "status": "active",
+        "deviceName": [
+          {
+            "name": "Some App",
+            "type": "other"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-app-source-blank-bundle",
+      "note": "A blank bundle identifier is no bundle identifier: the name-only rule.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp",
+        "name": "Some App",
+        "bundleIdentifier": "   "
+      },
+      "expectedKey": "a1fa35703a77afbe08131a2b25bbe61d7f0368c0650344cfd482e857f0c51c7f",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "value": "a1fa35703a77afbe08131a2b25bbe61d7f0368c0650344cfd482e857f0c51c7f"
+          }
+        ],
+        "status": "active",
+        "deviceName": [
+          {
+            "name": "Some App",
+            "type": "other"
+          }
+        ],
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "device-app-source-empty",
+      "note": "Neither a name nor a bundle identifier: refused.",
+      "patientId": "example-patient",
+      "descriptor": {
+        "kind": "sourceApp"
       },
       "expectedError": "emptyDeviceDescriptor"
     }

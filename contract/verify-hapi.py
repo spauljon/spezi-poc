@@ -95,8 +95,44 @@ def main():
             count += 1
             if st not in (200, 201) or errors:
                 failures += 1
+    # 3. the searches the nutrition design relies on (brief assumption: HAPI answers a search on one of several `category`
+    #    entries, on a custom code, and on a Device's second identifier). Each has a positive control below it.
+    contract = json.load(open(os.path.join(HERE, "metrics.json")))
+    systems = contract["systems"]
+    intake = [c for c in load("observations-quantity.json") if c["sample"]["metric"] in {m["id"] for m in contract["metrics"] if m["kind"] == "intake"}]
+    lunch = [c for c in intake if (c["sample"].get("meal") or {}).get("code") == "lunch"]
+    custom = [c for c in intake if c["sample"]["metric"] == "dietaryFiber"]
+
+    def total(query):
+        # a literal "|" in a query string is rejected by the servlet container (HTTP 400): encode it, as a client must
+        query = query.replace("|", "%7C")
+        status, text = auth.call("GET", auth.BASE + "/" + query + ("&" if "?" in query else "?") + "_summary=count", token)
+        return json.loads(text).get("total", -1) if status == 200 else -1
+
+    def expect(label, got, at_least=None, exactly=None):
+        nonlocal failures
+        good = got >= at_least if at_least is not None else got == exactly
+        print("%-52s %s %s" % (label, "ok  " if good else "FAIL", "found %d" % got))
+        if not good:
+            failures += 1
+
+    domain = "%s|nutrition" % systems["observationDomain"]
+    meal = "%s|lunch" % systems["mealType"]
+    expect("search: category = the nutrition domain", total("Observation?category=" + domain), at_least=len(intake))
+    expect("search: category = the lunch meal type", total("Observation?category=" + meal), at_least=len(lunch))
+    expect("search: BOTH categories on one Observation", total("Observation?category=%s&category=%s" % (domain, meal)), at_least=len(lunch))
+    expect("search: the custom nutrient code (fiber)", total("Observation?code=%s|fiber" % systems["nutrient"]), at_least=len(custom))
+    expect("search: a LOINC-coded nutrient (energy)", total("Observation?code=%s|9052-2" % systems["loinc"]), at_least=1)
+    expect("search: the source app by its bundle identifier", total("Device?identifier=%s|com.example.nutritionapp" % systems["identifier"]["appBundleId"]), at_least=1)
+    # controls: the same queries with a value that does not exist find nothing, so a zero is a real zero
+    expect("control: an unknown domain finds nothing", total("Observation?category=%s|no-such-domain" % systems["observationDomain"]), exactly=0)
+    expect("control: an unknown meal type finds nothing", total("Observation?category=%s|no-such-meal" % systems["mealType"]), exactly=0)
+    expect("control: an unknown bundle identifier finds nothing", total("Device?identifier=%s|com.example.nobody" % systems["identifier"]["appBundleId"]), exactly=0)
+    # the domain system alone does not match a meal code: the two systems are not interchangeable
+    expect("control: the meal code is not in the domain system", total("Observation?category=%s|lunch" % systems["observationDomain"]), exactly=0)
+
     print()
-    print("HAPI ACCEPTED all %d Observations and the Devices" % count if not failures else "HAPI REFUSED %d resource(s)" % failures)
+    print("HAPI ACCEPTED all %d Observations and the Devices; the searches answered" % count if not failures else "HAPI REFUSED or MISANSWERED %d thing(s)" % failures)
     return 1 if failures else 0
 
 

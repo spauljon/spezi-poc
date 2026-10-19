@@ -1,0 +1,95 @@
+{
+  "contractVersion": "1.5.0",
+  "cases": [
+    {
+      "name": "meal-breakfast",
+      "note": "A code's own name, capitalised.",
+      "label": "Breakfast",
+      "expected": {
+        "code": "breakfast",
+        "label": "Breakfast"
+      }
+    },
+    {
+      "name": "meal-lunch-lowercase",
+      "note": "Case does not matter.",
+      "label": "lunch",
+      "expected": {
+        "code": "lunch",
+        "label": "lunch"
+      }
+    },
+    {
+      "name": "meal-dinner-padded",
+      "note": "Whitespace is trimmed, and the trimmed label is kept.",
+      "label": "  Dinner ",
+      "expected": {
+        "code": "dinner",
+        "label": "Dinner"
+      }
+    },
+    {
+      "name": "meal-snack",
+      "note": "snack.",
+      "label": "Snack",
+      "expected": {
+        "code": "snack",
+        "label": "Snack"
+      }
+    },
+    {
+      "name": "meal-snacks-alias",
+      "note": "The plural is an alias of snack; the label keeps the source's wording.",
+      "label": "Snacks",
+      "expected": {
+        "code": "snack",
+        "label": "Snacks"
+      }
+    },
+    {
+      "name": "meal-other-keeps-label",
+      "note": "An unknown label is 'other', and the label is kept.",
+      "label": "Brunch",
+      "expected": {
+        "code": "other",
+        "label": "Brunch"
+      }
+    },
+    {
+      "name": "meal-numbered",
+      "note": "A numbered meal name is 'other' too.",
+      "label": "Meal 1",
+      "expected": {
+        "code": "other",
+        "label": "Meal 1"
+      }
+    },
+    {
+      "name": "meal-explicit-other",
+      "note": "other maps to itself.",
+      "label": "Other",
+      "expected": {
+        "code": "other",
+        "label": "Other"
+      }
+    },
+    {
+      "name": "meal-empty",
+      "note": "An empty label is no meal.",
+      "label": "",
+      "expected": null
+    },
+    {
+      "name": "meal-blank",
+      "note": "A blank label is no meal, never an invented one.",
+      "label": "   ",
+      "expected": null
+    },
+    {
+      "name": "meal-absent",
+      "note": "No label at all is no meal.",
+      "label": null,
+      "expected": null
+    }
+  ]
+}

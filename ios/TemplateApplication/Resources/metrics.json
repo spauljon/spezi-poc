@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.4.0",
+  "contractVersion": "1.5.0",
   "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
   "fhirVersion": "4.0.1",
   "verification": {
@@ -8,7 +8,11 @@
     "ucum": "Each unit returned true from the NLM UCUM service (ucum.nlm.nih.gov, isValidUCUM). LOINC's own example-unit field is empty for all of these codes, so UCUM alone confirms the units. 'beats/min' returned false and is not used.",
     "category": "Codes present in http://terminology.hl7.org/CodeSystem/observation-category version 2.0.0 (terminology.hl7.org).",
     "deviceNameType": "model-name is in http://hl7.org/fhir/device-nametype (R4 4.0.1).",
-    "heartRateProfile": "http://hl7.org/fhir/StructureDefinition/heartrate (R4, status draft) fixes category vital-signs, valueQuantity.system http://unitsofmeasure.org and valueQuantity.code /min, and requires subject and effective[x]. No meta.profile claim is made (spec: Conformance)."
+    "heartRateProfile": "http://hl7.org/fhir/StructureDefinition/heartrate (R4, status draft) fixes category vital-signs, valueQuantity.system http://unitsofmeasure.org and valueQuantity.code /min, and requires subject and effective[x]. No meta.profile claim is made (spec: Conformance).",
+    "nutrientLoinc": "9052-2 'Calorie intake total', 9079-5 'Protein intake Estimated', 9059-7 'Carbohydrate intake Estimated', 9066-2 'Fat intake Estimated' and 8984-7 'Fluid intake Estimated' each matched exactly in NLM Clinical Tables (loinc_items v3) on 2026-10-19; display is the LONG_COMMON_NAME and each has a valid check digit. LOINC's property for 9052-2 is an energy RATE, not an amount (A35); 8984-7 is all fluid, not only water (A36). No usable per-entry LOINC code was found for fiber, sugar or sodium (only 24-hour rate codes, a deprecated PhenX measure, and a sodium code measured in mmol), so those three use the project's own code system (A37).",
+    "nutrientUcum": "kcal, g, mg and mL returned true from the NLM UCUM service (isValidUCUM) on 2026-10-16.",
+    "ownCodeSystems": "systems.nutrient, observationDomain and mealType are this project's own: there is no external terminology to check them against, and none is claimed.",
+    "deviceNameTypeOther": "other is in http://hl7.org/fhir/device-nametype (R4 4.0.1, read 2026-10-17). The value set defines no code for a software brand; user-friendly-name is the nearest and other is the strictly safe choice (A40)."
   },
   "systems": {
     "loinc": "http://loinc.org",
@@ -18,13 +22,17 @@
       "patient": "http://blueysoft.com/fhir/identifier/poc-patient",
       "synthetic": "http://blueysoft.com/fhir/identifier/synthetic-sample",
       "healthKit": "http://blueysoft.com/fhir/identifier/healthkit-sample",
-      "deviceKey": "http://blueysoft.com/fhir/identifier/device-key"
+      "deviceKey": "http://blueysoft.com/fhir/identifier/device-key",
+      "appBundleId": "http://blueysoft.com/fhir/identifier/app-bundle-id"
     },
     "metaSource": {
       "synthetic": "http://blueysoft.com/fhir/capture-app/synthetic",
       "healthKit": "http://blueysoft.com/fhir/capture-app/healthkit"
     },
-    "dataQualityFlag": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag"
+    "dataQualityFlag": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
+    "observationDomain": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
+    "mealType": "http://blueysoft.com/fhir/CodeSystem/meal-type",
+    "nutrient": "http://blueysoft.com/fhir/CodeSystem/nutrient"
   },
   "dataQualityFlags": {
     "artifactSuspected": "artifact-suspected",
@@ -38,6 +46,19 @@
   "categories": {
     "vital-signs": { "code": "vital-signs", "display": "Vital Signs" },
     "activity": { "code": "activity", "display": "Activity" }
+  },
+  "domains": {
+    "nutrition": { "code": "nutrition", "display": "Nutrition" }
+  },
+  "mealTypes": {
+    "breakfast": { "code": "breakfast", "display": "Breakfast" },
+    "lunch": { "code": "lunch", "display": "Lunch" },
+    "dinner": { "code": "dinner", "display": "Dinner" },
+    "snack": { "code": "snack", "display": "Snack" },
+    "other": { "code": "other", "display": "Other" }
+  },
+  "mealTypeAliases": {
+    "snacks": "snack"
   },
   "rules": {
     "userEntered": "A sample that its source says was entered by hand (HealthKit: metadata HKMetadataKeyWasUserEntered true) carries meta.tag with system systems.dataQualityFlag and code dataQualityFlags.userEntered; any other sample carries no tag. It is provenance, not a defect: the value is stored and drawn as it is.",
@@ -57,7 +78,10 @@
       "fraction": "omitted when the sub-second part is zero, otherwise exactly 3 digits (milliseconds)"
     },
     "issued": "capture-app production time, always with exactly 3 fractional digits and the sample's offset",
-    "value": "valueQuantity must be finite and strictly greater than zero",
+    "value": "valueQuantity must be finite and strictly greater than zero, except for a metric marked zeroAllowed (the intake metrics: a food can contain none of a nutrient), where zero is stored as given. A negative value is always refused.",
+    "domain": "An intake metric's Observation.category is one entry: a CodeableConcept with one coding in systems.observationDomain whose code is the metric's domain. HL7's observation-category is not used for nutrition (it has no dietary code). A meal entry, when present, follows it. No consumer may depend on the position of an entry.",
+    "mealType": "A sample with a meal carries, as a SEPARATE entry of Observation.category after the domain entry, a CodeableConcept with one coding in systems.mealType whose code is the meal type, and text holding the label as the source wrote it. The label is trimmed and compared case-insensitively with the mealTypes codes and with mealTypeAliases: a match gives that code, any other non-empty label gives 'other', and no label gives no entry (never an invented one). The domain and the meal are separate entries because a CodeableConcept's codings are translations of one concept.",
+    "intakeCode": "An intake metric's Observation.code is its LOINC coding when it has one; otherwise it is the coding of its customCode in the system systems[customCode.system], with code.text equal to customCode.display.",
     "sleepDuration": "valueQuantity in UCUM min, derived from the period: (end - start) in seconds / 60, rounded half-up to 2 decimals; period must have end strictly after start"
   },
   "deviceKey": {
@@ -65,7 +89,11 @@
     "syntheticManufacturer": "Spezi POC",
     "syntheticName": "Synthetic simulator",
     "healthKitAlgorithm": "SHA-256, lowercase hex, over the UTF-8 bytes of the five fields name, manufacturer, model, hardwareVersion, softwareVersion (each trimmed; an absent field is the empty string) joined with the single character U+001F",
-    "deviceResource": "status active; manufacturer, modelNumber and each Device.version entry only when the field is present; deviceName = [{name, type model-name}] only when name is present; patient = the capture patient; at least one of the five fields must be present"
+    "deviceResource": "status active; manufacturer, modelNumber and each Device.version entry only when the field is present; deviceName = [{name, type model-name}] only when name is present; patient = the capture patient; at least one of the five fields must be present",
+    "appSourceAlgorithm": "For a sample with no HKDevice whose source has a bundle identifier: SHA-256, lowercase hex, over the UTF-8 bytes of the text app, the character U+001F and the trimmed bundle identifier. One app has one key under any display name.",
+    "appSourceNameType": "other",
+    "appSourceResource": "status active; identifier = [device-key, {system systems.identifier.appBundleId, value the trimmed bundle identifier}]; deviceName = [{name the source's display name, type other}] only when the name is present; no manufacturer, model or version; patient = the capture patient",
+    "appSourceFallback": "A source with no bundle identifier (absent or blank) keeps the five-field rule over its name alone, with deviceName type other and no bundle identifier; at least one of name and bundle identifier must be present."
   },
   "metrics": [
     {
@@ -117,6 +145,102 @@
       },
       "unmapped": ["inBed"],
       "claimsProfile": null
+    },
+    {
+      "id": "dietaryEnergy",
+      "kind": "intake",
+      "loinc": { "code": "9052-2", "display": "Calorie intake total" },
+      "unit": { "ucum": "kcal", "display": "kcal" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietaryEnergyConsumed",
+      "plausibleRange": { "min": 0, "max": 6000 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietaryProtein",
+      "kind": "intake",
+      "loinc": { "code": "9079-5", "display": "Protein intake Estimated" },
+      "unit": { "ucum": "g", "display": "g" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietaryProtein",
+      "plausibleRange": { "min": 0, "max": 400 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietaryCarbohydrates",
+      "kind": "intake",
+      "loinc": { "code": "9059-7", "display": "Carbohydrate intake Estimated" },
+      "unit": { "ucum": "g", "display": "g" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietaryCarbohydrates",
+      "plausibleRange": { "min": 0, "max": 1000 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietaryFat",
+      "kind": "intake",
+      "loinc": { "code": "9066-2", "display": "Fat intake Estimated" },
+      "unit": { "ucum": "g", "display": "g" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietaryFatTotal",
+      "plausibleRange": { "min": 0, "max": 500 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietaryFiber",
+      "kind": "intake",
+      "customCode": { "system": "nutrient", "code": "fiber", "display": "Dietary fiber" },
+      "unit": { "ucum": "g", "display": "g" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietaryFiber",
+      "plausibleRange": { "min": 0, "max": 200 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietarySugar",
+      "kind": "intake",
+      "customCode": { "system": "nutrient", "code": "sugar", "display": "Dietary sugar" },
+      "unit": { "ucum": "g", "display": "g" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietarySugar",
+      "plausibleRange": { "min": 0, "max": 1000 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietarySodium",
+      "kind": "intake",
+      "customCode": { "system": "nutrient", "code": "sodium", "display": "Dietary sodium" },
+      "unit": { "ucum": "mg", "display": "mg" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietarySodium",
+      "plausibleRange": { "min": 0, "max": 30000 },
+      "zeroAllowed": true,
+      "claimsProfile": null
+    },
+    {
+      "id": "dietaryWater",
+      "kind": "intake",
+      "loinc": { "code": "8984-7", "display": "Fluid intake Estimated" },
+      "unit": { "ucum": "mL", "display": "mL" },
+      "domain": "nutrition",
+      "effective": "instantOrPeriod",
+      "healthKit": "HKQuantityTypeIdentifierDietaryWater",
+      "plausibleRange": { "min": 0, "max": 6000 },
+      "zeroAllowed": true,
+      "claimsProfile": null
     }
   ],
   "assumptions": {
@@ -131,6 +255,14 @@
     "A30": "Data-quality flags are Coding entries in Observation.meta.tag (FHIR data model A8) in the project-defined system systems.dataQualityFlag; the codes are dataQualityFlags. The system is this project's own, so there is no external terminology to verify it against. The capture app writes all four at ingest (user-entered, artifact-suspected, late-arrival, duplicate-resolved) by the rules in rules; nothing else writes a flag, and a reader displays a flag when it is present and never infers one (M15).",
     "A31": "Flags are written by the capture app only. The capture role cannot update an Observation, so a flag can only describe what the app knew when it first sent the sample: a duplicate that arrives after upload cannot be flagged, and a later correction of a flag is not possible. Flags written by a different client (or none) are possible; consumers must treat absence of a flag as unknown, not as verified-good.",
     "A32": "plausibleRange minimum and maximum (heart rate 30 to 220 per minute, resting heart rate 30 to 150 per minute, HRV SDNN 5 to 400 ms) are clinical judgments chosen to catch only values that are implausible for a living person, not unusual ones; they are not from a standard. A flag is a suspicion, never a verdict.",
-    "A33": "lateArrival compares issued (the app's production time, stamped when the sample is mapped) with the sample's effective end. It does not use server receipt time, so a sample held in the offline queue is measured from when it was mapped, not from when it was uploaded."
+    "A33": "lateArrival compares issued (the app's production time, stamped when the sample is mapped) with the sample's effective end. It does not use server receipt time, so a sample held in the offline queue is measured from when it was mapped, not from when it was uploaded.",
+    "A34": "The plausibleRange of each intake metric is a PER-ENTRY clinical judgment (energy 0 to 6000 kcal, protein 0 to 400 g, carbohydrates 0 to 1000 g, fat 0 to 500 g, fiber 0 to 200 g, sugar 0 to 1000 g, sodium 0 to 30000 mg, water 0 to 6000 mL), chosen to catch a figure no single food entry could carry, not an unusual meal. They are not from a standard. Zero is inside the range.",
+    "A35": "dietaryEnergy uses LOINC 9052-2, whose property is an energy RATE, while an entry is an amount of energy in kcal. No per-entry energy-amount intake code was found: the unit is kept and the code is the nearest.",
+    "A36": "dietaryWater uses LOINC 8984-7 'Fluid intake Estimated' (volume), which is wider than water: a coded value slightly broader than what was measured.",
+    "A37": "dietaryFiber, dietarySugar and dietarySodium use the project's own nutrient code system (no usable per-entry LOINC code). Sodium stays in mg: LOINC's sodium intake is amount of substance (mmol), and converting would change the stored value. These codes are not interoperable without a mapping.",
+    "A38": "The meal-type normalization (the five codes and the alias snacks) is a guess at how the source names meals. Whether a user can rename meals, and what labels MyFitnessPal writes, is unverified (the M21 structure probe lists the labels' shape without values).",
+    "A39": "Zero is a valid intake value (a food with none of a nutrient). A missing nutrient is absent, not zero: a day with no entries is no data.",
+    "A40": "A source application is a Device keyed by its bundle identifier (stable across renames); its display name is typed 'other' because no DeviceNameType code covers a software brand (user-friendly-name is the nearest). Any server holding Devices made by the earlier name-only rule gets a second Device for the same app: accepted, no migration.",
+    "A41": "An intake sample's effective time is the source's own instant for the entry (start equals end). The time of day is indicative; the day as recorded (the date part in the sample's own offset) is what daily totals use (M22)."
   }
 }
