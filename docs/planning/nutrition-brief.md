@@ -200,7 +200,7 @@ Raised in review on 2026-10-17. R5's [`NutritionIntake`](https://hl7.org/fhir/R5
 
 1. HealthKit reports deleted UUIDs; the app already records them (`pending_deletions`).
 2. For each, the app sends a **conditional JSON Patch**: `PATCH Observation?identifier=<healthkit-sample system>|<uuid>` with exactly `[{"op":"replace","path":"/status","value":"entered-in-error"}]`.
-3. **HAPI rule (new, in `hapi/ext`):** the capture role may `PATCH` an `Observation` only if the patch is exactly that one operation, the target carries the capture app's `meta.source`, and nothing else is allowed (no `PUT`, no `DELETE`, no other path or resource type). Everything else stays refused.
+3. **HAPI rule (new, in `hapi/ext`; built in M21 as `RetractionPolicy` + `RetractionRule`, see `hapi/README.md`):** the capture role may `PATCH` an `Observation` only if the patch is exactly that one operation, the target is found by the capture app's own sample-identifier system (**changed from `meta.source`**: an identifier can be required in the request, `meta.source` cannot), and nothing else is allowed (no `PUT`, no `DELETE`, no other path or resource type). Everything else stays refused.
 4. A match count of 0 (never uploaded, or already retracted) is success. A sample deleted before it was uploaded is removed from the queue instead.
 5. The analytics worker excludes `entered-in-error` Observations from totals and recomputes the touched days.
 
@@ -238,7 +238,7 @@ A Nutrition view (daily energy and macronutrients, a table twin, "No entries" da
 | N8 | UCUM `kcal` vs HealthKit's kilocalorie (thermochemical, 4184 J) **[UNVERIFIED]** whether UCUM `kcal` is defined identically; the conversion endpoint I tried did not answer. | Numeric agreement of energy. |
 | N9 | Cardinality: `valueQuantity` is always present (1..1 in practice); no `component`, no `referenceRange`, no `interpretation`; `performer` omitted. A sample with a missing value or an unknown unit is ignored and counted, never guessed. | Same as A10. |
 | N10 | MFP may write a nutrient as 0 for an item (a food with no sodium listed). Zeros are stored as given; a missing nutrient is simply absent. | Totals vs "not recorded". |
-| N11 | HAPI 7.6.0 supports conditional JSON Patch by identifier search **[UNVERIFIED]** in this configuration; M21 verifies it first. | The whole retraction path depends on it. |
+| N11 | HAPI 7.6.0 supports conditional JSON Patch by identifier search. **VERIFIED live in M21** (`hapi/auth.py check`): 200 and only the matched Observation changes, 200 again on repeat, 404 for no match. Its own `allow().patch()` rule does not match a typed patch, so the project has its own rule. | The whole retraction path depends on it. |
 | N12 | `Observation` per nutrient is chosen over R5 `NutritionIntake` (see Alternatives considered). The resource page was read in full except its elements table and mappings (the search parameters were read): no meal-type element exists, and the `NutritionIntake.code` search parameter's element was not confirmed. The forward mapping's gaps (meal type, device, energy) are open. **[UNVERIFIED]** | The documented upgrade path may need adjusting; "snack" has no standard home in either version. |
 
 ## Environment prerequisite (read before M20)

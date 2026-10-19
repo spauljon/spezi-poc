@@ -14,7 +14,7 @@ A free-profile build **expires after 7 days**: the app stops opening until it is
 
 ## Daily use
 
-- Open the app, sign in as the capture user, and on Home choose **Apple Health** (read access to heart rate, resting heart rate, HRV and sleep only). It cannot be chosen until you are signed in and the server is configured; the reason is written beside it.
+- Open the app, sign in as the capture user, and on Home choose **Apple Health** (read access to heart rate, resting heart rate, HRV, sleep and, since M21, the eight dietary types; if you chose Apple Health before M21, the first launch asks once about the new types). It cannot be chosen until you are signed in and the server is configured; the reason is written beside it.
 - **Stop** the Xcode run before testing background behaviour: launch the app from the Home Screen, lock the phone, and do not force-quit it (iOS does not wake a force-quit app).
 
 ## Reading the screen (counts and times only; never values)
@@ -25,7 +25,10 @@ A free-profile build **expires after 7 days**: the app stops opening until it is
 | Received in total / Last received | kept across launches |
 | Queued / Uploaded | the queue: waiting, and confirmed stored by the server |
 | Last upload attempt, and "Recent upload attempts" | the last 20 attempts: time, outcome, how many were sent, whether the app was in the background (identical idle attempts are folded into one line with a count) |
-| Deleted in Apple Health, not applied | deletions are recorded, not applied to the server |
+| Deleted in Apple Health, waiting | a deletion HealthKit reported that is not applied yet (waiting for the next upload, the network or a retry) |
+| Retracted on the server | the server marked its copy `entered-in-error` (it is not deleted; consumers that read `final` no longer see it) |
+| Deleted, nothing on the server | the sample was deleted before it uploaded, or the server never had it |
+| Retraction refused | the server will never take that request; the Observation is unchanged |
 
 **Uploaded should equal the server's count** for the `poc-real` Patient. "Received in total" will usually be a little higher (it counts repeat deliveries, which the server stores once).
 
