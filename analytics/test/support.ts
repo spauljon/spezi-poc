@@ -21,6 +21,16 @@ export class FakeFhir implements FhirSearch {
     this.resources.push({ ...o, meta: { lastUpdated: new Date(lastUpdatedMs).toISOString(), ...(tag ? { tag } : {}) } });
   }
 
+  /** What the capture app's retraction does to a stored Observation: status entered-in-error, lastUpdated moves on. */
+  retract(id: string, atMs: number = this.serverNow): void {
+    const r = this.resources.find((x) => x.id === id);
+    if (!r) {
+      throw new Error(`no such observation ${id}`);
+    }
+    r.status = "entered-in-error";
+    r.meta = { ...r.meta, lastUpdated: new Date(atMs).toISOString() };
+  }
+
   async *search(path: string): AsyncIterable<ObservationLite> {
     this.requests.push(path);
     const q = new URL(path, "https://fake.invalid/fhir/").searchParams;
@@ -52,6 +62,7 @@ export function quantity(
 ): Omit<ObservationLite, "meta"> {
   return {
     id: `obs-${++counter}`,
+    status: "final",
     subject: { reference: `Patient/${patient}` },
     code: { coding: [{ system: contract.loincSystem, code: metric.loincCode }] },
     effectiveDateTime: at,
@@ -68,6 +79,7 @@ export function sleepStage(patient: string, stage: string, start: string, end: s
   }
   return {
     id: `obs-${++counter}`,
+    status: "final",
     subject: { reference: `Patient/${patient}` },
     code: { coding: [{ system: contract.loincSystem, code }] },
     effectivePeriod: { start, end },

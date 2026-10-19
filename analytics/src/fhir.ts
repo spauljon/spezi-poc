@@ -1,6 +1,8 @@
 /** The few Observation fields the worker reads (everything else is requested away with `_elements`). */
 export interface ObservationLite {
   id: string;
+  /** Only `final` counts. A sample deleted in Apple Health is retracted by the capture app as `entered-in-error` (M21). */
+  status?: string;
   subject?: { reference?: string };
   code?: { coding?: { system?: string; code?: string }[] };
   effectiveDateTime?: string;

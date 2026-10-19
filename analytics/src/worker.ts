@@ -191,7 +191,7 @@ export class RollupWorker {
       `Observation?${subjectParam(window.patientId)}` +
       `&${codeParam(contract.loincSystem, [...sleep.stageByCode.keys()])}` +
       `&date=ge${new Date(fromMs).toISOString()}&date=lt${new Date(toMs).toISOString()}` +
-      `&_count=${this.pageSize}&_elements=subject,code,effectiveDateTime,effectivePeriod`;
+      `&_count=${this.pageSize}&_elements=status,subject,code,effectiveDateTime,effectivePeriod`;
     const seen = new Set<string>();
     const intervals: StageInterval[] = [];
     for await (const obs of fhir.search(path)) {
@@ -199,6 +199,9 @@ export class RollupWorker {
         continue;
       }
       seen.add(obs.id);
+      if (obs.status !== "final") {
+        continue; // retracted (entered-in-error) or anything else not final: not part of the night
+      }
       const stage = this.sleepStageOf(obs);
       const span = periodMs(obs);
       if (!stage || !span || patientIdOf(obs.subject?.reference) !== window.patientId) {
@@ -224,7 +227,7 @@ export class RollupWorker {
       `Observation?${subjectParam(window.patientId)}` +
       `&${codeParam(contract.loincSystem, [metric.loincCode])}` +
       `&date=ge${window.day}T00:00:00Z&date=lt${nextDay(window.day)}T00:00:00Z` +
-      `&_count=${this.pageSize}&_elements=meta,subject,code,effectiveDateTime,effectivePeriod,valueQuantity`;
+      `&_count=${this.pageSize}&_elements=status,meta,subject,code,effectiveDateTime,effectivePeriod,valueQuantity`;
 
     // Local re-checks matter: the server's `date` search on a period matches any overlap, and the unit and the day
     // are ours to enforce, not HAPI's.
@@ -238,6 +241,9 @@ export class RollupWorker {
         continue;
       }
       seen.add(obs.id);
+      if (obs.status !== "final") {
+        continue; // retracted (entered-in-error) or anything else not final: not part of the day
+      }
       const instant = effectiveInstant(obs);
       if (!instant || utcDay(instant) !== window.day || patientIdOf(obs.subject?.reference) !== window.patientId) {
         continue;

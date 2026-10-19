@@ -334,3 +334,51 @@ test("a flag arriving with a late sample changes the day's stored row and its re
   assert.equal(after?.nArtifact, 1);
   assert.equal(after?.revision, (before?.revision ?? 0) + 1);
 });
+
+
+// ---- retraction (M21): a sample deleted in Apple Health is entered-in-error on the server ----
+
+test("a retracted sample is not counted, and retracting one after the rollup exists changes that day's row", async () => {
+  const { fhir, store, worker } = make();
+  const kept = quantity("p1", heartRate, 60, `${TUE}T08:00:00+00:00`);
+  const dropped = quantity("p1", heartRate, 100, `${TUE}T09:00:00+00:00`);
+  fhir.add(kept);
+  fhir.add(dropped);
+  await worker.runOnce();
+  const before = (await rows(store)).find((r) => r.day === TUE)!;
+  assert.equal(before.n, 2, "control: both final samples are counted");
+  assert.equal(before.max, 100);
+
+  fhir.serverNow += 3_600_000;
+  fhir.retract(dropped.id!);
+  await worker.runOnce();
+  const after = (await rows(store)).find((r) => r.day === TUE)!;
+  assert.equal(after.n, 1);
+  assert.equal(after.max, 60);
+  assert.equal(after.revision, before.revision + 1, "the change is a revision of the same row");
+});
+
+test("a status that is not final is not counted, whatever else it says", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(quantity("p1", heartRate, 60, `${TUE}T08:00:00+00:00`));
+  for (const status of ["entered-in-error", "preliminary", "cancelled", undefined]) {
+    const o = quantity("p1", heartRate, 200, `${TUE}T09:00:00+00:00`);
+    if (status === undefined) { delete o.status; } else { o.status = status; }
+    fhir.add(o);
+  }
+  await worker.runOnce();
+  assert.equal((await rows(store)).find((r) => r.day === TUE)!.n, 1);
+});
+
+test("a retracted sleep stage drops out of its night", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(stage("p1", "asleepCore", `${TUE}T23:00:00+00:00`, `${WED}T01:00:00+00:00`));
+  const extra = stage("p1", "asleepDeep", `${WED}T01:00:00+00:00`, `${WED}T02:00:00+00:00`);
+  fhir.add(extra);
+  await worker.runOnce();
+  assert.equal((await store.nights())[0]!.deepMin, 60, "control: the final stage is counted");
+  fhir.serverNow += 3_600_000;
+  fhir.retract(extra.id!);
+  await worker.runOnce();
+  assert.equal((await store.nights())[0]!.deepMin, 0);
+});

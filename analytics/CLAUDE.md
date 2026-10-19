@@ -15,5 +15,6 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - The API is loopback-only, TLS-only, GET-only and authenticates (signature, issuer, audience `poc-analytics`, role `clinician-reader`) before any routing. Widening the listener or the audience is a decision, not a convenience; document it in the root CLAUDE.md first.
 - The API description `api/openapi.json` is a contract: `test/api.test.ts` checks every response against it and the route list. Change both together.
 - Flag counts (M19) are read from the stored `meta.tag` only, using the contract's system and codes; never infer a flag from a value, and keep the bands inclusive of flagged samples (the counts say how many). A column added to the store goes in `sql/10-schema.sql` as an idempotent `ALTER`.
+- Only `status = final` Observations are counted (M21): the capture app retracts a sample deleted in Apple Health by setting `entered-in-error`, and the touched-window scan (`_lastUpdated`) re-reads that day. Keep the local check; do not rely on a search parameter alone.
 - Milestones: M9-M11
 - Commit prefix: `analytics:`
