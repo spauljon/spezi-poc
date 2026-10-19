@@ -40,7 +40,8 @@ struct MetricRegistry: Sendable {
         let kind: String
         let loinc: Coding?
         let unit: Unit
-        let category: String
+        /// An HL7 category key (`categories`); an intake metric has none and uses `domain`.
+        let category: String?
         let effective: String
         let stages: [String: Coding]?
         let unmapped: [String]?
@@ -48,6 +49,19 @@ struct MetricRegistry: Sendable {
         let healthKit: String?
         /// Values strictly outside this range are flagged `artifact-suspected` (never dropped). Sleep has none.
         let plausibleRange: PlausibleRange?
+        /// An intake metric without a LOINC code is coded in one of the project's own systems.
+        let customCode: CustomCode?
+        /// An intake metric's category is a domain (contract `domains`), not an HL7 category.
+        let domain: String?
+        /// Zero is a valid value (an intake: a food can contain none of a nutrient).
+        let zeroAllowed: Bool?
+    }
+    
+    /// A code in one of the project's own systems (contract `customCode`: `system` names a key of `systems`).
+    struct CustomCode: Decodable, Equatable, Sendable {
+        let system: String
+        let code: String
+        let display: String
     }
     
     /// The bounds of a plausible value for a metric (contract `plausibleRange`; a clinical judgment, assumption A32).
@@ -72,6 +86,7 @@ struct MetricRegistry: Sendable {
             let synthetic: String
             let healthKit: String
             let deviceKey: String
+            let appBundleId: String
         }
         
         struct MetaSource: Decodable, Equatable, Sendable {
@@ -86,12 +101,18 @@ struct MetricRegistry: Sendable {
         let metaSource: MetaSource
         /// The project's data-quality flag system (an `Observation.meta.tag` coding system), contract 1.2.0 and later.
         let dataQualityFlag: String
+        /// The project's own code systems (contract 1.5.0 and later).
+        let observationDomain: String
+        let mealType: String
+        let nutrient: String
     }
     
     struct DeviceKey: Decodable, Equatable, Sendable {
         let syntheticValue: String
         let syntheticManufacturer: String
         let syntheticName: String
+        /// The `deviceName` type for a source application's display name (D6: `other`).
+        let appSourceNameType: String
     }
     
     private struct File: Decodable {
@@ -101,6 +122,9 @@ struct MetricRegistry: Sendable {
         let deviceKey: DeviceKey
         let dataQualityFlags: [String: String]
         let qualityThresholds: QualityThresholds
+        let domains: [String: Coding]
+        let mealTypes: [String: Coding]
+        let mealTypeAliases: [String: String]
         let metrics: [Metric]
     }
     
@@ -112,6 +136,9 @@ struct MetricRegistry: Sendable {
     /// The flag codes by name (`artifactSuspected`, `userEntered`, ...).
     let dataQualityFlags: [String: String]
     let qualityThresholds: QualityThresholds
+    let domains: [String: Coding]
+    let mealTypes: [String: Coding]
+    let mealTypeAliases: [String: String]
     private let metricsByID: [String: Metric]
     
     
@@ -130,13 +157,30 @@ struct MetricRegistry: Sendable {
             guard byID.updateValue(metric, forKey: metric.id) == nil else {
                 throw .inconsistent("duplicate metric id \(metric.id)")
             }
-            guard file.categories[metric.category] != nil else {
-                throw .inconsistent("\(metric.id): unknown category \(metric.category)")
+            if let category = metric.category {
+                guard file.categories[category] != nil else {
+                    throw .inconsistent("\(metric.id): unknown category \(category)")
+                }
+            } else if let domain = metric.domain {
+                guard file.domains[domain] != nil else {
+                    throw .inconsistent("\(metric.id): unknown domain \(domain)")
+                }
+            } else {
+                throw .inconsistent("\(metric.id): has neither a category nor a domain")
+            }
+            if let custom = metric.customCode, Self.customSystem(custom.system, in: file.systems) == nil {
+                throw .inconsistent("\(metric.id): custom code in an unknown system \(custom.system)")
             }
         }
         // Every metric this code can emit must be in the contract, and the sleep stages must be accounted for.
-        for id in MetricID.allCases where byID[id.rawValue]?.loinc == nil {
-            throw .inconsistent("contract has no LOINC mapping for \(id.rawValue)")
+        for id in MetricID.allCases where byID[id.rawValue]?.loinc == nil && byID[id.rawValue]?.customCode == nil {
+            throw .inconsistent("contract has no code for \(id.rawValue)")
+        }
+        for key in ["breakfast", "lunch", "dinner", "snack", "other"] where file.mealTypes[key] == nil {
+            throw .inconsistent("contract has no meal type \(key) (contract 1.5.0 or later is required)")
+        }
+        for (alias, code) in file.mealTypeAliases where file.mealTypes[code] == nil || alias != alias.lowercased() {
+            throw .inconsistent("meal type alias \(alias) must be lowercase and point at a defined meal type")
         }
         guard let sleep = byID["sleepStage"], let stages = sleep.stages else {
             throw .inconsistent("contract has no sleepStage metric")
@@ -162,6 +206,9 @@ struct MetricRegistry: Sendable {
         }
         dataQualityFlags = file.dataQualityFlags
         qualityThresholds = file.qualityThresholds
+        domains = file.domains
+        mealTypes = file.mealTypes
+        mealTypeAliases = file.mealTypeAliases
         metricsByID = byID
     }
     
@@ -176,6 +223,30 @@ struct MetricRegistry: Sendable {
     
     func metric(_ id: MetricID) -> Metric? {
         metricsByID[id.rawValue]
+    }
+    
+    /// The URL of one of the project's own code systems by the name the contract uses for it in `customCode.system`.
+    func customSystem(_ name: String) -> String? {
+        Self.customSystem(name, in: systems)
+    }
+    
+    private static func customSystem(_ name: String, in systems: Systems) -> String? {
+        switch name {
+        case "nutrient": systems.nutrient
+        case "observationDomain": systems.observationDomain
+        case "mealType": systems.mealType
+        default: nil
+        }
+    }
+    
+    /// A meal label as a source wrote it, as a meal (contract rule `mealType`): trimmed, compared case-insensitively
+    /// with the meal type codes and the aliases; a match is that code, anything else is `other`; no label is no meal.
+    func meal(forLabel label: String?) -> MetricSample.Meal? {
+        let text = (label ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        let key = text.lowercased()
+        let code = mealTypes[key] != nil ? key : (mealTypeAliases[key] ?? "other")
+        return MetricSample.Meal(code: code, label: text)
     }
     
     var sleep: Metric? {

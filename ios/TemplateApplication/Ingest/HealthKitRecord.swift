@@ -43,6 +43,13 @@ struct HealthKitRecord: Equatable, Sendable {
     var device: HealthKitDevice?
     /// The app or device the sample came from (`HKSource.name`); used to describe a sample that has no `HKDevice`.
     var sourceName: String
+    /// The source's bundle identifier (`HKSource.bundleIdentifier`, a reverse-DNS app id): the identity of a source
+    /// application (contract `deviceKey.appSource*`). An app id, not personal data.
+    var sourceBundleIdentifier: String?
+    /// The meal label a source wrote into the sample's metadata (keys `meal` and `Meal`, see `resolveMealLabel`).
+    var mealLabel: String?
+    /// The two meal keys were both present and disagreed: no label is used and the case is counted.
+    var mealConflict = false
 }
 
 
@@ -55,9 +62,30 @@ extension HealthKitRecord {
             HKUnit.count().unitDivided(by: .minute())
         case HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue:
             HKUnit.secondUnit(with: .milli)
+        // Dietary intake (contract kind `intake`): explicit units, so the value never depends on a locale.
+        case HKQuantityTypeIdentifier.dietaryEnergyConsumed.rawValue:
+            HKUnit.kilocalorie()
+        case HKQuantityTypeIdentifier.dietaryProtein.rawValue, HKQuantityTypeIdentifier.dietaryCarbohydrates.rawValue,
+             HKQuantityTypeIdentifier.dietaryFatTotal.rawValue, HKQuantityTypeIdentifier.dietaryFiber.rawValue,
+             HKQuantityTypeIdentifier.dietarySugar.rawValue:
+            HKUnit.gram()
+        case HKQuantityTypeIdentifier.dietarySodium.rawValue:
+            HKUnit.gramUnit(with: .milli)
+        case HKQuantityTypeIdentifier.dietaryWater.rawValue:
+            HKUnit.literUnit(with: .milli)
         default:
             nil
         }
+    }
+    
+    /// The meal label from the two metadata keys a source is known to use (`meal` and `Meal`, contract A38). One key is
+    /// the label. Two keys that agree (ignoring case and surrounding whitespace) are the first one as written. Two that
+    /// disagree are NO label and a conflict: a guess would file the entry under the wrong meal. Blank is absent.
+    static func resolveMealLabel(_ values: [String?]) -> (label: String?, conflict: Bool) {
+        let present = values.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard let first = present.first else { return (nil, false) }
+        let agree = present.allSatisfy { $0.caseInsensitiveCompare(first) == .orderedSame }
+        return agree ? (first, false) : (nil, true)
     }
     
     /// `nil` for a sample this app does not read (another type, or a quantity in an incompatible unit).
@@ -77,6 +105,7 @@ extension HealthKitRecord {
             return nil
         }
         let metadata = sample.metadata ?? [:]
+        let meal = Self.resolveMealLabel([metadata["meal"] as? String, metadata["Meal"] as? String])
         let device = sample.device.map {
             HealthKitDevice(name: $0.name, manufacturer: $0.manufacturer, model: $0.model, hardwareVersion: $0.hardwareVersion, softwareVersion: $0.softwareVersion)
         }
@@ -90,7 +119,10 @@ extension HealthKitRecord {
             timeZoneIdentifier: metadata[HKMetadataKeyTimeZone] as? String,
             userEntered: (metadata[HKMetadataKeyWasUserEntered] as? NSNumber)?.boolValue ?? false,
             device: device,
-            sourceName: sample.sourceRevision.source.name
+            sourceName: sample.sourceRevision.source.name,
+            sourceBundleIdentifier: sample.sourceRevision.source.bundleIdentifier,
+            mealLabel: meal.label,
+            mealConflict: meal.conflict
         )
     }
 }

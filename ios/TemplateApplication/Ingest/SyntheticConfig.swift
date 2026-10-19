@@ -14,6 +14,13 @@ enum SyntheticMetric: String, CaseIterable, Hashable, Sendable {
     case restingHeartRate
     case hrv
     case sleep
+    /// Meals: food entries with their nutrients (dietary intake). Off by default.
+    case nutrition
+    
+    /// What a new config produces: everything except the meals, which are chosen deliberately.
+    static var standard: Set<SyntheticMetric> {
+        Set(allCases.filter { $0 != .nutrition })
+    }
 }
 
 
@@ -24,6 +31,16 @@ struct SyntheticConfig: Equatable, Sendable {
         /// Expected number of gaps per local day.
         var perDay = 0.0
         var meanMinutes = 0.0
+    }
+    
+    /// Faults of the meal log (only when `metrics` contains `.nutrition`).
+    struct Meals: Equatable, Sendable {
+        /// Fraction of days with no entry at all (a day nothing was logged: no data, not zero).
+        var skipDayFraction = 0.0
+        /// Fraction of food items edited after delivery: the original is later replaced by a corrected one.
+        var editFraction = 0.0
+        /// Fraction of food items deleted after delivery.
+        var deleteFraction = 0.0
     }
     
     struct LateDelivery: Equatable, Sendable {
@@ -47,10 +64,11 @@ struct SyntheticConfig: Equatable, Sendable {
     var artifactFraction = 0.0
     /// Seconds between HRV samples.
     var hrvInterval: TimeInterval = 1800
-    var metrics = Set(SyntheticMetric.allCases)
+    var metrics = SyntheticMetric.standard
+    var meals = Meals()
     
     
-    init(seed: UInt64 = 42, heartRateCadence: TimeInterval = 5, metrics: Set<SyntheticMetric> = Set(SyntheticMetric.allCases)) {
+    init(seed: UInt64 = 42, heartRateCadence: TimeInterval = 5, metrics: Set<SyntheticMetric> = SyntheticMetric.standard) {
         self.seed = seed
         self.heartRateCadence = heartRateCadence
         self.metrics = metrics
@@ -74,6 +92,9 @@ struct SyntheticConfig: Equatable, Sendable {
         c.duplicateFraction = min(max(duplicateFraction, 0), 1)
         c.artifactFraction = min(max(artifactFraction, 0), 1)
         c.hrvInterval = min(max(hrvInterval, 60), 86400)
+        c.meals.skipDayFraction = min(max(meals.skipDayFraction, 0), 1)
+        c.meals.editFraction = min(max(meals.editFraction, 0), 1)
+        c.meals.deleteFraction = min(max(meals.deleteFraction, 0), 1)
         return c
     }
 }
@@ -88,6 +109,8 @@ enum SyntheticPreset: String, CaseIterable, Identifiable, Sendable {
     case artifacts
     case everything
     case dense
+    /// A meal log with the faults a meal log has: days with nothing, edits and deletions (and the other faults at a low rate).
+    case meals
     
     var id: String { rawValue }
     
@@ -100,6 +123,7 @@ enum SyntheticPreset: String, CaseIterable, Identifiable, Sendable {
         case .artifacts: "Artifacts"
         case .everything: "Everything at once"
         case .dense: "Dense stream"
+        case .meals: "Meal log"
         }
     }
     
@@ -112,6 +136,7 @@ enum SyntheticPreset: String, CaseIterable, Identifiable, Sendable {
         case .artifacts: "A few percent of values are implausible spikes: tests that they are flagged, not dropped."
         case .everything: "Jitter, gaps, late and batched delivery, duplicates and artifacts together."
         case .dense: "One heart-rate sample per second: volume and paging."
+        case .meals: "Meals with all eight nutrients, days with nothing logged, edits and deletions, and a few implausible figures."
         }
     }
     
@@ -125,6 +150,7 @@ enum SyntheticPreset: String, CaseIterable, Identifiable, Sendable {
         c.batchInterval = 0
         c.duplicateFraction = 0
         c.artifactFraction = 0
+        c.meals = .init()
         switch self {
         case .cleanDay:
             break
@@ -147,6 +173,10 @@ enum SyntheticPreset: String, CaseIterable, Identifiable, Sendable {
             c.artifactFraction = 0.03
         case .dense:
             c.heartRateCadence = 1
+        case .meals:
+            c.metrics.insert(.nutrition)
+            c.meals = SyntheticConfig.Meals(skipDayFraction: 0.15, editFraction: 0.15, deleteFraction: 0.1)
+            c.artifactFraction = 0.03
         }
         return c
     }

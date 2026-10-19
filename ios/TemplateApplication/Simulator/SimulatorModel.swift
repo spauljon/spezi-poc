@@ -23,6 +23,7 @@ final class SimulatorModel {
         var restingHeartRate = 0
         var hrv = 0
         var sleepIntervals = 0
+        var nutrition = 0
         var late = 0
         var batched = 0
         var artifacts = 0
@@ -115,6 +116,8 @@ final class SimulatorModel {
     }
     
     
+    private static let registry = try? MetricRegistry.load()
+    
     private func record(_ ingested: IngestedSample, formatter: DateFormatter) {
         let sample = ingested.sample
         counts.total += 1
@@ -135,6 +138,12 @@ final class SimulatorModel {
                 counts.hrv += 1
                 metric = "HRV (SDNN)"
                 value = "\(Self.number(number)) ms"
+            case .dietaryEnergy, .dietaryProtein, .dietaryCarbohydrates, .dietaryFat, .dietaryFiber, .dietarySugar, .dietarySodium, .dietaryWater:
+                counts.nutrition += 1
+                // the name and unit come from the contract, never from this file
+                let entry = Self.registry?.metric(id)
+                metric = entry?.loinc?.display ?? entry?.customCode?.display ?? id.rawValue
+                value = "\(Self.number(number)) \(entry?.unit.display ?? "")"
             }
         case .sleep(let stage):
             counts.sleepIntervals += 1

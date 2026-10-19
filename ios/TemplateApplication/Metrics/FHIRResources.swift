@@ -15,7 +15,8 @@ import Foundation
 struct FHIRCoding: Codable, Equatable, Sendable {
     var system: String
     var code: String
-    var display: String
+    /// Omitted when the system has no display for the code (the project's own meal and nutrient codes).
+    var display: String?
 }
 
 struct FHIRCodeableConcept: Codable, Equatable, Sendable {

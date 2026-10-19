@@ -27,10 +27,12 @@ struct MappedHealthKitSample: Equatable, Sendable {
 ///  - `inBed` is mapped to `SleepStage.inBed`, which downstream produces no Observation (contract A4);
 ///  - nothing is filtered by value here: implausible values are stored as given (the contract's A17).
 struct HealthKitMapper: Sendable {
+    private let registry: MetricRegistry
     private let metricByIdentifier: [String: MetricID]
     private let sleepIdentifier: String?
     
     init(registry: MetricRegistry) {
+        self.registry = registry
         var table: [String: MetricID] = [:]
         for id in MetricID.allCases {
             if let identifier = registry.metric(id)?.healthKit {
@@ -58,9 +60,13 @@ struct HealthKitMapper: Sendable {
             return nil
         }
         let zone = record.timeZoneIdentifier.flatMap { TimeZone(identifier: $0) } ?? fallbackTimeZone
-        let sample = MetricSample(
+        var sample = MetricSample(
             measurement: measurement, start: record.start, end: record.end, issued: issued, timeZone: zone,
             source: .healthKit, id: record.uuid, userEntered: record.userEntered)
+        // A meal only belongs to an intake (contract rule mealType); a heart-rate sample never carries one.
+        if case .quantity(let id, _) = measurement, registry.metric(id)?.domain != nil {
+            sample.meal = registry.meal(forLabel: record.mealLabel)
+        }
         return MappedHealthKitSample(sample: sample, device: Self.descriptor(for: record))
     }
     
@@ -78,10 +84,13 @@ struct HealthKitMapper: Sendable {
     
     static func descriptor(for record: HealthKitRecord) -> DeviceDescriptor {
         guard let device = record.device else {
-            // A descriptor needs at least one field (contract deviceKey); a source that names itself with nothing gets
-            // a constant rather than an empty descriptor, which the mapper would refuse.
-            let source = record.sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
-            return .healthKit(name: source.isEmpty ? "Apple Health" : source, manufacturer: nil, model: nil, hardwareVersion: nil, softwareVersion: nil)
+            // No HKDevice: the sample came from an application (decision D6). Its bundle identifier is its identity, and its
+            // display name is the Device's name. A descriptor needs at least one of the two (contract deviceKey): a source
+            // with neither gets a constant name rather than an empty descriptor, which the mapper would refuse.
+            let name = record.sourceName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let bundle = (record.sourceBundleIdentifier ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return .sourceApp(name: name.isEmpty ? (bundle.isEmpty ? "Apple Health" : nil) : name,
+                              bundleIdentifier: bundle.isEmpty ? nil : bundle)
         }
         return .healthKit(
             name: device.name, manufacturer: device.manufacturer, model: device.model,

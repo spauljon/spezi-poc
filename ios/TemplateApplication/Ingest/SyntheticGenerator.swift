@@ -28,6 +28,9 @@ struct Emission: Equatable, Sendable {
 /// - Identifiers include the seed (`syn-<seed>-...`), so two seeds can never collide on a conditional create.
 struct SyntheticGenerator: Sendable {
     let config: SyntheticConfig
+    /// Where a meal's label and type come from: the contract, never this file. `nil` (the contract failed to load) means
+    /// no meal is attached.
+    private let registry: MetricRegistry?
     
     private let rng: KeyedRandom
     private let zone: TimeZone
@@ -39,12 +42,14 @@ struct SyntheticGenerator: Sendable {
         case resting = 0x300
         case sleep = 0x400
         case world = 0x500
+        case meal = 0x600
     }
     
     private enum Purpose: UInt64 {
         case jitter = 1, noise, artifact, artifactValue, late, lateDelay, duplicate, duplicateDelay
         case gapCount, gapStart, gapLength, exercise, exerciseStart, exerciseLength, exercisePeak
         case sleepStart, sleepLength, cycle
+        case skipDay, mealPresent, itemCount, mealJitter, amount, zero, edit, editDelay, editScale, delete
     }
     
     /// A sample before delivery has been decided.
@@ -57,7 +62,8 @@ struct SyntheticGenerator: Sendable {
     }
     
     
-    init(config: SyntheticConfig) {
+    init(config: SyntheticConfig, registry: MetricRegistry? = try? MetricRegistry.load()) {
+        self.registry = registry
         self.config = config.clamped
         self.rng = KeyedRandom(seed: config.seed)
         self.zone = self.config.timeZone
@@ -82,6 +88,7 @@ struct SyntheticGenerator: Sendable {
         if config.metrics.contains(.hrv) { bases += hrvSamples(from: low, to: high) }
         if config.metrics.contains(.restingHeartRate) { bases += restingSamples(from: low, to: high) }
         if config.metrics.contains(.sleep) { bases += sleepSamples(from: low, to: high) }
+        if config.metrics.contains(.nutrition) { bases += mealSamples(from: low, to: high) }
         
         var out: [Emission] = []
         for base in bases {
@@ -324,6 +331,146 @@ struct SyntheticGenerator: Sendable {
         return [inBed] + intervals
     }
     
+    
+    // MARK: - Meals (dietary intake)
+    
+    /// The roles of a day's meals. The raw values are the contract's meal type codes (checked when the contract loads).
+    private enum MealSlot: Int64, CaseIterable {
+        case breakfast, lunch, snack, dinner
+        
+        var code: String {
+            switch self {
+            case .breakfast: "breakfast"
+            case .lunch: "lunch"
+            case .snack: "snack"
+            case .dinner: "dinner"
+            }
+        }
+        
+        /// Local hour of day the meal is logged around (plus or minus half an hour).
+        var hour: Double {
+            switch self {
+            case .breakfast: 8.0
+            case .lunch: 12.5
+            case .snack: 15.5
+            case .dinner: 18.75
+            }
+        }
+        
+        var items: ClosedRange<Int> {
+            switch self {
+            case .breakfast: 1...3
+            case .lunch: 2...3
+            case .snack: 1...1
+            case .dinner: 2...4
+            }
+        }
+        
+        /// Chance the meal is logged on a day that has entries at all.
+        var chance: Double {
+            switch self {
+            case .breakfast: 0.9
+            case .lunch: 0.95
+            case .snack: 0.6
+            case .dinner: 0.95
+            }
+        }
+    }
+    
+    /// A meal's label as a source would write it: the plural alias where the contract has one (a source's own wording),
+    /// else the contract's display.
+    private func label(for slot: MealSlot) -> String? {
+        guard let registry else { return nil }
+        if let alias = registry.mealTypeAliases.first(where: { $0.value == slot.code })?.key {
+            return alias.capitalized
+        }
+        return registry.mealTypes[slot.code]?.display
+    }
+    
+    private static let intakeIDs: [MetricID] = [
+        .dietaryEnergy, .dietaryProtein, .dietaryCarbohydrates, .dietaryFat,
+        .dietaryFiber, .dietarySugar, .dietarySodium, .dietaryWater,
+    ]
+    
+    private func round1(_ value: Double) -> Double {
+        (value * 10).rounded() / 10
+    }
+    
+    /// One day at a time, whole: days with nothing logged are skipped entirely, so a day with no entries is no data.
+    private func mealSamples(from low: Date, to high: Date) -> [Base] {
+        var out: [Base] = []
+        var dayStart = startOfDay(low.addingTimeInterval(-86_400))
+        while dayStart < high {
+            let day = dayIndex(of: dayStart)
+            let skipped = config.meals.skipDayFraction > 0 && u(.meal, .skipDay, day) < config.meals.skipDayFraction
+            if !skipped {
+                for slot in MealSlot.allCases {
+                    let slotKey = day * 100_000 + slot.rawValue * 10_000
+                    guard u(.meal, .mealPresent, slotKey) < slot.chance else { continue }
+                    let span = slot.items
+                    let count = span.lowerBound + Int(u(.meal, .itemCount, slotKey) * Double(span.count))
+                    let mealStart = dayStart.addingTimeInterval((slot.hour + u(.meal, .mealJitter, slotKey) - 0.5) * 3600)
+                    for item in 0..<min(count, span.upperBound) {
+                        // items are logged a minute apart, so no two foods share an instant
+                        out += foodItem(day: day, slot: slot, item: item, key: slotKey + Int64(item) * 200,
+                                        at: ms(mealStart.timeIntervalSince1970 + Double(item) * 60))
+                    }
+                }
+            }
+            dayStart = nextDay(after: dayStart)
+        }
+        return out
+    }
+    
+    /// One food entry: eight nutrient samples at one instant, with the meal; and, by ground truth, whether it was
+    /// corrected (the original is then followed by a replacement with new ids and other amounts) or deleted.
+    private func foodItem(day: Int64, slot: MealSlot, item: Int, key: Int64, at instant: Date) -> [Base] {
+        let draw = { (purpose: Purpose, n: Int64) in self.u(.meal, purpose, key + n) }
+        let energy = round1(60 + draw(.amount, 0) * 440)
+        let carbs = round1(energy * (0.35 + 0.3 * draw(.amount, 1)) / 4)
+        let protein = round1(energy * (0.1 + 0.15 * draw(.amount, 2)) / 4)
+        let fat = round1(energy * (0.2 + 0.15 * draw(.amount, 3)) / 9)
+        // some foods contain none of a nutrient: zero is a value, stored as given
+        let fiber = draw(.zero, 4) < 0.25 ? 0 : round1(carbs * (0.05 + 0.15 * draw(.amount, 4)))
+        let sugar = draw(.zero, 5) < 0.25 ? 0 : round1(carbs * (0.1 + 0.4 * draw(.amount, 5)))
+        let sodium = draw(.zero, 6) < 0.1 ? 0 : round1(30 + 700 * draw(.amount, 6))
+        let water = draw(.zero, 7) < 0.7 ? 0 : round1(100 + 250 * draw(.amount, 7))
+        var amounts = [energy, protein, carbs, fat, fiber, sugar, sodium, water]
+        
+        let edited = config.meals.editFraction > 0 && draw(.edit, 0) < config.meals.editFraction
+        let deleted = !edited && config.meals.deleteFraction > 0 && draw(.delete, 0) < config.meals.deleteFraction
+        var original: InjectedAnomalies = []
+        if edited { original.insert(.edited) }
+        if deleted { original.insert(.deleted) }
+        if config.artifactFraction > 0, draw(.artifact, 0) < config.artifactFraction {
+            amounts[0] = round1(7000 + draw(.artifactValue, 0) * 3000)   // no single food entry carries this much
+            original.insert(.artifact)
+        }
+        
+        let name = label(for: slot)
+        let meal = name.flatMap { registry?.meal(forLabel: $0) }
+        func bases(_ values: [Double], version: Int, delay: TimeInterval, injected: InjectedAnomalies) -> [Base] {
+            zip(Self.intakeIDs, values).enumerated().map { index, pair in
+                var sample = self.sample(.quantity(pair.0, pair.1), instant, instant,
+                                         "food-\(day)-\(slot.code)-\(item)-\(pair.0.rawValue)-v\(version)")
+                sample.meal = meal
+                // the energy figure carries the artifact flag's ground truth; the other nutrients are ordinary
+                let marks = pair.0 == .dietaryEnergy ? injected : injected.subtracting(.artifact)
+                return Base(sample: sample, baseDelivery: instant.addingTimeInterval(60 + delay),
+                            key: key + Int64(version) * 50 + Int64(index), kind: .meal, injected: marks)
+            }
+        }
+        var out = bases(amounts, version: 1, delay: 0, injected: original)
+        if edited {
+            // the corrected entry: new ids, other amounts, delivered later
+            let scale = draw(.editScale, 0) < 0.5 ? 0.8 : 1.25
+            let corrected = amounts.enumerated().map { index, value in
+                index == 0 && value > 6000 ? round1(value * 0.05) : round1(value * scale)
+            }
+            out += bases(corrected, version: 2, delay: 300 + draw(.editDelay, 0) * 3300, injected: [])
+        }
+        return out
+    }
     
     // MARK: - Helpers
     

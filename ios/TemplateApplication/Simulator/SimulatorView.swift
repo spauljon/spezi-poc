@@ -107,6 +107,9 @@ struct SimulatorView: View {
                 LabeledContent("Resting heart rate", value: "\(model.counts.restingHeartRate)")
                 LabeledContent("HRV", value: "\(model.counts.hrv)")
                 LabeledContent("Sleep intervals", value: "\(model.counts.sleepIntervals)")
+                if model.counts.nutrition > 0 {
+                    LabeledContent("Nutrition samples", value: "\(model.counts.nutrition)")
+                }
                 LabeledContent("Late", value: "\(model.counts.late)")
                 LabeledContent("Batched", value: "\(model.counts.batched)")
                 LabeledContent("Duplicates", value: "\(model.counts.duplicates)")

@@ -23,6 +23,10 @@ struct InjectedAnomalies: OptionSet, Sendable, Hashable {
     static let artifact = InjectedAnomalies(rawValue: 1 << 2)
     /// A second delivery of a sample that was already delivered (same identity, same content).
     static let duplicate = InjectedAnomalies(rawValue: 1 << 3)
+    /// A food entry that was corrected after delivery: this is the ORIGINAL, later replaced by a new sample.
+    static let edited = InjectedAnomalies(rawValue: 1 << 4)
+    /// A food entry deleted after delivery.
+    static let deleted = InjectedAnomalies(rawValue: 1 << 5)
     
     var labels: [String] {
         var out: [String] = []
@@ -30,6 +34,8 @@ struct InjectedAnomalies: OptionSet, Sendable, Hashable {
         if contains(.batched) { out.append("batched") }
         if contains(.artifact) { out.append("artifact") }
         if contains(.duplicate) { out.append("duplicate") }
+        if contains(.edited) { out.append("edited") }
+        if contains(.deleted) { out.append("deleted") }
         return out
     }
 }

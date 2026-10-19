@@ -14,6 +14,15 @@ enum MetricID: String, CaseIterable, Codable, Sendable {
     case heartRate
     case restingHeartRate
     case hrvSdnn
+    // Dietary intake (contract kind `intake`): amounts a food entry carries, one sample per nutrient.
+    case dietaryEnergy
+    case dietaryProtein
+    case dietaryCarbohydrates
+    case dietaryFat
+    case dietaryFiber
+    case dietarySugar
+    case dietarySodium
+    case dietaryWater
 }
 
 
@@ -39,6 +48,9 @@ enum SampleSource: String, Codable, Sendable {
 enum DeviceDescriptor: Hashable, Codable, Sendable {
     case synthetic
     case healthKit(name: String?, manufacturer: String?, model: String?, hardwareVersion: String?, softwareVersion: String?)
+    /// A sample with no `HKDevice`: it came from an application. Keyed by its bundle identifier when it has one, so one
+    /// app is one `Device` under any display name (contract `deviceKey.appSource*`, decision D6).
+    case sourceApp(name: String?, bundleIdentifier: String?)
 }
 
 
@@ -70,6 +82,14 @@ struct MetricSample: Equatable, Codable, Sendable {
     var lateArrival = false
     /// Two deliveries of this sample met in the queue before upload (contract rule `duplicateResolved`).
     var duplicateResolved = false
+    /// The meal this intake belongs to, when the source said (contract rule `mealType`). `nil` is "no meal", never a guess.
+    var meal: Meal?
+    
+    /// A meal type code from the contract and the label exactly as the source wrote it (trimmed).
+    struct Meal: Codable, Hashable, Sendable {
+        var code: String
+        var label: String
+    }
 }
 
 
@@ -88,5 +108,6 @@ extension MetricSample {
         artifactSuspected = try c.decodeIfPresent(Bool.self, forKey: .artifactSuspected) ?? false
         lateArrival = try c.decodeIfPresent(Bool.self, forKey: .lateArrival) ?? false
         duplicateResolved = try c.decodeIfPresent(Bool.self, forKey: .duplicateResolved) ?? false
+        meal = try c.decodeIfPresent(Meal.self, forKey: .meal)
     }
 }

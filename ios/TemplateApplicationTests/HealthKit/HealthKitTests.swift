@@ -127,6 +127,10 @@ struct HealthKitRecordTests {
             switch metric.unit.ucum {
             case "/min": #expect(unit == perMinute, "\(id.rawValue)")
             case "ms": #expect(unit == HKUnit.secondUnit(with: .milli), "\(id.rawValue)")
+            case "kcal": #expect(unit == HKUnit.kilocalorie(), "\(id.rawValue)")
+            case "g": #expect(unit == HKUnit.gram(), "\(id.rawValue)")
+            case "mg": #expect(unit == HKUnit.gramUnit(with: .milli), "\(id.rawValue)")
+            case "mL": #expect(unit == HKUnit.literUnit(with: .milli), "\(id.rawValue)")
             default: Issue.record("\(id.rawValue) has the unit \(metric.unit.ucum), which this adapter does not know")
             }
         }
@@ -150,12 +154,15 @@ struct HealthKitMapperTests {
         try #require(HealthKitRecord(sample: sample))
     }
     
-    @Test("it reads exactly the types the contract lists")
+    @Test("it reads exactly the types the contract lists (read from the contract file, not from the registry)")
     func identifiers() throws {
-        #expect(try mapper().identifiers == [
-            HKQuantityTypeIdentifier.heartRate.rawValue, HKQuantityTypeIdentifier.restingHeartRate.rawValue,
-            HKQuantityTypeIdentifier.heartRateVariabilitySDNN.rawValue, HKCategoryTypeIdentifier.sleepAnalysis.rawValue,
-        ])
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "contract/metrics.json")
+        let raw = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let listed = Set((try #require(raw["metrics"] as? [[String: Any]])).compactMap { $0["healthKit"] as? String })
+        #expect(listed.count == 12, "four existing metrics and eight intake metrics")
+        #expect(try mapper().identifiers == listed)
+        #expect(listed.contains(HKQuantityTypeIdentifier.dietaryEnergyConsumed.rawValue) && listed.contains(HKCategoryTypeIdentifier.sleepAnalysis.rawValue))
     }
     
     @Test("a heart rate sample becomes a healthKit-source metric sample with the record's identity")
@@ -193,7 +200,7 @@ struct HealthKitMapperTests {
     @Test("a sample whose source names itself with nothing still gets a usable device descriptor")
     func emptySourceName() throws {
         let mapped = try #require(try mapper().map(handBuilt(source: "  "), issued: issued, fallbackTimeZone: utc))
-        #expect(mapped.device == .healthKit(name: "Apple Health", manufacturer: nil, model: nil, hardwareVersion: nil, softwareVersion: nil))
+        #expect(mapped.device == .sourceApp(name: "Apple Health", bundleIdentifier: nil))
         // and the device mapper accepts it (an empty descriptor would be refused with emptyDeviceDescriptor)
         let key = try DeviceMapper(registry: try registry()).key(for: mapped.device)
         #expect(key.count == 64)
@@ -204,14 +211,15 @@ struct HealthKitMapperTests {
         let sample = quantity(.heartRate, 80, unit: perMinute, metadata: [HKMetadataKeyWasUserEntered: true])
         let mapped = try #require(try mapper().map(try record(sample), issued: issued, fallbackTimeZone: utc))
         #expect(mapped.sample.userEntered)
-        guard case .healthKit(let name, let manufacturer, _, _, _) = mapped.device else {
-            Issue.record("expected a HealthKit device")
+        guard case .sourceApp(let name, let bundle) = mapped.device else {
+            Issue.record("expected a source application (no HKDevice)")
             return
         }
         // an in-memory sample has not been saved, so its source has no name yet: the descriptor then falls back
         let source = sample.sourceRevision.source.name
-        #expect(name == (source.isEmpty ? "Apple Health" : source))
-        #expect(manufacturer == nil)
+        #expect(name == (source.isEmpty ? (sample.sourceRevision.source.bundleIdentifier.isEmpty ? "Apple Health" : nil) : source))
+        let sourceBundle = sample.sourceRevision.source.bundleIdentifier
+        #expect(bundle == (sourceBundle.isEmpty ? nil : sourceBundle), "a blank bundle identifier is none, not an empty string")
     }
     
     @Test("all six HealthKit sleep values map; an unknown one is ignored, not guessed", arguments: [
@@ -619,5 +627,125 @@ struct HealthKitWindowTests {
         let other = HealthKitBridge(defaults: isolatedDefaults())
         #expect(await other.counters.lifetimeAccepted == 0)
         #expect(await other.counters.lastReceivedAt == nil)
+    }
+}
+
+
+// MARK: - dietary intake (M20)
+
+@Suite("HealthKit dietary intake")
+struct HealthKitIntakeTests {
+    private let issued = t0.addingTimeInterval(60)
+    private let utc = TimeZone(identifier: "UTC") ?? .gmt
+    
+    private func mapper() throws -> HealthKitMapper {
+        HealthKitMapper(registry: try registry())
+    }
+    
+    private func handBuilt(_ identifier: HKQuantityTypeIdentifier, value: Double, meal: String? = nil, conflict: Bool = false,
+                           source: String = "Example App", bundle: String? = "com.example.app") -> HealthKitRecord {
+        HealthKitRecord(typeIdentifier: identifier.rawValue, value: value, categoryValue: nil, start: t0, end: t0, uuid: "F-1",
+                        timeZoneIdentifier: nil, userEntered: false, device: nil, sourceName: source,
+                        sourceBundleIdentifier: bundle, mealLabel: meal, mealConflict: conflict)
+    }
+    
+    @Test("each dietary type is read in the contract's unit whatever unit the source wrote (no locale, no guess)")
+    func unitsAreConverted() throws {
+        let cases: [(HKQuantityTypeIdentifier, HKQuantity, Double)] = [
+            (.dietaryEnergyConsumed, HKQuantity(unit: .jouleUnit(with: .kilo), doubleValue: 1883), 1883 / 4.184),  // kJ to kcal (4184 J each)
+            (.dietaryProtein, HKQuantity(unit: .gramUnit(with: .milli), doubleValue: 31_500), 31.5),          // mg to g
+            (.dietaryCarbohydrates, HKQuantity(unit: .gram(), doubleValue: 62), 62),
+            (.dietaryFatTotal, HKQuantity(unit: .ounce(), doubleValue: 1), 28.349523125),                      // oz to g
+            (.dietaryFiber, HKQuantity(unit: .gram(), doubleValue: 7.5), 7.5),
+            (.dietarySugar, HKQuantity(unit: .gram(), doubleValue: 22), 22),
+            (.dietarySodium, HKQuantity(unit: .gram(), doubleValue: 0.62), 620),                               // g to mg
+            (.dietaryWater, HKQuantity(unit: .liter(), doubleValue: 0.25), 250),                               // L to mL
+        ]
+        for (identifier, quantity, expected) in cases {
+            let sample = HKQuantitySample(type: HKQuantityType(identifier), quantity: quantity, start: t0, end: t0)
+            let record = try #require(HealthKitRecord(sample: sample), "\(identifier.rawValue)")
+            #expect(abs((record.value ?? .nan) - expected) < 0.01, "\(identifier.rawValue): got \(record.value ?? .nan), expected \(expected)")
+        }
+    }
+    
+    @Test("zero is a real intake and is kept; the mapper to FHIR stores it (heart rate zero is still refused)")
+    func zeroIsKept() throws {
+        let mapped = try #require(try mapper().map(handBuilt(.dietarySodium, value: 0), issued: issued, fallbackTimeZone: utc))
+        #expect(mapped.sample.measurement == .quantity(.dietarySodium, 0))
+        let observation = try ObservationMapper(registry: try registry()).map(mapped.sample, patientID: "p")
+        guard case .observation(let resource) = observation else {
+            Issue.record("zero sodium must map to an Observation")
+            return
+        }
+        #expect(resource.valueQuantity.value == 0)
+        // the control: the same zero is refused for a metric that does not allow it
+        var heart = mapped.sample
+        heart.measurement = .quantity(.heartRate, 0)
+        #expect(throws: MappingError.nonPositiveValue) { try ObservationMapper(registry: try registry()).map(heart, patientID: "p") }
+        var negative = mapped.sample
+        negative.measurement = .quantity(.dietarySodium, -1)
+        #expect(throws: MappingError.negativeValue) { try ObservationMapper(registry: try registry()).map(negative, patientID: "p") }
+    }
+    
+    @Test("a meal label resolves from the two metadata keys: one, two that agree, two that disagree, blank")
+    func mealLabelResolution() {
+        #expect(HealthKitRecord.resolveMealLabel(["Lunch", nil]).label == "Lunch")
+        #expect(HealthKitRecord.resolveMealLabel([nil, "Lunch"]).label == "Lunch")
+        let both = HealthKitRecord.resolveMealLabel(["Lunch", " lunch "])
+        #expect(both.label == "Lunch" && !both.conflict, "agreeing keys (ignoring case and whitespace) are the first as written")
+        let disagree = HealthKitRecord.resolveMealLabel(["Lunch", "Dinner"])
+        #expect(disagree.label == nil && disagree.conflict, "a disagreement is no label and is counted, never a guess")
+        #expect(HealthKitRecord.resolveMealLabel([nil, nil]) == (nil, false))
+        #expect(HealthKitRecord.resolveMealLabel(["  ", ""]) == (nil, false))
+    }
+    
+    @Test("the metadata keys are read from a real sample, and nothing else about it")
+    func mealFromMetadata() throws {
+        let sample = HKQuantitySample(
+            type: HKQuantityType(.dietaryEnergyConsumed), quantity: HKQuantity(unit: .kilocalorie(), doubleValue: 300), start: t0, end: t0,
+            metadata: ["meal": "Lunch", "Meal": "Lunch"])
+        let record = try #require(HealthKitRecord(sample: sample))
+        #expect(record.mealLabel == "Lunch" && !record.mealConflict)
+        let none = try #require(HealthKitRecord(sample: HKQuantitySample(
+            type: HKQuantityType(.dietaryEnergyConsumed), quantity: HKQuantity(unit: .kilocalorie(), doubleValue: 300), start: t0, end: t0)))
+        #expect(none.mealLabel == nil && !none.mealConflict)
+        let clash = try #require(HealthKitRecord(sample: HKQuantitySample(
+            type: HKQuantityType(.dietaryEnergyConsumed), quantity: HKQuantity(unit: .kilocalorie(), doubleValue: 300), start: t0, end: t0,
+            metadata: ["meal": "Lunch", "Meal": "Dinner"])))
+        #expect(clash.mealLabel == nil && clash.mealConflict)
+    }
+    
+    @Test("an intake gets its meal from the contract's normalization; a heart-rate sample never does")
+    func mealOnTheSample() throws {
+        let mapper = try mapper()
+        for (label, code) in [("Lunch", "lunch"), ("SNACKS", "snack"), ("Brunch", "other")] {
+            let sample = try #require(try mapper.map(handBuilt(.dietaryEnergyConsumed, value: 300, meal: label), issued: issued, fallbackTimeZone: utc)).sample
+            #expect(sample.meal == MetricSample.Meal(code: code, label: label), "\(label)")
+        }
+        #expect(try #require(try mapper.map(handBuilt(.dietaryEnergyConsumed, value: 300), issued: issued, fallbackTimeZone: utc)).sample.meal == nil)
+        // the control: the same label on a heart-rate record is ignored
+        let heart = try #require(try mapper.map(handBuilt(.heartRate, value: 70, meal: "Lunch"), issued: issued, fallbackTimeZone: utc))
+        #expect(heart.sample.meal == nil)
+    }
+    
+    @Test("no HKDevice: the app is the Device, by its bundle identifier; with an HKDevice the device is kept")
+    func sourceApplication() throws {
+        let mapped = try #require(try mapper().map(handBuilt(.dietaryProtein, value: 20), issued: issued, fallbackTimeZone: utc))
+        #expect(mapped.device == .sourceApp(name: "Example App", bundleIdentifier: "com.example.app"))
+        let renamed = try #require(try mapper().map(handBuilt(.dietaryProtein, value: 20, source: "Example App Pro"), issued: issued, fallbackTimeZone: utc))
+        let devices = DeviceMapper(registry: try registry())
+        #expect(try devices.key(for: mapped.device) == devices.key(for: renamed.device), "one bundle identifier is one Device under any display name")
+        let other = try #require(try mapper().map(handBuilt(.dietaryProtein, value: 20, bundle: "com.example.other"), issued: issued, fallbackTimeZone: utc))
+        #expect(try devices.key(for: mapped.device) != devices.key(for: other.device), "another bundle identifier is another Device (the control)")
+        
+        let watch = HealthKitDevice(name: "Apple Watch", manufacturer: "Apple Inc.", model: "Watch7,1", hardwareVersion: nil, softwareVersion: nil)
+        var withDevice = handBuilt(.heartRate, value: 70)
+        withDevice.device = watch
+        let kept = try #require(try mapper().map(withDevice, issued: issued, fallbackTimeZone: utc))
+        guard case .healthKit(let name, _, _, _, _) = kept.device else {
+            Issue.record("a sample with an HKDevice keeps the device, not the source app")
+            return
+        }
+        #expect(name == "Apple Watch")
     }
 }

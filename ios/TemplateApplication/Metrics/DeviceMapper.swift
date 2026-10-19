@@ -28,9 +28,25 @@ struct DeviceMapper: Sendable {
             guard fields.contains(where: { !$0.isEmpty }) else {
                 throw .emptyDeviceDescriptor
             }
-            let digest = SHA256.hash(data: Data(fields.joined(separator: Self.separator).utf8))
-            return digest.map { String(format: "%02x", $0) }.joined()
+            return Self.sha256(fields.joined(separator: Self.separator))
+            
+        case .sourceApp(let name, let bundleIdentifier):
+            // Contract deviceKey.appSource*: the bundle identifier is the identity, so one app is one Device under any display name.
+            let bundle = (bundleIdentifier ?? "").trimmingCharacters(in: .whitespaces)
+            if !bundle.isEmpty {
+                return Self.sha256("app" + Self.separator + bundle)
+            }
+            let name = (name ?? "").trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else {
+                throw .emptyDeviceDescriptor
+            }
+            // no bundle identifier: the five-field rule over the name alone (what the earlier rule produced)
+            return Self.sha256([name, "", "", "", ""].joined(separator: Self.separator))
         }
+    }
+    
+    private static func sha256(_ text: String) -> String {
+        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
     
     func map(_ descriptor: DeviceDescriptor, patientID: String) throws(MappingError) -> FHIRDevice {
@@ -64,6 +80,20 @@ struct DeviceMapper: Sendable {
                 deviceName: clean(name).map { [FHIRDevice.Name(name: $0, type: "model-name")] },
                 modelNumber: clean(model),
                 version: versions.isEmpty ? nil : versions,
+                patient: patient
+            )
+            
+        case .sourceApp(let name, let bundleIdentifier):
+            let bundle = (bundleIdentifier ?? "").trimmingCharacters(in: .whitespaces)
+            let displayName = (name ?? "").trimmingCharacters(in: .whitespaces)
+            var identifiers = [identifier]
+            if !bundle.isEmpty {
+                identifiers.append(FHIRIdentifier(system: registry.systems.identifier.appBundleId, value: bundle))
+            }
+            return FHIRDevice(
+                identifier: identifiers,
+                status: "active",
+                deviceName: displayName.isEmpty ? nil : [FHIRDevice.Name(name: displayName, type: registry.deviceKey.appSourceNameType)],
                 patient: patient
             )
         }

@@ -82,7 +82,10 @@ private func sample(from object: [String: Any]) throws -> MetricSample {
         userEntered: (object["userEntered"] as? Bool) ?? false,
         artifactSuspected: (object["artifactSuspected"] as? Bool) ?? false,
         lateArrival: (object["lateArrival"] as? Bool) ?? false,
-        duplicateResolved: (object["duplicateResolved"] as? Bool) ?? false
+        duplicateResolved: (object["duplicateResolved"] as? Bool) ?? false,
+        meal: (object["meal"] as? [String: Any]).flatMap { raw in
+            (raw["code"] as? String).flatMap { code in (raw["label"] as? String).map { MetricSample.Meal(code: code, label: $0) } }
+        }
     )
 }
 
@@ -121,8 +124,14 @@ struct MetricContractTests {
         let registry = try registry()
         #expect(registry.contractVersion.hasPrefix("\(MetricRegistry.supportedMajorVersion)."))
         for id in MetricID.allCases {
-            #expect(registry.metric(id)?.loinc != nil, "\(id.rawValue)")
+            let metric = registry.metric(id)
+            #expect(metric?.loinc != nil || metric?.customCode != nil, "\(id.rawValue) has a code")
         }
+        // the intake metrics: three use the project's own nutrient system, the others LOINC; none has an HL7 category
+        let intake = MetricID.allCases.filter { registry.metric($0)?.domain != nil }
+        #expect(intake.count == 8)
+        #expect(intake.filter { registry.metric($0)?.customCode != nil }.count == 3)
+        #expect(intake.allSatisfy { registry.metric($0)?.category == nil && registry.metric($0)?.zeroAllowed == true })
         #expect(registry.sleep?.stages?.count == 5)
         #expect(registry.sleep?.unmapped == ["inBed"])
     }
@@ -355,16 +364,17 @@ struct SpecSampleTests {
         return blocks
     }
     
-    @Test("the heart-rate and sleep samples printed in fhir-data-model.md are reproduced exactly (apart from meta.source, which the spec's A9 adds)")
+    @Test("the heart-rate, sleep and dietary-intake samples printed in fhir-data-model.md are reproduced exactly (apart from meta.source, which the spec's A9 adds)")
     func specSamples() throws {
         let specs = try Self.specObservations()
-        #expect(specs.count == 2, "expected the spec's two Observation samples, found \(specs.count)")
+        #expect(specs.count == 3, "expected the spec's three Observation samples (heart rate, sleep, dietary intake), found \(specs.count)")
         let mapper = ObservationMapper(registry: try registry())
         let all = goldenCases("observations-quantity.json") + goldenCases("observations-sleep.json")
         for spec in specs {
             let identifiers = try #require(spec["identifier"] as? [[String: Any]])
         let id = try #require(identifiers.first?["value"] as? String)
-            let golden = try #require(all.first { (($0["sample"] as? [String: Any])?["id"] as? String) == id }, "no fixture for spec sample \(id)")
+            // a HealthKit identifier is the lowercased sample UUID (contract A16), so the spec's value is matched ignoring case
+            let golden = try #require(all.first { (($0["sample"] as? [String: Any])?["id"] as? String)?.lowercased() == id.lowercased() }, "no fixture for spec sample \(id)")
             guard case .observation(let produced) = try mapper.map(
                 try sample(from: try #require(golden["sample"] as? [String: Any])), patientID: patient,
                 deviceReference: golden["deviceReference"] as? String) else {
@@ -389,6 +399,8 @@ struct DeviceMappingTests {
         switch try #require(raw["kind"] as? String) {
         case "synthetic":
             return .synthetic
+        case "sourceApp":
+            return .sourceApp(name: raw["name"] as? String, bundleIdentifier: raw["bundleIdentifier"] as? String)
         default:
             return .healthKit(name: raw["name"] as? String, manufacturer: raw["manufacturer"] as? String, model: raw["model"] as? String,
                               hardwareVersion: raw["hardwareVersion"] as? String, softwareVersion: raw["softwareVersion"] as? String)
@@ -469,5 +481,28 @@ struct UserEnteredTests {
         let decoded = try JSONDecoder().decode(MetricSample.self, from: try JSONSerialization.data(withJSONObject: json))
         #expect(decoded == sample)
         #expect(decoded.userEntered == false)
+    }
+}
+
+
+@Suite("Meal labels")
+struct MealLabelTests {
+    static let names = goldenCases("meals.json").compactMap { $0["name"] as? String }
+    
+    @Test("meal fixtures were found")
+    func found() {
+        #expect(Self.names.count >= 10)
+    }
+    
+    @Test("a label normalizes exactly as the independent generator says", arguments: MealLabelTests.names)
+    func normalization(_ name: String) throws {
+        let golden = try #require(goldenCases("meals.json").first { $0["name"] as? String == name })
+        let label = golden["label"] as? String   // absent in the fixture (null) is "no label"
+        let produced = try registry().meal(forLabel: label)
+        if let expected = golden["expected"] as? [String: Any] {
+            #expect(produced == MetricSample.Meal(code: try #require(expected["code"] as? String), label: try #require(expected["label"] as? String)), "\(name)")
+        } else {
+            #expect(produced == nil, "\(name) is no meal")
+        }
     }
 }

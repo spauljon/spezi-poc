@@ -280,6 +280,26 @@ records.
 - **Open finding (not changed):** a sample with no `HKDevice` takes its device name from the source app's name, but the `Device.deviceName` type is `model-name`. `other` (or `user-friendly-name`) would be more honest. It changes the contract (1.4.0, generator, golden, iOS and any consumer) so it is yours to decide.
 - **Entitlement evidence** (task 1): the signed build's entitlements and the embedded profile both include background delivery on a free profile (checked with `codesign` and the profile's contents), expiring 2026-10-21. That shows signing works; whether iOS actually wakes the app is what the device measurement shows.
 
+## Dietary intake (M20)
+
+The contract's eight `intake` metrics (energy, protein, carbohydrates, fat, fiber, sugar, sodium, water) are mapped to FHIR; nothing reads them from HealthKit yet (M21).
+
+| Piece | What it does |
+|---|---|
+| `MetricRegistry` | `Metric` now has an optional `loinc` **or** a `customCode` (in one of the project's own systems), an optional `category` **or** a `domain`, and `zeroAllowed`; the registry also holds `domains`, `mealTypes` and `mealTypeAliases`, and `meal(forLabel:)` (trimmed, case-insensitive, an alias or `other`; no label is no meal). |
+| `ObservationMapper` | An intake's `category` is the domain entry plus, when the sample has a meal, a **separate** meal entry; its `code` is LOINC or the custom coding with the display in `text`; zero is stored and negative is refused (`negativeValue`). Everything is read from the contract. |
+| `DeviceMapper` | `.sourceApp(name:bundleIdentifier:)`: keyed by the bundle identifier (one app is one Device under any display name), two identifiers, name type `other`; no bundle identifier keeps the earlier name-only key. |
+| `HealthKitRecord` / `HealthKitMapper` | Units for the eight types are read in explicit units (kcal, g, mg, mL, converted from whatever the source wrote); the source's bundle identifier; and the meal label from the metadata keys `meal` and `Meal`: one key is the label, two that agree are one, **two that disagree are no label and a counted conflict**. A sample with no `HKDevice` is a source application. |
+| Synthetic meal generator | `SyntheticMetric.nutrition` (off by default; the *Meal log* preset turns it on): breakfast, lunch, a snack and dinner at plausible times with labels from the contract (the snack as the plural alias), eight nutrients per food entry at one instant, zeros, **days with nothing logged** (no samples, not zero), **edits** (a corrected entry with new ids and other amounts, delivered 5 to 60 minutes later), **deletions** and implausible energy figures. Edits and deletions are ground truth only (`InjectedAnomalies.edited` and `.deleted`); the retraction path that uses them is M21. |
+
+### Assumptions made in M20 (review these)
+
+- **The meal-label rules are a guess** at how a source names meals (contract A38): the five codes and the alias `snacks`. The M21 structure probe is what confirms what MyFitnessPal writes.
+- **A source application's name type is `other`** (D6); a Device made by the earlier name-only rule is not merged with the new one.
+- **The metadata keys `meal` and `Meal`** were seen on one sample in Apple Health's detail view; that our code receives them is not yet verified (M21).
+- **Plausible ranges for intakes are per entry** and generous (contract A34).
+- The simulator's counters show nutrition samples only when there are some; the preset list gained *Meal log*.
+
 ## Data-quality flags (M19)
 
 The app sets the four flags of the contract (`user-entered`, `artifact-suspected`, `late-arrival`, `duplicate-resolved`) as `Observation.meta.tag`, listed in ascending code order. A flag sits **beside** the value: nothing is dropped or altered.

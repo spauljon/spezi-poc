@@ -15,6 +15,8 @@ enum MappingError: Error, Equatable {
     case emptySampleID
     case nonFiniteValue
     case nonPositiveValue
+    /// A negative intake: always refused, even though zero is allowed for an intake.
+    case negativeValue
     case endBeforeStart
     case emptySleepInterval
     case offsetNotWholeMinutes
@@ -32,6 +34,7 @@ extension MappingError {
         case .emptySampleID: "emptySampleID"
         case .nonFiniteValue: "nonFiniteValue"
         case .nonPositiveValue: "nonPositiveValue"
+        case .negativeValue: "negativeValue"
         case .endBeforeStart: "endBeforeStart"
         case .emptySleepInterval: "emptySleepInterval"
         case .offsetNotWholeMinutes: "offsetNotWholeMinutes"
@@ -79,17 +82,20 @@ struct ObservationMapper: Sendable {
         
         switch sample.measurement {
         case .quantity(let id, let value):
-            guard let metric = registry.metric(id), let loinc = metric.loinc else {
+            guard let metric = registry.metric(id), let code = codeConcept(for: metric) else {
                 throw .contractMissing(id.rawValue)
             }
             guard value.isFinite else {
                 throw .nonFiniteValue
             }
-            guard value > 0 else {
-                throw .nonPositiveValue
+            // Contract rules.value: strictly positive, except an intake, where zero is stored as given. Negative: never.
+            if metric.zeroAllowed == true {
+                guard value >= 0 else { throw .negativeValue }
+            } else {
+                guard value > 0 else { throw .nonPositiveValue }
             }
             let quantity = FHIRQuantity(value: Self.decimal(value), unit: metric.unit.display, system: registry.systems.ucum, code: metric.unit.ucum)
-            return .observation(try build(sample, sampleID: sampleID, metric: metric, coding: loinc, value: quantity,
+            return .observation(try build(sample, sampleID: sampleID, metric: metric, code: code, value: quantity,
                                           period: metric.effective == "period" || sample.start != sample.end,
                                           patientID: patientID, deviceReference: deviceReference))
             
@@ -105,17 +111,47 @@ struct ObservationMapper: Sendable {
             }
             let minutes = Self.minutes(from: sample.start, to: sample.end)
             let quantity = FHIRQuantity(value: minutes, unit: sleep.unit.display, system: registry.systems.ucum, code: sleep.unit.ucum)
-            return .observation(try build(sample, sampleID: sampleID, metric: sleep, coding: coding, value: quantity, period: true,
+            let code = FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.loinc, code: coding.code, display: coding.display)])
+            return .observation(try build(sample, sampleID: sampleID, metric: sleep, code: code, value: quantity, period: true,
                                           patientID: patientID, deviceReference: deviceReference))
         }
     }
     
     
-    private func build(_ sample: MetricSample, sampleID: String, metric: MetricRegistry.Metric, coding: MetricRegistry.Coding,
-                       value: FHIRQuantity, period: Bool, patientID: String, deviceReference: String?) throws(MappingError) -> FHIRObservation {
-        guard let category = registry.categories[metric.category] else {
-            throw .contractMissing("category \(metric.category)")
+    /// `Observation.code` of a quantity or intake metric (contract rules.intakeCode): the LOINC coding when it has one,
+    /// otherwise the coding in the project's own system with the contract's display as `text`.
+    private func codeConcept(for metric: MetricRegistry.Metric) -> FHIRCodeableConcept? {
+        if let loinc = metric.loinc {
+            return FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.loinc, code: loinc.code, display: loinc.display)])
         }
+        guard let custom = metric.customCode, let system = registry.customSystem(custom.system) else {
+            return nil
+        }
+        return FHIRCodeableConcept(coding: [FHIRCoding(system: system, code: custom.code, display: nil)], text: custom.display)
+    }
+    
+    /// `Observation.category` (contract rules.domain and rules.mealType): an intake is classified by its domain, and by
+    /// its meal as a SEPARATE entry (a CodeableConcept's codings are translations of one concept, so the two never share
+    /// one). Every other metric keeps its single HL7 category.
+    private func categories(for metric: MetricRegistry.Metric, sample: MetricSample) throws(MappingError) -> [FHIRCodeableConcept] {
+        if let domainKey = metric.domain {
+            guard let domain = registry.domains[domainKey] else {
+                throw .contractMissing("domain \(domainKey)")
+            }
+            var out = [FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.observationDomain, code: domain.code, display: domain.display)])]
+            if let meal = sample.meal {
+                out.append(FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.mealType, code: meal.code, display: nil)], text: meal.label))
+            }
+            return out
+        }
+        guard let key = metric.category, let category = registry.categories[key] else {
+            throw .contractMissing("category \(metric.category ?? "?")")
+        }
+        return [FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.observationCategory, code: category.code, display: category.display)])]
+    }
+    
+    private func build(_ sample: MetricSample, sampleID: String, metric: MetricRegistry.Metric, code: FHIRCodeableConcept,
+                       value: FHIRQuantity, period: Bool, patientID: String, deviceReference: String?) throws(MappingError) -> FHIRObservation {
         let identifierSystem: String
         let identifierValue: String
         let metaSource: String
@@ -143,8 +179,8 @@ struct ObservationMapper: Sendable {
             meta: FHIRMeta(source: metaSource, tag: qualityTags(for: sample)),
             identifier: [FHIRIdentifier(system: identifierSystem, value: identifierValue)],
             status: "final",
-            category: [FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.observationCategory, code: category.code, display: category.display)])],
-            code: FHIRCodeableConcept(coding: [FHIRCoding(system: registry.systems.loinc, code: coding.code, display: coding.display)]),
+            category: try categories(for: metric, sample: sample),
+            code: code,
             subject: FHIRReference(reference: "Patient/\(patientID)"),
             effectiveDateTime: effectiveDateTime,
             effectivePeriod: effectivePeriod,
