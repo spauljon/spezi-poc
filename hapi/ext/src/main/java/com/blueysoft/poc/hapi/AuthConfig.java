@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
 import com.nimbusds.jose.proc.SecurityContext;
 import java.net.URL;
 import java.nio.file.Path;
+import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,18 @@ import org.springframework.context.annotation.Configuration;
 public class AuthConfig {
 
 	private static final Logger ourLog = LoggerFactory.getLogger(AuthConfig.class);
+
+	/**
+	 * The guard for the one write the capture role may make besides creating (see {@link RetractionPolicy}). The
+	 * identifier systems are the app's own sample-identifier systems (comma separated); none configured means no
+	 * retraction is allowed at all.
+	 */
+	@Bean
+	public RetractionPolicy retractionPolicy(@Value("${poc.auth.retraction-identifier-systems:}") String theSystems) {
+		var systems = Arrays.stream(theSystems.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+		ourLog.info("Retraction (PATCH status to entered-in-error) allowed for identifier systems: {}", systems);
+		return new RetractionPolicy(systems);
+	}
 
 	/**
 	 * Fails startup (closed) if the CA file or the URL is unusable. The identity provider itself need not be up

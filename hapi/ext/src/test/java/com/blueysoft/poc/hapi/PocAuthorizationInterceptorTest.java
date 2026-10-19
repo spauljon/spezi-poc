@@ -38,5 +38,10 @@ class PocAuthorizationInterceptorTest {
 		assertEquals(1, PocAuthorizationInterceptor.rulesFor(java.util.List.of()).size());
 		assertEquals(1, PocAuthorizationInterceptor.rulesFor(java.util.List.of("some-other-role")).size());
 		assertTrue(PocAuthorizationInterceptor.rulesFor(java.util.List.of("capture-writer")).size() > 1); // control
+		// the write rule a retraction needs is added for the capture role only, and only on request
+		int plain = PocAuthorizationInterceptor.rulesFor(java.util.List.of("capture-writer")).size();
+		assertEquals(plain + 1, PocAuthorizationInterceptor.rulesFor(java.util.List.of("capture-writer"), true).size());
+		assertEquals(PocAuthorizationInterceptor.rulesFor(java.util.List.of("clinician-reader")).size(),
+				PocAuthorizationInterceptor.rulesFor(java.util.List.of("clinician-reader"), true).size());
 	}
 }

@@ -50,7 +50,8 @@ def call(method, url, token=None, body=None, headers=None, raw_auth=None):
         tmp.write(body if isinstance(body, str) else json.dumps(body))
         tmp.close()
         cmd += ["--data-binary", "@" + tmp.name]
-        cfg.append('header = "Content-Type: application/fhir+json"')
+        if not any(k.lower() == "content-type" for k in (headers or {})):
+            cfg.append('header = "Content-Type: application/fhir+json"')
     try:
         p = subprocess.run(cmd, input=("\n".join(cfg) + "\n").encode(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     finally:
@@ -118,6 +119,77 @@ def txn_entry(patient_id):
 
 
 FAILS = []
+
+SAMPLE_SYSTEM = "http://blueysoft.com/fhir/identifier/synthetic-sample"
+RETRACT = '[{"op":"replace","path":"/status","value":"entered-in-error"}]'
+PATCH_TYPE = {"Content-Type": "application/json-patch+json"}
+
+
+def sample_observation(pid, value):
+    obs = observation(pid)
+    obs["identifier"] = [{"system": SAMPLE_SYSTEM, "value": value}]
+    return obs
+
+
+def status_of(cap, value):
+    st, text = call("GET", BASE + "/Observation?" + urllib.parse.urlencode({"identifier": "%s|%s" % (SAMPLE_SYSTEM, value)}), cap)
+    entries = json.loads(text).get("entry", []) if st == 200 else []
+    return [e["resource"].get("status") for e in entries]
+
+
+def retraction_checks(pid, cap, cli, wrk):
+    """M21 (D2): the capture role's one narrow update. A conditional JSON Patch by sample identifier that sets status to
+    entered-in-error is applied; every other patch, and every other kind of update, is refused. Each refusal is judged
+    against the accepted request (the positive control) and then proved to have changed nothing."""
+    print("== capture-writer: retract its own Observation (conditional JSON Patch of status), nothing else")
+    a, b = "auth-check-retract-a", "auth-check-retract-b"
+    for v in (a, b):
+        st, _ = call("POST", BASE + "/Observation", cap, sample_observation(pid, v), {"If-None-Exist": "identifier=%s|%s" % (SAMPLE_SYSTEM, v)})
+        expect("create the synthetic Observation %s to retract" % v, st, [200, 201])
+    url = lambda v, name="identifier": BASE + "/Observation?" + urllib.parse.urlencode({name: "%s|%s" % (SAMPLE_SYSTEM, v)})
+
+    # refusals first, while the Observation is still final, each followed by proof that nothing changed
+    st, _ = call("PATCH", url(a), cap, '[{"op":"replace","path":"/valueQuantity/value","value":999}]', PATCH_TYPE)
+    expect("patch of anything but status is refused", st, 403)
+    st, _ = call("PATCH", url(a), cap, '[{"op":"replace","path":"/status","value":"final"}]', PATCH_TYPE)
+    expect("patch of status to another value is refused", st, 403)
+    st, _ = call("PATCH", url(a), cap, '[{"op":"replace","path":"/status","value":"entered-in-error"},{"op":"replace","path":"/valueQuantity/value","value":1}]', PATCH_TYPE)
+    expect("a two-operation patch is refused", st, 403)
+    st, _ = call("PATCH", BASE + "/Observation?" + urllib.parse.urlencode({"identifier": "http://example.org/other|" + a}), cap, RETRACT, PATCH_TYPE)
+    expect("patch found by an identifier system that is not the app's own is refused", st, 403)
+    st, _ = call("PATCH", BASE + "/Observation?" + urllib.parse.urlencode({"subject": "Patient/" + pid}), cap, RETRACT, PATCH_TYPE)
+    expect("patch found by anything but one sample identifier (here: every Observation of the patient) is refused", st, 403)
+    st, _ = call("PATCH", BASE + "/Observation?" + urllib.parse.urlencode({"identifier": "%s|%s,%s|%s" % (SAMPLE_SYSTEM, a, SAMPLE_SYSTEM, b)}), cap, RETRACT, PATCH_TYPE)
+    expect("patch found by several identifiers at once is refused", st, 403)
+    st, _ = call("PATCH", BASE + "/Observation/does-not-matter", cap, RETRACT, PATCH_TYPE)
+    expect("patch by id is refused", st, 403)
+    st, _ = call("PATCH", BASE + "/Patient?" + urllib.parse.urlencode({"identifier": "%s|%s" % (PATIENT_SYSTEM, PATIENT_VALUE)}), cap, RETRACT, PATCH_TYPE)
+    expect("patch of a Patient is refused", st, 403)
+    st, _ = call("PATCH", url(a), cap, RETRACT, {"Content-Type": "application/fhir+json"})
+    expect("a patch sent as another media type is refused", st, [403, 400, 415])
+    for who, tok in (("clinician-reader", cli), ("worker-reader", wrk)):
+        st, _ = call("PATCH", url(a), tok, RETRACT, PATCH_TYPE)
+        expect("%s cannot retract" % who, st, 403)
+    st, _ = call("PATCH", url(a), None, RETRACT, PATCH_TYPE)
+    expect("a retraction without a token is refused", st, 401)
+    st, _ = call("PUT", url(a), cap, sample_observation(pid, a))
+    expect("a conditional update (PUT) is still refused", st, 403)
+    st, _ = call("DELETE", url(a), cap)
+    expect("a conditional delete is still refused", st, 403)
+    got = status_of(cap, a), status_of(cap, b)
+    expect("none of the refused requests changed anything (both still final)", got, [(["final"], ["final"])])
+
+    # the control: the exact retraction is accepted, applies to the one Observation, and is repeatable
+    st, text = call("PATCH", url(a), cap, RETRACT, PATCH_TYPE)
+    expect("CONTROL: the conditional status patch is accepted (HAPI 7.6.0 applies a conditional JSON Patch by identifier)", st, 200)
+    expect("the retracted Observation is entered-in-error and the other is untouched",
+           (status_of(cap, a), status_of(cap, b)), [(["entered-in-error"], ["final"])])
+    st, _ = call("PATCH", url(a), cap, RETRACT, PATCH_TYPE)
+    expect("retracting again is harmless (idempotent)", st, 200)
+    st, _ = call("PATCH", url("auth-check-no-such-sample"), cap, RETRACT, PATCH_TYPE)
+    expect("retracting a sample the server never received answers 404, which the app treats as done", st, 404)
+    st, _ = call("PATCH", url(b), cap, RETRACT, PATCH_TYPE)
+    expect("the second Observation can be retracted too (leaves the stack in the retracted state)", st, 200)
 
 
 def expect(label, got, want):
@@ -244,6 +316,8 @@ def cmd_check():
     # nothing from the refused Bundles was applied: the Patient still exists unchanged
     st, text = call("GET", BASE + "/Patient/" + pid, cap)
     expect("a refused Bundle applied nothing (the Patient is still there)", st, 200)
+
+    retraction_checks(pid, cap, cli, wrk)
 
     for who, tok in (("clinician-reader", cli), ("worker-reader", wrk)):
         print("== %s: read-only" % who)

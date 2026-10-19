@@ -82,9 +82,26 @@ Nothing calls either: no class, template or script in the image references them,
 
 | Role (token `roles` claim) | Allowed | Everything else |
 |---|---|---|
-| `capture-writer` | create and read (search) `Observation`, `Device`, `Patient`; **transaction Bundles whose every entry is one of those** (M8) | 403: update, delete, other types, `$lastn`; a Bundle containing even one disallowed entry is refused as a whole |
+| `capture-writer` | create and read (search) `Observation`, `Device`, `Patient`; **transaction Bundles whose every entry is one of those** (M8); **one update: retract its own Observation** (M21, below) | 403: any other update, `PUT`, `PATCH` by id, any other patch, delete, other types, `$lastn`; a Bundle containing even one disallowed entry is refused as a whole |
 | `clinician-reader`, `worker-reader` | read and search every type; `Observation/$lastn`; metadata | 403: any write, any transaction, admin operations |
 | any other or no role | metadata only | 403 |
+
+### Retraction (M21, decision D2)
+
+A deleted or edited sample must not stay `final` on the server, so the capture role has **one** update: a conditional JSON Patch that sets `status` to `entered-in-error`.
+
+```
+PATCH [base]/Observation?identifier=<app sample-identifier system>|<value>
+Content-Type: application/json-patch+json
+[{"op":"replace","path":"/status","value":"entered-in-error"}]
+```
+
+HAPI's rule builder can allow or deny PATCH but cannot look inside it, and its own `allow().patch().allRequests()` does not match a typed (conditional) patch at all in 7.6.0 (found live: the accepted request got 403 from the final deny). So two classes in `hapi/ext` do the work:
+
+- `RetractionPolicy` (pure, unit-tested): refuses unless the request is PATCH, on `Observation`, with **no id**, exactly **one** `identifier` search parameter (no modifier, one value) naming one plain value in one of the configured systems, media type `application/json-patch+json`, and a body that is exactly one `replace` of `/status` to `entered-in-error` with no other member. The systems are `poc.auth.retraction-identifier-systems` in `application.yaml` (the contract's synthetic and healthKit sample systems; `contract/check.py` keeps them equal); none configured means no retraction at all.
+- `RetractionRule` (an `IAuthRule`): added to a request's rules **only after** the policy accepted that request, so a `PUT` or a delete by the same caller never sees it. It allows the PATCH and the UPDATE HAPI derives from it, for an Observation, nothing else.
+
+Observed on 7.6.0 and recorded in `hapi/auth.py check`: the exact retraction answers 200 and changes only the matched Observation; retracting again is 200 (idempotent); a sample the server never received is **404**, which the app treats as done. Refused, each proved to change nothing: another path or value, two operations, another system, another or several search parameters, a patch by id, a Patient, another media type, `PUT`, delete, the two reader roles (403) and no token (401). The brief's wording "the target carries the capture app's `meta.source`" became "found by the app's own identifier system", because an identifier can be required in the request itself and `meta.source` cannot.
 
 ### Assumptions to review
 

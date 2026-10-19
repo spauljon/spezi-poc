@@ -11,6 +11,7 @@ import ca.uhn.fhir.rest.api.RestOperationTypeEnum;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import ca.uhn.fhir.rest.server.RestfulServerUtils;
 import ca.uhn.fhir.rest.server.exceptions.AuthenticationException;
+import ca.uhn.fhir.rest.server.exceptions.ForbiddenOperationException;
 import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
 import ca.uhn.fhir.rest.server.exceptions.UnclassifiedServerFailureException;
 import ca.uhn.fhir.rest.server.interceptor.auth.AuthorizationInterceptor;
@@ -19,6 +20,7 @@ import ca.uhn.fhir.rest.server.interceptor.auth.PolicyEnum;
 import ca.uhn.fhir.rest.server.interceptor.auth.RuleBuilder;
 import ca.uhn.fhir.rest.server.method.ResourceParameter;
 import jakarta.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.List;
 import org.hl7.fhir.r4.model.Observation;
 import org.slf4j.Logger;
@@ -56,13 +58,16 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 	static final String ROLE_WORKER = "worker-reader";
 
 	private final JwtVerifier myVerifier;
+	private final RetractionPolicy myRetractionPolicy;
 
-	public PocAuthorizationInterceptor(JwtVerifier theVerifier) {
+	public PocAuthorizationInterceptor(JwtVerifier theVerifier, RetractionPolicy theRetractionPolicy) {
 		super(PolicyEnum.DENY);
 		myVerifier = theVerifier;
+		myRetractionPolicy = theRetractionPolicy;
 	}
 
 	private static final String RULES_KEY = PocAuthorizationInterceptor.class.getName() + ".rules";
+	private static final String ROLES_KEY = PocAuthorizationInterceptor.class.getName() + ".roles";
 
 	/**
 	 * Authorization shifted left: runs before the request validator (order 0). Failures throw (401/403/503).
@@ -81,12 +86,43 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 	public boolean incomingRequestPostProcessed(@Nonnull RequestDetails theRequest) {
 		theRequest.getUserData().put(RULES_KEY, computeRules(theRequest)); // throws 401 / 503
 		RestOperationTypeEnum operation = theRequest.getRestOperationType();
+		if (operation == RestOperationTypeEnum.PATCH) {
+			guardPatch(theRequest);
+		}
 		if ((operation == RestOperationTypeEnum.TRANSACTION || operation == RestOperationTypeEnum.BATCH)
 				&& theRequest.getResource() == null) {
 			parseBody(theRequest);
 		}
 		super.incomingRequestPreHandled(theRequest, Pointcut.SERVER_INCOMING_REQUEST_POST_PROCESSED);
 		return true;
+	}
+
+	/**
+	 * The rule list can allow PATCH but not look inside it, so for a caller allowed to patch at all (the capture role)
+	 * the request must be exactly the permitted retraction ({@link RetractionPolicy}); anything else is a 403 before
+	 * HAPI runs it. Other roles are refused by the rules (default deny) and are not inspected here.
+	 */
+	private void guardPatch(RequestDetails theRequest) {
+		Object roles = theRequest.getUserData().get(ROLES_KEY);
+		if (!(roles instanceof List<?> list) || !list.contains(ROLE_CAPTURE)) {
+			return;
+		}
+		@SuppressWarnings("unchecked")
+		List<String> verifiedRoles = (List<String>) roles;
+		String refusal = myRetractionPolicy.refusal(
+				theRequest.getRequestType(),
+				theRequest.getResourceName(),
+				theRequest.getId() == null ? null : theRequest.getId().getIdPart(),
+				theRequest.getParameters(),
+				theRequest.getHeader("Content-Type"),
+				theRequest.loadRequestContents());
+		if (refusal != null) {
+			ourLog.warn("403 PATCH refused: {}", refusal);
+			throw new ForbiddenOperationException("Not permitted");
+		}
+		// Only THIS request, already shown to be the retraction, gets the rule that allows the PATCH and the update it
+		// produces; a PUT or a conditional update by the same caller is built from the normal rules and stays refused.
+		theRequest.getUserData().put(RULES_KEY, rulesFor(verifiedRoles, true));
 	}
 
 	private static void parseBody(RequestDetails theRequest) {
@@ -143,6 +179,7 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 			throw new UnclassifiedServerFailureException(503, "Authentication service unavailable");
 		}
 
+		theRequest.getUserData().put(ROLES_KEY, verified.roles());
 		List<IAuthRule> rules = rulesFor(verified.roles());
 		ourLog.debug("Authenticated azp={} roles={} -> {} rule(s)", verified.authorizedParty(), verified.roles(), rules.size());
 		return rules;
@@ -150,6 +187,11 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 
 	/** Roles to rules. Pure function of the verified roles. */
 	static List<IAuthRule> rulesFor(List<String> theRoles) {
+		return rulesFor(theRoles, false);
+	}
+
+	/** @param theRetraction true only for a request already shown to be the permitted retraction (see guardPatch) */
+	static List<IAuthRule> rulesFor(List<String> theRoles, boolean theRetraction) {
 		RuleBuilder b = new RuleBuilder();
 		boolean any = false;
 
@@ -175,7 +217,13 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 		if (any) {
 			b.allow().metadata().andThen();
 		}
-		return b.denyAll().build();
+		List<IAuthRule> rules = new ArrayList<>(b.denyAll().build());
+		if (theRetraction && theRoles.contains(ROLE_CAPTURE)) {
+			// M21 (D2): only for a request RetractionPolicy has accepted (guardPatch). HAPI's patch rule cannot match a
+			// conditional PATCH, so a rule of our own sits in front of the final deny; see RetractionRule.
+			rules.add(rules.size() - 1, new RetractionRule());
+		}
+		return rules;
 	}
 
 	/** The capability statement: GET [base]/metadata. */
