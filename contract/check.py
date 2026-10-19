@@ -140,6 +140,20 @@ def main():
     for url in c["systems"]["identifier"].values():
         check(url.startswith("http://blueysoft.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % url.rsplit("/", 1)[-1], "identifier system outside the namespace: " + url)
 
+    # --- M21: the HAPI retraction rule names the app's own sample-identifier systems; they must equal the contract's
+    def retraction_systems(text):
+        m = re.search(r"^\s*retraction-identifier-systems:\s*(\S+)\s*$", text, re.M)
+        return set(m.group(1).split(",")) if m else None
+    sample = {c["systems"]["identifier"]["synthetic"], c["systems"]["identifier"]["healthKit"]}
+    check(retraction_systems("a:\n  retraction-identifier-systems: x,y\n") == {"x", "y"} and retraction_systems("nothing here") is None,
+          "retraction control: the application.yaml parser reads a list and notices a missing key", "the retraction-systems parser is broken")
+    yaml_path = os.path.join(ROOT, "hapi", "application.yaml")
+    configured = retraction_systems(open(yaml_path).read())
+    check(configured == sample, "hapi/application.yaml retraction-identifier-systems equals the contract's synthetic and healthKit sample systems",
+          "hapi/application.yaml retraction-identifier-systems (%s) differs from the contract sample systems (%s)" % (configured, sample))
+    check(retraction_systems(open(yaml_path).read().replace("healthkit-sample", "healthkit-samples")) != sample,
+          "retraction control: a misspelt system in application.yaml would be caught", "the retraction-systems comparison cannot see a misspelt system")
+
     # --- the iOS bundled copy
     if os.path.exists(BUNDLED):
         check(open(BUNDLED, "rb").read() == open(CONTRACT, "rb").read(), "the iOS bundled copy is byte-identical to contract/metrics.json",
