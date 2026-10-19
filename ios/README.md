@@ -282,7 +282,7 @@ records.
 
 ## Dietary intake (M20)
 
-The contract's eight `intake` metrics (energy, protein, carbohydrates, fat, fiber, sugar, sodium, water) are mapped to FHIR; nothing reads them from HealthKit yet (M21).
+The contract's eight `intake` metrics (energy, protein, carbohydrates, fat, fiber, sugar, sodium, water) are mapped to FHIR; M21 reads them from HealthKit (below).
 
 | Piece | What it does |
 |---|---|
@@ -299,6 +299,25 @@ The contract's eight `intake` metrics (energy, protein, carbohydrates, fat, fibe
 - **The metadata keys `meal` and `Meal`** were seen on one sample in Apple Health's detail view; that our code receives them is not yet verified (M21).
 - **Plausible ranges for intakes are per entry** and generous (contract A34).
 - The simulator's counters show nutrition samples only when there are some; the preset list gained *Meal log*.
+
+## Nutrition ingest and retraction (M21)
+
+| Piece | What it does |
+|---|---|
+| `TemplateApplicationDelegate` | Eight more `CollectSamples` (dietary energy, protein, carbohydrates, fat total, fiber, sugar, sodium, water): same fixed window, same acknowledged handoff, same `poc-real` patient. |
+| `HomeView` | While Apple Health is in effect, `askForAuthorization()` is called once more if HealthKit says not every configured type was asked about; the sheet lists only the new types, and nothing is shown when all were asked. |
+| `SampleQueue` | `pending_deletions` gained `state`, `attempts`, `next_attempt`, `last_error` (a file from before M21 is migrated in place and its recorded deletions stay pending); `withdrawDeletedUploads()`, `dueDeletions`, `markDeletion`, `recordDeletionFailure`, `deletionCounts()`. A sample delivered after its deletion was reported is queued as skipped. |
+| `SyncEngine` | After the uploads of a run, each pending deletion is one conditional `PATCH Observation?identifier=<healthKit system>\|<uuid>` (see `hapi/README.md`, "Retraction"): 200 retracted, 404 nothing on the server, 5xx or offline backs off, 403 stays pending with a reason and does not block uploads, other 4xx is recorded as refused. |
+| `SyncSection` | "Deleted in Apple Health, waiting", "Retracted on the server", "Deleted, nothing on the server", "Retraction refused". |
+| `NutritionProbe` (debug builds) | "Inspect nutrition structure": counts and metadata key names of the last window's nutrition samples; no values, no food names. |
+
+### Assumptions made in M21 (review these)
+
+- **A deletion HealthKit reports is applied to every metric, not only nutrition.** A deleted heart-rate sample is retracted too; the analytics worker now counts only `final`.
+- **Deletions are matched by the sample UUID alone**, not by patient: HealthKit UUIDs are unique, and the server's rule allows no other search parameter.
+- **A sample uploaded before this milestone and deleted since** is retracted on the first sync after the upgrade (its deletion was already recorded).
+- **A permanent refusal (4xx other than 404) leaves the Observation unchanged and says so**; it is not retried.
+- **The structure probe shows meal labels as written** (trimmed, at most 24 characters): the one text value it reports, because their shape is what it is for.
 
 ## Data-quality flags (M19)
 

@@ -22,8 +22,9 @@ final class SyncModel {
     private(set) var rejections: [(key: String, reason: String)] = []
     /// Samples refused as already queued (a duplicate delivery, caught before it reached the server).
     private(set) var duplicatesDropped = 0
-    /// Apple Health samples that were deleted there and have not been applied to the server (see `SampleQueue`).
-    private(set) var deletionsNotApplied = 0
+    /// Apple Health samples that were deleted there, and where each stands: withdrawn from the queue, retracted on the
+    /// server (status `entered-in-error`), or still waiting (see `SyncEngine`).
+    private(set) var deletions = DeletionCounts()
     /// The most recent time the app tried to upload, and how it went: kept across launches, so a background wake-up that
     /// ended in a failure (or never got as far as an attempt) is still readable the next time the app is opened.
     private(set) var attempts: [UploadAttempt] = []
@@ -133,11 +134,12 @@ final class SyncModel {
     
     func recordDeletions(_ uuids: [String]) async {
         _ = try? await queue.recordDeletions(uuids)
-        deletionsNotApplied = (try? await queue.deletionCount()) ?? deletionsNotApplied
+        deletions = (try? await queue.deletionCounts()) ?? deletions
+        kick()
     }
     
     func refreshCounts() async {
-        deletionsNotApplied = (try? await queue.deletionCount()) ?? 0
+        deletions = (try? await queue.deletionCounts()) ?? DeletionCounts()
         if let engine {
             let latest = await engine.refresh()
             status.counts = latest.counts
@@ -215,6 +217,7 @@ final class SyncModel {
     
     private func apply(_ result: SyncStatus) async {
         status = result
+        deletions = result.deletions
         rejections = (try? await queue.rejections(limit: 5)) ?? []
         timer?.cancel()
         if case .waiting(let until) = result.phase {

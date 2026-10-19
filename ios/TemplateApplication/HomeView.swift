@@ -88,6 +88,11 @@ struct HomeView: View {
                 }
                 
                 SyncSection()
+                #if DEBUG
+                if source == .appleHealth {
+                    NutritionProbeView()
+                }
+                #endif
             }
             .navigationTitle("Capture")
             .task {
@@ -104,6 +109,12 @@ struct HomeView: View {
                 await HealthKitBridge.shared.setEnabled(gate.acceptsSamples(chosen: chosen))
                 if gate.mayStartCollection(chosen: chosen) {
                     simulator.stop()
+                    // Types added since Apple Health was first allowed (M21: dietary intake) have not been asked about: ask
+                    // now, once. HealthKit shows the sheet for the new types only, and nothing at all when all were asked.
+                    await healthKit.waitForConfigurationDone()
+                    if !healthKit.isFullyAuthorized {
+                        try? await healthKit.askForAuthorization()
+                    }
                     await healthKit.triggerDataSourceCollection()
                 }
                 await sources.refreshCounters()
@@ -162,7 +173,7 @@ struct HomeView: View {
     private var appleHealthDetail: String {
         switch gate {
         case .available:
-            "Your own measurements (heart rate, resting heart rate, HRV, sleep) from the last 7 days onwards, read-only, sent to your own server as a separate patient."
+            "Your own measurements (heart rate, resting heart rate, HRV, sleep) and the nutrition other apps write to Apple Health, from the last 7 days onwards, read-only, sent to your own server as a separate patient."
         case .unavailable(let reason):
             reason.message
         }

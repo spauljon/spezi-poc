@@ -30,6 +30,8 @@ struct SyncStatus: Equatable, Sendable {
     
     var phase = Phase.idle
     var counts = QueueCounts()
+    /// Samples HealthKit reported deleted, and where each stands (M21).
+    var deletions = DeletionCounts()
     var lastSuccess: Date?
     var lastError: String?
     /// Observations the server created in this run of the app.
@@ -39,9 +41,15 @@ struct SyncStatus: Equatable, Sendable {
 }
 
 
-/// Drains the queue into HAPI as transaction Bundles.
+/// Drains the queue into HAPI as transaction Bundles, then applies the deletions HealthKit reported.
 ///
-/// Rules of the road:
+/// A deleted sample is applied in two steps (M21, decision D2). One still waiting in the queue is withdrawn locally and
+/// never uploaded. One already uploaded is retracted: a conditional JSON Patch that sets the Observation's `status` to
+/// `entered-in-error` and nothing else, found by the sample's identifier. The server's capture role may make that one
+/// update only (`hapi/ext` `RetractionPolicy`); the Observation stays on the server, hidden from consumers that read
+/// `final`. A 404 means the server never had it, which is also done.
+///
+/// Rules of the road for uploading:
 /// - Every entry is a conditional create (`ifNoneExist` on `identifier`), so a resend (after a timeout, a crash, or a
 ///   duplicate delivery) changes nothing on the server.
 /// - A whole batch succeeds or fails together (transaction). Failure kinds are handled differently:
@@ -70,6 +78,8 @@ actor SyncEngine {
     private let transport: any FHIRTransport
     private let token: @Sendable () async throws(AuthError) -> String
     private let builder: BundleBuilder
+    /// The identifier system of a HealthKit sample's Observation (contract `systems.identifier.healthKit`).
+    private let healthKitSystem: String
     private let settings: Settings
     private let now: @Sendable () -> Date
     private let random: @Sendable () -> Double
@@ -92,6 +102,7 @@ actor SyncEngine {
         self.transport = transport
         self.token = token
         self.builder = BundleBuilder(registry: registry)
+        self.healthKitSystem = registry.systems.identifier.healthKit
         self.settings = settings
         self.now = now
         self.random = random
@@ -102,6 +113,9 @@ actor SyncEngine {
     func refresh() async -> SyncStatus {
         if let counts = try? await queue.counts() {
             status.counts = counts
+        }
+        if let deletions = try? await queue.deletionCounts() {
+            status.deletions = deletions
         }
         return status
     }
@@ -119,6 +133,8 @@ actor SyncEngine {
         status.lastError = nil
         
         do {
+            // Local and instant: a sample deleted before it was uploaded is not uploaded.
+            try await queue.withdrawDeletedUploads()
             while true {
                 let due = try await queue.nextBatch(limit: settings.batchSize, now: now())
                 guard !due.isEmpty else {
@@ -148,8 +164,16 @@ actor SyncEngine {
                 case .stop(let stop): // nothing more to do right now
                     status.phase = stop
                     status.counts = try await queue.counts()
+                    status.deletions = try await queue.deletionCounts()
                     return status
                 }
+            }
+            // Uploads first, so a sample uploaded in this very run and deleted since is retracted in the same run.
+            if case .stop(let stop) = try await retract() {
+                status.phase = stop
+                status.counts = try await queue.counts()
+                status.deletions = try await queue.deletionCounts()
+                return status
             }
             status.phase = .idle
             status.lastSuccess = now()
@@ -158,7 +182,84 @@ actor SyncEngine {
             status.lastError = "The local queue failed: \(error)"
         }
         status.counts = (try? await queue.counts()) ?? status.counts
+        status.deletions = (try? await queue.deletionCounts()) ?? status.deletions
         return status
+    }
+    
+    
+    // MARK: - Retraction
+    
+    static let retraction = Data(#"[{"op":"replace","path":"/status","value":"entered-in-error"}]"#.utf8)
+    
+    /// Applies every due deletion to the server, one conditional PATCH each. A transient failure stops the run and
+    /// backs off (the deletion stays pending); a request the server will never take is recorded as refused and the rest go on.
+    private func retract() async throws(QueueError) -> Step {
+        while true {
+            let due = try await queue.dueDeletions(limit: 50, now: now())
+            guard !due.isEmpty else {
+                return .done
+            }
+            for (uuid, attempts) in due {
+                let bearer: String
+                do {
+                    bearer = try await token()
+                } catch {
+                    status.phase = error == .signedOut ? .blocked(.signInRequired) : .waiting(until: now().addingTimeInterval(settings.backoff.delay(forAttempt: attempts + 1, random: random())))
+                    status.lastError = error == .signedOut ? "Sign in to upload." : "Could not get an access token."
+                    return .stop(status.phase)
+                }
+                let request = FHIRHTTPRequest(
+                    method: "PATCH",
+                    path: "Observation?" + FHIRSearch.identifierQuery(system: healthKitSystem, value: uuid),
+                    headers: ["Content-Type": "application/json-patch+json"],
+                    body: Self.retraction)
+                var response: FHIRHTTPResponse
+                do {
+                    response = try await transport.send(request, token: bearer)
+                    if response.status == 401 {
+                        // Once more: the token source refreshes an expired token when asked again.
+                        response = try await transport.send(request, token: try await token())
+                    }
+                } catch let failure as TransportFailure {
+                    return try await retractionBackoff(uuid, message: failure.description, attempts: attempts)
+                } catch {
+                    status.phase = .blocked(.signInRequired)
+                    status.lastError = "Sign in to upload."
+                    return .stop(status.phase)
+                }
+                switch response.status {
+                case 200..<300:
+                    try await queue.markDeletion(uuid, .retracted)
+                case 404:
+                    try await queue.markDeletion(uuid, .notOnServer, note: "The server has no such Observation")
+                case 401:
+                    status.phase = .blocked(.signInRequired)
+                    status.lastError = "The server did not accept the sign-in. Sign in again."
+                    return .stop(status.phase)
+                case 403:
+                    // Not final: a server without the retraction rule (or a read-only sign-in) refuses every one. Keep the
+                    // deletion pending, say why, and try again later; do not block the uploads.
+                    let reason = Self.diagnostics(response.body) ?? "Forbidden"
+                    try await queue.recordDeletionFailure(uuid, error: "The server refused the retraction: \(reason)", retryAt: now().addingTimeInterval(3600))
+                    status.lastError = "The server refused a retraction: \(reason)"
+                case 408, 429, 500..<600:
+                    return try await retractionBackoff(uuid, message: "Server returned HTTP \(response.status).", attempts: attempts)
+                default:
+                    // 400, 409, 412, 422...: this request will never be taken as it is.
+                    let reason = Self.diagnostics(response.body) ?? "HTTP \(response.status)"
+                    try await queue.markDeletion(uuid, .refused, note: "HTTP \(response.status): \(reason)")
+                    status.lastError = "A retraction was refused: HTTP \(response.status)"
+                }
+            }
+        }
+    }
+    
+    private func retractionBackoff(_ uuid: String, message: String, attempts: Int) async throws(QueueError) -> Step {
+        let due = now().addingTimeInterval(settings.backoff.delay(forAttempt: attempts + 1, random: random()))
+        try await queue.recordDeletionFailure(uuid, error: message, retryAt: due)
+        status.phase = .waiting(until: due)
+        status.lastError = message
+        return .stop(status.phase)
     }
     
     

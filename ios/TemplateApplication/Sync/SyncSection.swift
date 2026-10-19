@@ -52,10 +52,22 @@ struct SyncSection: View {
             if sync.status.counts.skipped > 0 {
                 LabeledContent("Not uploaded (no FHIR mapping)", value: "\(sync.status.counts.skipped)")
             }
-            if sync.deletionsNotApplied > 0 {
-                // Deleted in Apple Health after upload: the server's copy is unchanged, and this says so.
-                LabeledContent("Deleted in Apple Health, not applied", value: "\(sync.deletionsNotApplied)")
+            if sync.deletions.pending > 0 {
+                // Deleted in Apple Health and not yet applied: waiting for the next upload, the network or a retry.
+                LabeledContent("Deleted in Apple Health, waiting", value: "\(sync.deletions.pending)")
                     .accessibilityIdentifier("syncDeletions")
+            }
+            if sync.deletions.retracted > 0 {
+                LabeledContent("Retracted on the server", value: "\(sync.deletions.retracted)")
+                    .accessibilityIdentifier("syncRetracted")
+            }
+            if sync.deletions.notOnServer > 0 {
+                LabeledContent("Deleted, nothing on the server", value: "\(sync.deletions.notOnServer)")
+                    .accessibilityIdentifier("syncDeletedUnsent")
+            }
+            if sync.deletions.refused > 0 {
+                LabeledContent("Retraction refused", value: "\(sync.deletions.refused)")
+                    .accessibilityIdentifier("syncRetractionRefused")
             }
             if sync.duplicatesDropped > 0 {
                 LabeledContent("Duplicates dropped", value: "\(sync.duplicatesDropped)")

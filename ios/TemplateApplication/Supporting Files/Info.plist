@@ -25,7 +25,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Spezi POC Capture reads your heart rate, resting heart rate, heart rate variability and sleep from Apple Health, and sends them only to your own server over an authenticated, encrypted connection. It never writes to Apple Health.</string>
+	<string>Spezi POC Capture reads your heart rate, resting heart rate, heart rate variability, sleep and dietary intake (energy, protein, carbohydrates, fat, fibre, sugar, sodium, water) from Apple Health, and sends them only to your own server over an authenticated, encrypted connection. It never writes to Apple Health.</string>
 	<key>POCClientID</key>
 	<string>$(POC_CLIENT_ID)</string>
 	<key>POCFHIRBaseURL</key>
