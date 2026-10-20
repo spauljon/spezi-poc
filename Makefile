@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-rescan analytics-run analytics-api web-dev web-seed-dense-day web-seed-sleep-nights test-web-live test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-rescan analytics-run analytics-api web-dev web-seed-dense-day web-seed-sleep-nights web-seed-nutrition-days test-web-live test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -52,6 +52,8 @@ web-seed-dense-day:  ## seed one dense synthetic day (heart rate every 4 s) for 
 	@./web/seed-dense-day.sh
 web-seed-sleep-nights:  ## seed three known synthetic sleep nights (overlap, unscored gap, a nap, a DST night) for the sleep view; idempotent
 	@./web/seed-sleep-nights.sh
+web-seed-nutrition-days:  ## seed 24 known synthetic dietary intake days (gaps, a zero day, an evening entry, a retraction, a flagged entry) for the nutrition view; idempotent
+	@./web/seed-nutrition-days.sh
 web-dev:  ## DEV: Vite's dev server on :3000 (hot reload); the deployed stack already serves the built app, so stop that first
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^spezi-poc-web$$'; then echo "web-dev: the deployed web app owns port 3000 (spezi-poc-web), already running at https://macpro16.local:3000; to use the dev server instead: docker stop spezi-poc-web"; exit 1; fi
 	@./scripts/check-node.sh && cd web && { [ -d node_modules ] || npm ci --silent; } && npm run dev
