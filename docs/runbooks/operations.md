@@ -99,6 +99,7 @@ The live suites need data the fresh stack lacks:
 ```bash
 make web-seed-dense-day             # one dense synthetic day, idempotent
 make web-seed-sleep-nights          # three known synthetic nights, idempotent
+make web-seed-nutrition-days        # 24 known synthetic dietary intake days (gaps, a zero day, a retraction, a flag), idempotent
 make test-ios-integration           # uploads through the app's real code path; needs the simulator booted and trusting the CA
 make test-analytics-live
 python3 analytics/verify-intake.py  # nutrition totals vs an independent sum from HAPI (add `poc-real` for your own data; counts only)
