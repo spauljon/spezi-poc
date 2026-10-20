@@ -1,6 +1,7 @@
 import type { Contract } from "./contract.ts";
 import { isDay, nextDay } from "./day.ts";
 import { bearerToken, type JwtVerifier } from "./jwt.ts";
+import { MEAL_ALL, MEAL_NONE, type StoredIntakeTotal } from "./intake.ts";
 import type { Reader, StoredRollup, StoredSleepSession } from "./store.ts";
 
 export const MAX_RANGE_DAYS = 366;
@@ -53,6 +54,8 @@ function spanDays(from: string, to: string): number {
  *   GET /v1/metrics                                              metrics the bands exist for
  *   GET /v1/patients/{id}/bands?metric=&from=&to=                daily min/median/max (UTC days, inclusive)
  *   GET /v1/patients/{id}/sleep?from=&to=                        sleep sessions by night (UTC date of waking)
+ *   GET /v1/nutrients                                            dietary nutrients totals exist for
+ *   GET /v1/patients/{id}/nutrition?nutrient=&from=&to=          daily intake totals, overall and by meal (day as recorded)
  *
  * Every response says how complete it is (days with no data, windows still being recomputed, how far the worker has
  * read, when the rows last changed), because absence of data is never a normal reading.
@@ -139,6 +142,9 @@ export class AnalyticApi {
     if (decoded.length === 2 && resource === "metrics") {
       return reply(200, this.metrics());
     }
+    if (decoded.length === 2 && resource === "nutrients") {
+      return reply(200, this.nutrients());
+    }
     if (decoded.length === 4 && resource === "patients" && patientId !== undefined) {
       if (!PATIENT_ID.test(patientId)) {
         return reply(400, { error: "bad_request", detail: "The patient id is not valid." });
@@ -149,6 +155,9 @@ export class AnalyticApi {
       if (view === "sleep") {
         return this.sleep(patientId, url.searchParams, reply);
       }
+      if (view === "nutrition") {
+        return this.nutrition(patientId, url.searchParams, reply);
+      }
     }
     return reply(404, { error: "not_found", detail: "No such resource." });
   }
@@ -157,6 +166,13 @@ export class AnalyticApi {
     return {
       contractVersion: this.o.contract.version,
       metrics: this.o.contract.quantityMetrics.map((m) => ({ id: m.id, display: m.display, unit: m.ucum })),
+    };
+  }
+
+  private nutrients() {
+    return {
+      contractVersion: this.o.contract.version,
+      nutrients: this.o.contract.intakeMetrics.map((m) => ({ id: m.id, display: m.display, unit: m.ucum })),
     };
   }
 
@@ -252,6 +268,57 @@ export class AnalyticApi {
       nightDefinition: "UTC date of the final waking from sleep; sessions are separated by gaps over 2 hours",
       sessions,
       completeness: await this.completeness(range, rows.map((r) => r.night), pending, rows.map((r) => r.updatedAtMs)),
+    });
+  }
+
+  private async nutrition(
+    patientId: string,
+    params: URLSearchParams,
+    reply: (status: number, body: unknown) => ApiResponse,
+  ): Promise<ApiResponse> {
+    const nutrient = this.o.contract.intakeMetrics.find((m) => m.id === params.get("nutrient"));
+    if (!nutrient) {
+      return reply(400, { error: "bad_request", detail: "`nutrient` must be one of the ids from /v1/nutrients." });
+    }
+    const range = this.range(params, reply);
+    if ("status" in range) {
+      return range;
+    }
+    const rows = await this.o.reader.intakeDays(patientId, nutrient.id, range.from, range.to);
+    const pending = await this.o.reader.pendingCount(patientId, [nutrient.id], range.from, range.to);
+    const mealOrder = [...(this.o.contract.meals?.codes ?? []), MEAL_NONE];
+    const byDay = new Map<string, StoredIntakeTotal[]>();
+    for (const r of rows) {
+      byDay.set(r.day, [...(byDay.get(r.day) ?? []), r]);
+    }
+    const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).flatMap(([d, group]) => {
+      const all = group.find((r) => r.meal === MEAL_ALL);
+      if (!all) {
+        return []; // a day's overall row always exists with its meals; without it there is nothing to report
+      }
+      const rank = (m: string) => (mealOrder.includes(m) ? mealOrder.indexOf(m) : mealOrder.length);
+      return [{
+        day: d,
+        total: all.total,
+        entries: all.n,
+        firstEntry: new Date(all.firstMs).toISOString(),
+        lastEntry: new Date(all.lastMs).toISOString(),
+        artifactSuspected: all.nArtifact,
+        lateArrival: all.nLate,
+        revision: Math.max(...group.map((r) => r.revision)),
+        byMeal: group.filter((r) => r.meal !== MEAL_ALL).sort((a, b) => rank(a.meal) - rank(b.meal))
+          .map((r) => ({ meal: r.meal, total: r.total, entries: r.n })),
+      }];
+    });
+    return reply(200, {
+      patientId,
+      nutrient: { id: nutrient.id, display: nutrient.display, unit: nutrient.ucum },
+      from: range.from,
+      to: range.to,
+      dayDefinition: "Calendar date written in each entry's own timestamp, in the offset it carries (day as recorded); " +
+        "not the UTC day of bands and sleep. A day with no entries is absent (missingDays), never a total of zero",
+      days,
+      completeness: await this.completeness(range, days.map((x) => x.day), pending, rows.map((r) => r.updatedAtMs)),
     });
   }
 

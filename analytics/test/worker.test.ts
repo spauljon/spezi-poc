@@ -141,7 +141,7 @@ test("only the contract's metric codes are asked for", async () => {
     assert.ok(scan.includes(`${contract.loincSystem}|${m.loincCode}`), `${m.id} missing from the scan`);
   }
   const requested = (scan.match(/code=([^&]*)/)![1]!).split(",");
-  assert.equal(requested.length, contract.quantityMetrics.length + contract.sleep!.stageByCode.size);
+  assert.equal(requested.length, contract.quantityMetrics.length + contract.sleep!.stageByCode.size + contract.intakeMetrics.length);
 });
 
 test("an observation with no usable subject, code or time is ignored, not fatal", async () => {
@@ -381,4 +381,20 @@ test("a retracted sleep stage drops out of its night", async () => {
   fhir.retract(extra.id!);
   await worker.runOnce();
   assert.equal((await store.nights())[0]!.deepMin, 0);
+});
+
+
+test("data older than the watermark is not scanned, until the watermark is reset (a metric added to the contract later)", async () => {
+  const { fhir, store, worker } = make();
+  fhir.add(quantity("p1", heartRate, 60, `${TUE}T08:00:00Z`)); // gives the worker a watermark
+  await worker.runOnce();
+  // written long before the watermark, as data is when the contract learns a new metric afterwards
+  fhir.add(quantity("p1", hrv, 41, `${TUE}T09:00:00Z`), Date.parse("2020-01-01T00:00:00Z"));
+  await worker.runOnce();
+  assert.equal((await store.rollups("p1")).some((r) => r.metricId === hrv.id), false, "control: the old observation is not found by a normal cycle");
+  await store.resetWatermark("t");
+  assert.equal(await store.getWatermark("t"), null);
+  await worker.runOnce();
+  assert.equal((await store.rollups("p1")).some((r) => r.metricId === hrv.id), true, "found after the reset");
+  assert.equal((await store.rollups("p1")).filter((r) => r.metricId === heartRate.id).length, 1, "and nothing was duplicated");
 });

@@ -5,6 +5,8 @@ export interface ObservationLite {
   status?: string;
   subject?: { reference?: string };
   code?: { coding?: { system?: string; code?: string }[] };
+  /** Dietary intake: the domain entry and, when the source gave one, the meal entry (separate entries, never one coding list). */
+  category?: { coding?: { system?: string; code?: string }[] }[];
   effectiveDateTime?: string;
   effectivePeriod?: { start?: string; end?: string };
   valueQuantity?: { value?: number; unit?: string; system?: string; code?: string };

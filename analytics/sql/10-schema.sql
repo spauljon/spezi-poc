@@ -96,6 +96,31 @@ begin
          constraint sleep_session_main_ck check (is_main in (0, 1))
        )');
 
+  -- Daily dietary intake totals (M22): a SUM per patient, nutrient and DAY AS RECORDED (decision D3: the calendar date in
+  -- the entry's own timestamp and offset, not the UTC date used by daily_rollup and sleep_session). One row per day
+  -- overall (meal = 'all') and one per meal bucket that has entries (a contract meal code, or 'unlabelled'). A day with
+  -- no entries has NO row: "no entries" is never stored as a total of zero. A day whose entries are all zero has a row
+  -- with total 0 and n > 0. first_ms / last_ms are the earliest and latest entry instants (epoch ms, UTC).
+  ddl('create table &owner..nutrition_daily (
+         patient_id   varchar2(64)  not null,
+         metric_id    varchar2(40)  not null,
+         day          date          not null,
+         meal         varchar2(24)  not null,
+         unit         varchar2(32)  not null,
+         total        binary_double not null,
+         n            number(10)    not null,
+         first_ms     number(16)    not null,
+         last_ms      number(16)    not null,
+         n_artifact   number(10)    default 0 not null,
+         n_late       number(10)    default 0 not null,
+         revision     number(10)    default 1 not null,
+         updated_at   timestamp(3) with time zone default systimestamp not null,
+         constraint nutrition_daily_pk primary key (patient_id, metric_id, day, meal),
+         constraint nutrition_daily_day_ck check (day = trunc(day)),
+         constraint nutrition_daily_n_ck check (n > 0),
+         constraint nutrition_daily_total_ck check (total >= 0)
+       )');
+
   dbms_output.put_line('analytics schema present in ' || upper('&owner'));
 end;
 /

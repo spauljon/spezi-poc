@@ -115,6 +115,28 @@ A rollup row also carries `n_artifact` and `n_late`: how many of the day's sampl
 - The contract loader refuses a contract without the flag system and codes; the fixtures isolate each refusal's reason.
 - Verified live: flagged Observations written to HAPI, worked through the worker and Oracle, and the API's counts equal an independent count of the tags.
 
+## Daily dietary intake totals (M22)
+
+Dietary intake (contract 1.5.0, `kind: "intake"`: energy, protein, carbohydrate, fat, fibre, sugar, sodium, water) is a **sum**, not a band: `GET /v1/nutrients` lists the nutrients and `GET /v1/patients/{id}/nutrition?nutrient=&from=&to=` returns, for each day that has entries, the total, the number of entries, the first and last entry, the flag counts and the day split by meal. It is stored in `nutrition_daily` (`sql/10-schema.sql`), one row per patient, nutrient and day as recorded for the whole day (`meal = 'all'`) and one per meal that has entries (a contract meal code, or `unlabelled`).
+
+- **Day as recorded (D3).** An entry belongs to the calendar date written in its own `effectiveDateTime` (or `effectivePeriod.start`), in the offset it carries: `2026-10-19T23:30:00-07:00` is the 19th although it is the 20th in UTC. Bands and sleep keep the UTC day (A6); the API says which rule applies in `dayDefinition`, and the two never mix in one table. The worker's day search covers the widest possible UTC span for a recorded day (UTC-12 to UTC+14) and then checks each entry's own date.
+- **No entries is not zero.** A day with no entries has no row and appears in `completeness.missingDays`; a day whose entries sum to zero has a row with `total: 0` and `entries > 0`. Tests, the live test and `verify-intake.py` all keep the two apart, each with a control.
+- **Only `final` entries count.** A retracted entry (`entered-in-error`, M21) drops out on the next cycle; retracting a day's last entry removes the day (it becomes "no entries", never a stored zero). An edit in the source app arrives as a retraction plus a new entry and shows the new amount only.
+- **Exact sums.** Each amount is taken to a millionth of a unit and added as an integer, so the order of entries and float rounding cannot change a total (`0.1 + 0.2` is `0.3`). Tests compare the sum with an independent decimal-string implementation.
+- **Flags** are counted from the stored tags exactly as for bands; the total includes flagged entries (a 7,000 kcal entry is in the day and counted as suspect).
+- **Only the contract is trusted for codes:** each nutrient's system, code and unit come from `contract/metrics.json` (five are LOINC, three are in the contract's own `nutrient` system); the worker re-checks the code, unit, patient, status and recorded day of every returned entry instead of trusting the search. An entry with a wrong unit is left out and counted (`wrongUnit`), a negative or non-numeric amount is left out and counted (`invalidValue`), and a date-time with no offset has no day (ignored).
+
+Independent check on any patient, safe for real data because it prints counts and a verdict only:
+
+```bash
+python3 analytics/verify-intake.py            # the synthetic patient
+python3 analytics/verify-intake.py poc-real   # your own data
+```
+
+It reads the Observations from HAPI itself (no shared code), sums them by the date written in each timestamp, and compares every day and nutrient with the API, including that the meals add up to the day.
+
+**Backfill after a contract change.** The worker scans only what changed since its watermark, so Observations written *before* it knew a metric's code are never found. When a contract change adds a metric, run `make analytics-rescan` once: it forgets the watermark and the running worker re-reads everything on its next cycle (every step is idempotent). Found in M22, when 21 real nutrition Observations uploaded before the worker knew the codes were not summed until a rescan.
+
 ## Deployment and schedule (M13a)
 
 `make stack-up` deploys and supervises the worker and the API; nothing is started by hand.
@@ -148,6 +170,7 @@ A rollup row also carries `n_artifact` and `n_late`: how many of the day's sampl
 ```bash
 make analytics-migrate      # reapply the schema (reruns db/init.sh in the oracle container; the worker has no DDL rights)
 make analytics-run          # one cycle on the host
+make analytics-rescan       # re-read everything on the next cycle (after the contract gains a metric)
 analytics/run.sh status     # watermark, row count, pending windows (counts only)
 analytics/run.sh loop       # every POC_WORKER_INTERVAL_SECONDS (default 30)
 make test-analytics         # unit + contract tests (no stack needed)
@@ -184,8 +207,9 @@ Node's built-in runner. node-oracledb's types are declared locally (`src/oracled
   `Cache-Control: no-cache`, otherwise a recompute right after a write could read stale data (seen in M8).
 - **A35 Units are enforced here, not by HAPI.** An Observation whose `valueQuantity` is not the contract's UCUM
   system and code is excluded and counted (`wrongUnit`).
-- **A36 No deletes.** No role can delete Observations, so a rollup is never made smaller by a deletion; a window
-  whose observations are all gone does delete its row (handled, tested with a fake only).
+- **A36 No deletes.** No role can delete Observations. Since M21 the capture app retracts a deleted sample by setting
+  `status` to `entered-in-error`; only `final` Observations are counted, so a rollup does get smaller, and a window
+  with nothing left deletes its row (tested with a fake and, for intake totals, live).
 - **A37 Session gap** is 2 hours and **A38 minimum awakening** is 5 minutes: constants in `src/sleep.ts`, a clinical
   judgment, not standards. They could move into `contract/metrics.json` with the M16 thresholds.
 - **A39 Night date** is the UTC date of the final waking, consistent with A6; a sleeper far from UTC can see a
@@ -196,5 +220,12 @@ Node's built-in runner. node-oracledb's types are declared locally (`src/oracled
   (start to end) is the closest proxy and is not labelled "in bed".
 - **A42 Session length**: a recompute reads 5 days, so a session longer than about 30 hours would be cut. Not
   expected from real sleep.
+- **A48 Day as recorded** is the date in the entry's own timestamp and offset (D3). A date-time with no offset has no day and is ignored: it is never filed under a guessed one. A traveller's entries each take their own offset's date, so one date can hold entries from two zones.
+- **A49 Sums are exact to a millionth.** Amounts are rounded to 1e-6 of a unit before adding. A value converted from another unit (kJ to kcal, oz to g) can have more digits, so a total can differ from the full-precision sum by up to 5e-7 per entry; on the developer's real data the largest difference was 7e-7. `verify-intake.py` allows exactly that and nothing more.
+- **A50 Meal buckets.** A contract meal code, `unlabelled` for entries with no meal (never invented as `other`), and a meal code the contract does not know counts as `other`. The meals add up to the day. Moving an entry between meals is a retraction plus a new entry.
+- **A51 First and last entry are UTC instants**; the recorded offset is not kept, so the web cannot show the local clock time of a meal. Time of day is indicative anyway (nutrition brief N5).
+- **A52 A day's `revision`** is the largest revision among its rows. A meal row that disappears without any other change (the day's last entry of that meal retracted) also changes the day's total or entry count, so the revision moves in practice; a pure re-labelling that leaves every count unchanged would not.
+- **A53 The total sums every entry, from every source.** The API does not filter by source app, so two apps logging the same meal into Apple Health would count it twice. The source-application `Device` (D6) is stored on the Observation, so a per-source split is possible later; it is not built.
+- **A54 Entries are never deduplicated here.** Two entries with identical amount and time but different identifiers are two entries; a re-delivery of the same sample is one Observation already (conditional create), so it cannot be counted twice.
 - Not done: the analytic API (M11), flagging of artifacts (M16), a container for the worker (it runs on the host
   for the POC).

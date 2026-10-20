@@ -1,0 +1,57 @@
+{
+ "contractVersion": "1.5.0",
+ "systems": {
+  "loinc": "http://loinc.org",
+  "ucum": "http://unitsofmeasure.org",
+  "dataQualityFlag": "http://example.org/flags",
+  "mealType": "http://example.org/meal",
+  "nutrient": "http://example.org/nutrient"
+ },
+ "dataQualityFlags": {
+  "artifactSuspected": "a",
+  "lateArrival": "l"
+ },
+ "mealTypes": {
+  "lunch": {
+   "code": "lunch"
+  },
+  "other": {
+   "code": "other"
+  }
+ },
+ "metrics": [
+  {
+   "id": "x",
+   "kind": "quantity",
+   "loinc": {
+    "code": "1-1"
+   },
+   "unit": {
+    "ucum": "u"
+   }
+  },
+  {
+   "id": "e",
+   "kind": "intake",
+   "loinc": {
+    "code": "2-2",
+    "display": "Energy"
+   },
+   "unit": {
+    "ucum": "k"
+   }
+  },
+  {
+   "id": "f",
+   "kind": "intake",
+   "customCode": {
+    "system": "nope",
+    "code": "fib",
+    "display": "Fibre"
+   },
+   "unit": {
+    "ucum": "g"
+   }
+  }
+ ]
+}

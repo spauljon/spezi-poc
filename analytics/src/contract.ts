@@ -10,6 +10,16 @@ export interface QuantityMetric {
   readonly display: string;
 }
 
+/** One dietary intake metric (contract `kind: "intake"`): summed per day as recorded, never banded. */
+export interface IntakeMetric {
+  readonly id: string;
+  /** The code's system: LOINC for five nutrients, the contract's own `nutrient` system for the rest. */
+  readonly codeSystem: string;
+  readonly code: string;
+  readonly ucum: string;
+  readonly display: string;
+}
+
 /** The sleep-stage metric: one duration Observation per stage interval, code per stage. */
 export interface SleepMetric {
   readonly id: string;
@@ -26,12 +36,24 @@ export interface QualityFlags {
   readonly lateArrival: string;
 }
 
+/** How the meal of an intake entry is carried (contract `systems.mealType`, `mealTypes`). */
+export interface MealTypes {
+  readonly system: string;
+  /** The contract's meal codes, in the contract's order (`breakfast`, ..., `other`). */
+  readonly codes: readonly string[];
+  /** The contract's catch-all code, for a meal code this reader does not know. */
+  readonly fallback: string;
+}
+
 export interface Contract {
   readonly version: string;
   readonly flags: QualityFlags;
   readonly loincSystem: string;
   readonly ucumSystem: string;
   readonly quantityMetrics: readonly QuantityMetric[];
+  /** Dietary intake metrics (contract 1.5.0); empty for an older contract. */
+  readonly intakeMetrics: readonly IntakeMetric[];
+  readonly meals: MealTypes | null;
   readonly sleep: SleepMetric | null;
 }
 
@@ -43,6 +65,7 @@ interface RawMetric {
   id?: unknown;
   kind?: unknown;
   loinc?: { code?: unknown; display?: unknown };
+  customCode?: { system?: unknown; code?: unknown; display?: unknown };
   unit?: { ucum?: unknown };
   stages?: Record<string, { code?: unknown }>;
   unmapped?: unknown;
@@ -79,6 +102,20 @@ function parseQuantity(metric: RawMetric): QuantityMetric {
   return { id, loincCode, ucum, display: text(metric.loinc?.display) || id };
 }
 
+function parseIntake(metric: RawMetric, systems: Record<string, unknown>, loincSystem: string): IntakeMetric {
+  const id = text(metric.id);
+  const ucum = text(metric.unit?.ucum);
+  // exactly one way to code an intake: a LOINC code, or a code in one of the contract's own systems
+  const custom = metric.customCode;
+  const codeSystem = custom ? text(systems[text(custom.system)]) : loincSystem;
+  const code = text(custom ? custom.code : metric.loinc?.code);
+  const display = text(custom ? custom.display : metric.loinc?.display) || id;
+  if (!id || !ucum || !code || !codeSystem) {
+    throw new Error(`contract intake metric ${id || "(no id)"} lacks a code, a code system or a unit`);
+  }
+  return { id, codeSystem, code, ucum, display };
+}
+
 /**
  * Reads the contract and keeps only what the rollups need. Nothing here is a literal: a code or unit that is not in
  * the file does not exist for the worker (spec: never hand-copy codes, units or categories).
@@ -86,7 +123,8 @@ function parseQuantity(metric: RawMetric): QuantityMetric {
 export function loadContract(path: string = defaultContractPath): Contract {
   const raw = JSON.parse(readFileSync(path, "utf8")) as {
     contractVersion?: unknown;
-    systems?: { loinc?: unknown; ucum?: unknown; dataQualityFlag?: unknown };
+    systems?: { loinc?: unknown; ucum?: unknown; dataQualityFlag?: unknown; mealType?: unknown } & Record<string, unknown>;
+    mealTypes?: Record<string, { code?: unknown }>;
     dataQualityFlags?: { artifactSuspected?: unknown; lateArrival?: unknown };
     metrics?: RawMetric[];
   };
@@ -114,5 +152,20 @@ export function loadContract(path: string = defaultContractPath): Contract {
   if (quantityMetrics.length === 0) {
     throw new Error("contract has no quantity metrics");
   }
-  return { version, flags, loincSystem, ucumSystem, quantityMetrics, sleep: sleepMetric ? parseSleep(sleepMetric) : null };
+  const intakeMetrics = metrics.filter((m) => m.kind === "intake").map((m) => parseIntake(m, raw.systems ?? {}, loincSystem));
+  let meals: MealTypes | null = null;
+  if (intakeMetrics.length > 0) {
+    const codes = Object.values(raw.mealTypes ?? {}).map((m) => text(m.code)).filter((c) => c.length > 0);
+    const system = text(raw.systems?.mealType);
+    // `other` is the contract's catch-all (its normalisation maps any unknown label there)
+    const fallback = codes.includes("other") ? "other" : "";
+    if (!system || codes.length === 0 || !fallback) {
+      throw new Error("contract has intake metrics but no meal types (contract 1.5.0 is required)");
+    }
+    meals = { system, codes, fallback };
+  }
+  return {
+    version, flags, loincSystem, ucumSystem, quantityMetrics, intakeMetrics, meals,
+    sleep: sleepMetric ? parseSleep(sleepMetric) : null,
+  };
 }

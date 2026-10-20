@@ -16,5 +16,7 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - The API description `api/openapi.json` is a contract: `test/api.test.ts` checks every response against it and the route list. Change both together.
 - Flag counts (M19) are read from the stored `meta.tag` only, using the contract's system and codes; never infer a flag from a value, and keep the bands inclusive of flagged samples (the counts say how many). A column added to the store goes in `sql/10-schema.sql` as an idempotent `ALTER`.
 - Only `status = final` Observations are counted (M21): the capture app retracts a sample deleted in Apple Health by setting `entered-in-error`, and the touched-window scan (`_lastUpdated`) re-reads that day. Keep the local check; do not rely on a search parameter alone.
-- Milestones: M9-M11
+- Dietary intake totals (M22) use the **day as recorded** (the date in the entry's own timestamp), not the UTC day; never mix the two in one table or one rule, and keep `dayDefinition` honest. A day with no entries has no row (never a stored 0); a zero total needs entries. Sums go through `sumExact` (micro-units); the contract owns each nutrient's system, code and unit; the worker re-checks every returned entry. `analytics/verify-intake.py` is the independent check and prints counts only, so it is safe for real data; real amounts never go in output.
+- When the contract gains a metric, run `make analytics-rescan`: the watermark scan never finds data older than itself.
+- Milestones: M9-M11, M22
 - Commit prefix: `analytics:`

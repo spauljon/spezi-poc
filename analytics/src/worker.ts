@@ -1,5 +1,6 @@
-import type { Contract, QuantityMetric } from "./contract.ts";
-import { nextDay, utcDay } from "./day.ts";
+import type { Contract, IntakeMetric, QuantityMetric } from "./contract.ts";
+import { dayAsRecorded, nextDay, searchSpanFor, utcDay } from "./day.ts";
+import { mealOf, totalsFor, type IntakeEntry } from "./intake.ts";
 import { affectedNights, buildSessions, fetchRange, type StageInterval } from "./sleep.ts";
 import type { FhirSearch, ObservationLite } from "./fhir.ts";
 import { summarize } from "./rollup.ts";
@@ -33,6 +34,8 @@ export interface CycleReport {
   changed: number;
   /** Observations skipped while recomputing because their unit was not the contract's. */
   wrongUnit: number;
+  /** Dietary entries skipped while recomputing because the amount was negative or not a number. */
+  invalidValue: number;
   watermarkMs: number | null;
 }
 
@@ -65,7 +68,11 @@ function subjectParam(patientId: string): string {
 
 /** `code=<system>|<c1>,<system>|<c2>`, escaped (a comma-separated list is OR). */
 function codeParam(system: string, codes: readonly string[]): string {
-  const tokens = codes.map((c) => `${system}|${c}`);
+  return tokenParam(codes.map((c) => `${system}|${c}`));
+}
+
+/** `code=` for tokens that already carry their own system (intake codes come from two systems). */
+function tokenParam(tokens: readonly string[]): string {
   return `code=${encodeURIComponent(tokens.join(","))}`;
 }
 
@@ -75,17 +82,19 @@ export class RollupWorker {
   private readonly overlapMs: number;
   private readonly pageSize: number;
   private readonly byCode: Map<string, QuantityMetric>;
+  private readonly intakeByToken: Map<string, IntakeMetric>;
 
   constructor(private readonly o: WorkerOptions) {
     this.overlapMs = o.overlapMs ?? DEFAULT_OVERLAP_MS;
     this.pageSize = o.pageSize ?? DEFAULT_PAGE;
     this.byCode = new Map(o.contract.quantityMetrics.map((m) => [m.loincCode, m]));
+    this.intakeByToken = new Map(o.contract.intakeMetrics.map((m) => [`${m.codeSystem}|${m.code}`, m]));
   }
 
   /** One full cycle: find what changed, then bring every touched window up to date. */
   async runOnce(): Promise<CycleReport> {
     const report: CycleReport = {
-      scanned: 0, ignored: 0, touched: 0, recomputed: 0, changed: 0, wrongUnit: 0, watermarkMs: null,
+      scanned: 0, ignored: 0, touched: 0, recomputed: 0, changed: 0, wrongUnit: 0, invalidValue: 0, watermarkMs: null,
     };
     await this.scan(report);
     await this.recomputePending(report);
@@ -98,13 +107,14 @@ export class RollupWorker {
     const { contract, fhir, store, name } = this.o;
     const watermark = await store.getWatermark(name);
     const since = Math.max(0, (watermark ?? 0) - this.overlapMs);
-    const codes = [
-      ...contract.quantityMetrics.map((m) => m.loincCode),
-      ...(contract.sleep ? contract.sleep.stageByCode.keys() : []),
+    const tokens = [
+      ...contract.quantityMetrics.map((m) => `${contract.loincSystem}|${m.loincCode}`),
+      ...(contract.sleep ? [...contract.sleep.stageByCode.keys()].map((c) => `${contract.loincSystem}|${c}`) : []),
+      ...this.intakeByToken.keys(),
     ];
     const path =
       `Observation?_lastUpdated=ge${encodeURIComponent(isoMs(since))}` +
-      `&${codeParam(contract.loincSystem, codes)}&_sort=_lastUpdated&_count=${this.pageSize}` +
+      `&${tokenParam(tokens)}&_sort=_lastUpdated&_count=${this.pageSize}` +
       `&_elements=meta,subject,code,effectiveDateTime,effectivePeriod`;
 
     const touched = new Map<string, Window>();
@@ -144,11 +154,28 @@ export class RollupWorker {
         patientId, metricId: this.o.contract.sleep!.id, day,
       }));
     }
+    const intake = this.intakeOf(obs);
+    if (intake) {
+      // dietary intake belongs to the day as recorded, not the UTC day (D3)
+      const recorded = effectiveInstant(obs);
+      const recordedDay = recorded ? dayAsRecorded(recorded) : null;
+      return recordedDay ? [{ patientId, metricId: intake.id, day: recordedDay }] : [];
+    }
     const instant = effectiveInstant(obs);
     const day = instant ? utcDay(instant) : null;
     const loinc = obs.code?.coding?.find((c) => c.system === this.o.contract.loincSystem && c.code && this.byCode.has(c.code));
     const metric = loinc?.code ? this.byCode.get(loinc.code) : undefined;
     return day && metric ? [{ patientId, metricId: metric.id, day }] : [];
+  }
+
+  private intakeOf(obs: ObservationLite): IntakeMetric | null {
+    for (const c of obs.code?.coding ?? []) {
+      const metric = c.system && c.code ? this.intakeByToken.get(`${c.system}|${c.code}`) : undefined;
+      if (metric) {
+        return metric;
+      }
+    }
+    return null;
   }
 
   private sleepStageOf(obs: ObservationLite): string | null {
@@ -213,10 +240,68 @@ export class RollupWorker {
     return store.applyNights(window, sessions);
   }
 
+  /**
+   * One nutrient on one day as recorded: every final entry of the patient whose own date is the window's day, summed
+   * (overall and by meal). The server's `date` search only narrows by instant, so the span is wider than the day and
+   * every entry is checked against its own recorded date here.
+   */
+  private async recomputeIntake(window: Window, metric: IntakeMetric, report: CycleReport): Promise<boolean> {
+    const { contract, fhir, store } = this.o;
+    const span = searchSpanFor(window.day);
+    const path =
+      `Observation?${subjectParam(window.patientId)}` +
+      `&${tokenParam([`${metric.codeSystem}|${metric.code}`])}` +
+      `&date=ge${span.from}T00:00:00Z&date=lt${span.to}T00:00:00Z` +
+      `&_count=${this.pageSize}&_elements=status,meta,subject,code,effectiveDateTime,effectivePeriod,valueQuantity,category`;
+    const seen = new Set<string>();
+    const entries: IntakeEntry[] = [];
+    const { flags, meals } = contract;
+    for await (const obs of fhir.search(path)) {
+      if (seen.has(obs.id)) {
+        continue;
+      }
+      seen.add(obs.id);
+      if (obs.status !== "final") {
+        continue; // retracted (entered-in-error) or anything else not final: not part of the day
+      }
+      const recorded = effectiveInstant(obs);
+      if (!recorded || dayAsRecorded(recorded) !== window.day || patientIdOf(obs.subject?.reference) !== window.patientId ||
+          this.intakeOf(obs)?.id !== metric.id) {
+        continue;
+      }
+      const q = obs.valueQuantity;
+      if (!q || typeof q.value !== "number" || !Number.isFinite(q.value)) {
+        continue;
+      }
+      if (q.system !== contract.ucumSystem || q.code !== metric.ucum) {
+        report.wrongUnit++;
+        continue;
+      }
+      if (q.value < 0) {
+        report.invalidValue++; // an intake is never negative (zero is a real amount); do not let one entry subtract
+        continue;
+      }
+      const tags = (obs.meta?.tag ?? []).filter((t) => t.system === flags.system);
+      entries.push({
+        id: obs.id,
+        value: q.value,
+        instantMs: Date.parse(recorded),
+        meal: meals ? mealOf(obs.category, meals) : null,
+        artifactSuspected: tags.some((t) => t.code === flags.artifactSuspected),
+        lateArrival: tags.some((t) => t.code === flags.lateArrival),
+      });
+    }
+    return store.applyIntake(window, totalsFor(window, metric.ucum, entries));
+  }
+
   private async recompute(window: Window, report: CycleReport): Promise<boolean> {
     const { contract, fhir, store } = this.o;
     if (window.metricId === contract.sleep?.id) {
       return this.recomputeNight(window);
+    }
+    const intakeMetric = contract.intakeMetrics.find((m) => m.id === window.metricId);
+    if (intakeMetric) {
+      return this.recomputeIntake(window, intakeMetric, report);
     }
     const metric = contract.quantityMetrics.find((m) => m.id === window.metricId);
     if (!metric) {

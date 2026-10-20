@@ -16,6 +16,8 @@ export class FakeFhir implements FhirSearch {
   private readonly resources: ObservationLite[] = [];
   /** Server time used to stamp `meta.lastUpdated` on `add`. */
   serverNow = Date.parse("2026-10-12T12:00:00.000Z");
+  /** Simulates a server that does not honor the `code` search parameter (the worker must not trust it). */
+  ignoreCodeFilter = false;
 
   add(o: Omit<ObservationLite, "meta">, lastUpdatedMs: number = this.serverNow, tag?: { system: string; code: string }[]): void {
     this.resources.push({ ...o, meta: { lastUpdated: new Date(lastUpdatedMs).toISOString(), ...(tag ? { tag } : {}) } });
@@ -41,7 +43,7 @@ export class FakeFhir implements FhirSearch {
     const ge = dates.find((d) => d.startsWith("ge"))?.slice(2);
     const lt = dates.find((d) => d.startsWith("lt"))?.slice(2);
     const matches = this.resources
-      .filter((r) => codes.length === 0 || r.code?.coding?.some((c) => codes.includes(`${c.system}|${c.code}`)))
+      .filter((r) => this.ignoreCodeFilter || codes.length === 0 || r.code?.coding?.some((c) => codes.includes(`${c.system}|${c.code}`)))
       .filter((r) => Date.parse(r.meta?.lastUpdated ?? "") >= since)
       .filter((r) => subject === null || r.subject?.reference === subject)
       .filter((r) => {
@@ -86,5 +88,30 @@ export function sleepStage(patient: string, stage: string, start: string, end: s
     valueQuantity: {
       value: (Date.parse(end) - Date.parse(start)) / 60_000, system: contract.ucumSystem, code: "min",
     },
+  };
+}
+
+export const energy = contract.intakeMetrics.find((m) => m.id === "dietaryEnergy")!;
+export const protein = contract.intakeMetrics.find((m) => m.id === "dietaryProtein")!;
+/** A nutrient coded in the contract's own system rather than LOINC. */
+export const fiber = contract.intakeMetrics.find((m) => m.id === "dietaryFiber")!;
+
+/**
+ * A dietary intake Observation, shaped as the capture app writes it: the nutrient's code and unit from the contract
+ * and, when a meal is given, a separate `category` entry in the contract's meal-type system.
+ */
+export function intake(
+  patient: string, metric: { codeSystem: string; code: string; ucum: string }, value: number, at: string,
+  opts: { meal?: string; overrides?: Partial<ObservationLite> } = {},
+): Omit<ObservationLite, "meta"> {
+  return {
+    id: `obs-${++counter}`,
+    status: "final",
+    subject: { reference: `Patient/${patient}` },
+    code: { coding: [{ system: metric.codeSystem, code: metric.code }] },
+    ...(opts.meal ? { category: [{ coding: [{ system: contract.meals!.system, code: opts.meal }] }] } : {}),
+    effectiveDateTime: at,
+    valueQuantity: { value, unit: metric.ucum, system: contract.ucumSystem, code: metric.ucum },
+    ...opts.overrides,
   };
 }

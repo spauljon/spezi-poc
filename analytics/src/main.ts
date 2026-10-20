@@ -17,6 +17,8 @@ import { RollupWorker } from "./worker.ts";
  *   loop    cycles forever, `POC_WORKER_INTERVAL_SECONDS` apart (30); a failed cycle is logged and retried with
  *           backoff, never fatal. This is what the compose service runs.
  *   status  counts only (watermark, rows, pending windows)
+ *   rescan  forget the watermark so the next cycle re-reads everything (after the contract gains a metric: data written
+ *           before the worker knew its code is older than the watermark); the running loop does the work within a cycle
  *   api     the analytic API (loopback-bound by default; see below)
  *
  * Credentials come from the environment (analytics/run.sh on the host, env_file in compose); nothing is printed.
@@ -124,8 +126,8 @@ async function runApi(store: OracleStore, contract: Contract, name: string): Pro
 
 async function main(): Promise<number> {
   const command = process.argv[2] ?? "once";
-  if (!["once", "loop", "status", "api"].includes(command)) {
-    console.error("usage: main.ts [once|loop|status|api]");
+  if (!["once", "loop", "status", "api", "rescan"].includes(command)) {
+    console.error("usage: main.ts [once|loop|status|api|rescan]");
     return 2;
   }
   const contract = loadContract();
@@ -151,6 +153,10 @@ async function main(): Promise<number> {
         });
         return 0;
       }
+      case "rescan":
+        await store.resetWatermark(name);
+        log({ worker: name, watermark: null, rescan: "requested: the next cycle re-reads every Observation" });
+        return 0;
       default:
         log({ ...(await makeWorker(store, contract, name).runOnce()) });
         return 0;

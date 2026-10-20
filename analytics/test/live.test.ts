@@ -405,3 +405,165 @@ test("live: flag counts equal the tags HAPI holds, through the worker, Oracle an
   assert.equal(row?.nArtifact, 2);
   assert.equal(row?.nLate, 2);
 });
+
+
+// ---- dietary intake totals (M22) ----
+
+interface IntakeSample { key: string; nutrient: string; at: string; value: number; meal?: string }
+
+/** Uploads dietary intake Observations as the capture app writes them: one transaction of conditional creates. */
+async function uploadIntake(token: string, patient: string, tag: string, samples: IntakeSample[]) {
+  const entry = samples.map((s) => {
+    const metric = contract.intakeMetrics.find((m) => m.id === s.nutrient)!;
+    const identifier = `syn-live-${tag}-${s.key}`;
+    return {
+      fullUrl: `urn:uuid:${crypto.randomUUID()}`,
+      resource: {
+        resourceType: "Observation",
+        identifier: [{ system: sampleSystem, value: identifier }],
+        status: "final",
+        category: [
+          { coding: [{ system: "http://aboutobjects.com/fhir/CodeSystem/observation-domain", code: "nutrition" }] },
+          ...(s.meal ? [{ coding: [{ system: contract.meals!.system, code: s.meal }] }] : []),
+        ],
+        code: { coding: [{ system: metric.codeSystem, code: metric.code }] },
+        subject: { reference: `Patient/${patient}` },
+        effectiveDateTime: s.at,
+        issued: new Date().toISOString(),
+        valueQuantity: { value: s.value, unit: metric.ucum, system: contract.ucumSystem, code: metric.ucum },
+      },
+      request: { method: "POST", url: "Observation", ifNoneExist: `identifier=${encodeURIComponent(`${sampleSystem}|${identifier}`)}` },
+    };
+  });
+  const response = await fhir(token, "", { method: "POST", body: JSON.stringify({ resourceType: "Bundle", type: "transaction", entry }) });
+  assert.equal(response.status, 200, `intake upload failed with HTTP ${response.status}`);
+}
+
+/** What the capture app's retraction sends: one conditional JSON Patch of the status, by the sample's own identifier. */
+async function retract(token: string, tag: string, key: string): Promise<number> {
+  const search = `identifier=${encodeURIComponent(`${sampleSystem}|syn-live-${tag}-${key}`)}`;
+  const response = await fetch(`${fhirBase}/Observation?${search}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json-patch+json", Accept: "application/fhir+json" },
+    body: JSON.stringify([{ op: "replace", path: "/status", value: "entered-in-error" }]),
+  });
+  return response.status;
+}
+
+/**
+ * The totals read straight from HAPI, without the worker's code: every Observation of this run (by its identifier
+ * prefix), final only, grouped by the date written in `effectiveDateTime` (a string slice: the day as recorded) and by
+ * nutrient code, summed as decimal strings in micro-units. Shares nothing with `src/`.
+ */
+async function independentTotals(token: string, patient: string, tag: string, from: string, to: string): Promise<Map<string, string>> {
+  const found = new Map<string, bigint>();
+  let path: string | null = `Observation?subject=${encodeURIComponent(`Patient/${patient}`)}&date=ge${from}T00:00:00Z&date=lt${to}T00:00:00Z&_count=100`;
+  while (path) {
+    const bundle = (await (await fhir(token, path)).json()) as {
+      entry?: { resource: { status: string; identifier?: { value: string }[]; code: { coding: { code: string }[] }; effectiveDateTime: string; valueQuantity: { value: number } } }[];
+      link?: { relation: string; url: string }[];
+    };
+    for (const { resource: r } of bundle.entry ?? []) {
+      if (r.status !== "final" || !r.identifier?.some((i) => i.value.startsWith(`syn-live-${tag}-`))) {
+        continue;
+      }
+      const metric = contract.intakeMetrics.find((m) => m.code === r.code.coding[0]!.code)!;
+      const [whole = "0", frac = ""] = String(r.valueQuantity.value).split(".");
+      const micro = BigInt(whole) * 1_000_000n + BigInt((frac + "000000").slice(0, 6));
+      const key = `${metric.id}|${r.effectiveDateTime.slice(0, 10)}`;
+      found.set(key, (found.get(key) ?? 0n) + micro);
+    }
+    const next = bundle.link?.find((l) => l.relation === "next")?.url;
+    path = next ? next.slice(next.indexOf(fhirBase) + fhirBase.length + 1) : null;
+  }
+  return new Map([...found].map(([k, micro]) => {
+    const text = micro.toString().padStart(7, "0");
+    const f = text.slice(-6).replace(/0+$/, "");
+    return [k, f ? `${text.slice(0, -6)}.${f}` : text.slice(0, -6)];
+  }));
+}
+
+test("live: daily intake totals equal an independent sum of the Observations in HAPI, survive a retraction, and keep no-data distinct from zero", { skip: !live && "set POC_ANALYTICS_LIVE=1" }, async (t) => {
+  const capture = await captureToken();
+  const patient = await patientId(capture);
+  const tag = randomBytes(4).toString("hex");
+  const d0 = await freeDay(capture);
+  const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  const [d1, d2, d3] = [addDays(d0, 1), addDays(d0, 2), addDays(d0, 3)] as [string, string, string];
+  const ids = ["dietaryEnergy", "dietaryProtein", "dietaryFiber"];
+  const windows: Window[] = ids.flatMap((metricId) => [d0, d1, d2, d3].map((day) => ({ patientId: patient, metricId, day })));
+
+  const store = await OracleStore.connect({
+    user: required("ANALYTICS_DB_USER"), password: required("ANALYTICS_DB_PASSWORD"),
+    connectString: process.env["POC_ANALYTICS_CONNECT"] ?? "127.0.0.1:1522/ANALYTICSPDB",
+  });
+  const name = `live-intake-${tag}`;
+  t.after(async () => {
+    await store.purge(name, windows);
+    await store.close();
+  });
+  await store.recordTouched(name, [], Date.now() - 5 * 60_000);
+
+  await uploadIntake(capture, patient, tag, [
+    { key: "bkf", nutrient: "dietaryEnergy", at: `${d0}T08:00:00-07:00`, value: 400, meal: "breakfast" },
+    { key: "lunch", nutrient: "dietaryEnergy", at: `${d0}T12:30:00-07:00`, value: 650.5, meal: "lunch" },
+    { key: "late", nutrient: "dietaryEnergy", at: `${d0}T23:30:00-07:00`, value: 800 }, // 06:30 UTC the NEXT day: still d0 as recorded
+    { key: "next", nutrient: "dietaryEnergy", at: `${d1}T09:00:00-07:00`, value: 500, meal: "breakfast" },
+    { key: "z1", nutrient: "dietaryEnergy", at: `${d2}T10:00:00-07:00`, value: 0, meal: "snack" },
+    { key: "z2", nutrient: "dietaryEnergy", at: `${d2}T15:00:00-07:00`, value: 0, meal: "snack" },
+    { key: "prot", nutrient: "dietaryProtein", at: `${d0}T12:30:00-07:00`, value: 30.25, meal: "lunch" },
+    { key: "fib", nutrient: "dietaryFiber", at: `${d0}T12:30:00-07:00`, value: 6.5, meal: "lunch" },
+  ]);
+  const credentials = new ClientCredentials(issuer, "analytics-worker", required("POC_WORKER_CLIENT_SECRET"));
+  const worker = new RollupWorker({ name, contract, store, fhir: new HapiClient(fhirBase, () => credentials.token()) });
+  const clinician = await userToken("clinician-user", "POC_CLINICIAN_USER_PASSWORD");
+  const api = new AnalyticApi({
+    contract, reader: store, workerName: name, corsOrigin: null,
+    verifier: new JwtVerifier({ issuer, audience: "poc-analytics", role: "clinician-reader" }),
+  });
+  const mine = async () => (await store.intakeTotals(patient)).filter((r) => windows.some((w) => w.day === r.day && w.metricId === r.metricId));
+  const overall = async () => new Map((await mine()).filter((r) => r.meal === "all").map((r) => [`${r.metricId}|${r.day}`, String(r.total)]));
+
+  await worker.runOnce();
+  const first = await overall();
+  assert.deepEqual([...first].sort(), [...(await independentTotals(capture, patient, tag, addDays(d0, -2), addDays(d3, 2)))].sort(),
+    "Oracle equals the independent reading of HAPI");
+  assert.deepEqual([...first].sort(), [
+    [`dietaryEnergy|${d0}`, "1850.5"], [`dietaryEnergy|${d1}`, "500"], [`dietaryEnergy|${d2}`, "0"],
+    [`dietaryFiber|${d0}`, "6.5"], [`dietaryProtein|${d0}`, "30.25"],
+  ].sort(), "the evening entry is on d0, the zero day is present as 0, and d3 (no entries) has no row");
+  assert.equal(first.has(`dietaryEnergy|${d3}`), false);
+
+  // the API serves what Oracle holds, by meal, and lists the day with no entries as missing, not zero
+  const get = (path: string) => api.handle({ method: "GET", url: path, headers: { authorization: `Bearer ${clinician}` } });
+  const res = await get(`/v1/patients/${patient}/nutrition?nutrient=dietaryEnergy&from=${d0}&to=${d3}`);
+  assert.equal(res.status, 200);
+  const served = res.body as { days: { day: string; total: number; entries: number; byMeal: { meal: string; total: number }[] }[]; completeness: { missingDays: string[]; pendingWindows: number } };
+  assert.deepEqual(served.days.map((d) => [d.day, d.total, d.entries]), [[d0, 1850.5, 3], [d1, 500, 1], [d2, 0, 2]]);
+  assert.deepEqual(served.days[0]!.byMeal.map((m) => [m.meal, m.total]), [["breakfast", 400], ["lunch", 650.5], ["unlabelled", 800]]);
+  assert.deepEqual(served.completeness.missingDays, [d3]);
+  assert.equal(served.completeness.pendingWindows, 0);
+  assert.equal((await api.handle({ method: "GET", url: `/v1/patients/${patient}/nutrition?nutrient=dietaryEnergy&from=${d0}&to=${d3}`, headers: {} })).status, 401);
+
+  // running again changes nothing (and re-reads: positive control)
+  const again = await worker.runOnce();
+  assert.ok(again.recomputed > 0);
+  assert.equal(again.changed, 0);
+
+  // the capture app retracts the lunch (a delete in Apple Health): the day drops by exactly that entry
+  const rowBefore = (await mine()).find((r) => r.metricId === "dietaryEnergy" && r.day === d0 && r.meal === "all")!;
+  assert.equal(await retract(capture, tag, "lunch"), 200);
+  const afterRetract = await worker.runOnce();
+  assert.ok(afterRetract.changed >= 1);
+  const after = await overall();
+  assert.equal(after.get(`dietaryEnergy|${d0}`), "1200", "400 + 800");
+  assert.deepEqual([...after].sort(), [...(await independentTotals(capture, patient, tag, addDays(d0, -2), addDays(d3, 2)))].sort());
+  const rowAfter = (await mine()).find((r) => r.metricId === "dietaryEnergy" && r.day === d0 && r.meal === "all")!;
+  assert.equal(rowAfter.revision, rowBefore.revision + 1);
+  assert.equal((await mine()).some((r) => r.metricId === "dietaryEnergy" && r.day === d0 && r.meal === "lunch"), false, "the lunch row went with its only entry");
+  // retracting the last entry of a day removes the day (no entries), it does not leave a zero
+  assert.equal(await retract(capture, tag, "next"), 200);
+  await worker.runOnce();
+  assert.equal((await overall()).has(`dietaryEnergy|${d1}`), false);
+  assert.equal((await overall()).has(`dietaryEnergy|${d2}`), true, "control: the zero day is still a day with entries");
+});

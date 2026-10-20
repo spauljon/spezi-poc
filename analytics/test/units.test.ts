@@ -60,3 +60,11 @@ test("summarize does not depend on input order and does not mutate its input", (
   assert.deepEqual(summarize(input), summarize([...input].reverse()));
   assert.deepEqual(input, before);
 });
+
+test("isDay rejects a date that only parses by rolling over, and still accepts a real leap day (the control)", async () => {
+  assert.equal(isDay("2024-02-29"), true);
+  assert.equal(isDay("2026-02-29"), false);
+  assert.equal(isDay("2026-02-30"), false);
+  assert.equal(isDay("2026-04-31"), false);
+  assert.equal(isDay("2026-10-31"), true);
+});

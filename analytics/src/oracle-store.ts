@@ -1,6 +1,7 @@
 import oracledb, { type Connection } from "oracledb";
+import type { IntakeTotal, StoredIntakeTotal } from "./intake.ts";
 import type { SleepSession } from "./sleep.ts";
-import { sameSession } from "./store.ts";
+import { sameIntake, sameSession } from "./store.ts";
 import type { Reader, Rollup, Store, StoredRollup, StoredSleepSession, Window } from "./store.ts";
 
 export interface OracleConfig {
@@ -38,6 +39,11 @@ export class OracleStore implements Store, Reader {
     );
     const row = result.rows?.[0];
     return row ? Number(row.MS) : null;
+  }
+
+  async resetWatermark(worker: string): Promise<void> {
+    await this.connection.execute("delete from rollup_watermark where worker_name = :w", { w: worker });
+    await this.connection.commit();
   }
 
   async recordTouched(worker: string, windows: readonly Window[], watermarkMs: number | null): Promise<void> {
@@ -264,6 +270,87 @@ export class OracleStore implements Store, Reader {
     }));
   }
 
+  async applyIntake(window: Window, totals: readonly IntakeTotal[]): Promise<boolean> {
+    const existing = new Map(
+      (await this.intakeTotals(window.patientId))
+        .filter((t) => t.metricId === window.metricId && t.day === window.day)
+        .map((t) => [t.meal, t]),
+    );
+    const key = { p: window.patientId, m: window.metricId, d: window.day };
+    try {
+      let changed = false;
+      const keep = new Set<string>();
+      for (const t of totals) {
+        keep.add(t.meal);
+        const old = existing.get(t.meal);
+        if (old && sameIntake(old, t)) {
+          continue;
+        }
+        const binds = {
+          ...key, b_meal: t.meal, b_unit: t.unit, b_total: t.total, b_n: t.n, b_first: t.firstMs, b_last: t.lastMs,
+          b_na: t.nArtifact, b_nl: t.nLate,
+        };
+        if (old) {
+          await this.connection.execute(
+            `update nutrition_daily set unit = :b_unit, total = :b_total, n = :b_n, first_ms = :b_first, last_ms = :b_last,
+                    n_artifact = :b_na, n_late = :b_nl, revision = revision + 1, updated_at = systimestamp
+              where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD') and meal = :b_meal`,
+            binds,
+          );
+        } else {
+          await this.connection.execute(
+            `insert into nutrition_daily (patient_id, metric_id, day, meal, unit, total, n, first_ms, last_ms, n_artifact, n_late)
+             values (:p, :m, to_date(:d, 'YYYY-MM-DD'), :b_meal, :b_unit, :b_total, :b_n, :b_first, :b_last, :b_na, :b_nl)`,
+            binds,
+          );
+        }
+        changed = true;
+      }
+      for (const meal of existing.keys()) {
+        if (!keep.has(meal)) {
+          await this.connection.execute(
+            "delete from nutrition_daily where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD') and meal = :b_meal",
+            { ...key, b_meal: meal },
+          );
+          changed = true;
+        }
+      }
+      await this.connection.execute(
+        "delete from rollup_touched where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')",
+        key,
+      );
+      await this.connection.commit();
+      return changed;
+    } catch (error) {
+      await this.connection.rollback();
+      throw error;
+    }
+  }
+
+  async intakeTotals(patientId?: string): Promise<StoredIntakeTotal[]> {
+    const result = await this.connection.execute<Record<string, number | string>>(
+      `select patient_id, metric_id, to_char(day, 'YYYY-MM-DD') as day, meal, unit, total, n, first_ms, last_ms,
+              n_artifact, n_late, revision,
+              round((cast(sys_extract_utc(updated_at) as date) - date '1970-01-01') * 86400) * 1000 as updated_at_ms
+         from nutrition_daily
+        where (:p is null or patient_id = :p)
+        order by patient_id, metric_id, day, meal`,
+      { p: patientId ?? null },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    );
+    return (result.rows ?? []).map((r) => ({
+      patientId: String(r["PATIENT_ID"]), metricId: String(r["METRIC_ID"]), day: String(r["DAY"]), meal: String(r["MEAL"]),
+      unit: String(r["UNIT"]), total: Number(r["TOTAL"]), n: Number(r["N"]),
+      firstMs: Number(r["FIRST_MS"]), lastMs: Number(r["LAST_MS"]),
+      nArtifact: Number(r["N_ARTIFACT"]), nLate: Number(r["N_LATE"]),
+      revision: Number(r["REVISION"]), updatedAtMs: Number(r["UPDATED_AT_MS"]),
+    }));
+  }
+
+  async intakeDays(patientId: string, metricId: string, from: string, to: string): Promise<StoredIntakeTotal[]> {
+    return (await this.intakeTotals(patientId)).filter((t) => t.metricId === metricId && t.day >= from && t.day <= to);
+  }
+
   /** Test support: remove one worker's watermark and the given windows' rows. */
   async purge(worker: string, windows: readonly Window[]): Promise<void> {
     await this.connection.execute("delete from rollup_watermark where worker_name = :w", { w: worker });
@@ -274,6 +361,8 @@ export class OracleStore implements Store, Reader {
         { p: w.patientId, d: w.day });
       await this.connection.execute(
         "delete from daily_rollup where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')", key);
+      await this.connection.execute(
+        "delete from nutrition_daily where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')", key);
       await this.connection.execute(
         "delete from rollup_touched where patient_id = :p and metric_id = :m and day = to_date(:d, 'YYYY-MM-DD')", key);
     }

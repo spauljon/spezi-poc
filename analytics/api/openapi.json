@@ -3,7 +3,7 @@
   "info": {
     "title": "POC analytic API",
     "version": "1.0.0",
-    "description": "Daily trend bands and sleep nights computed by the aggregation worker (M9, M10) from HAPI. Synthetic data only in the POC. Not a medical device: it returns data and provenance, not interpretations. Every response carries `completeness`: absence of data is never a normal reading."
+    "description": "Daily trend bands, sleep nights and daily dietary intake totals computed by the aggregation worker (M9, M10, M22) from HAPI. Synthetic data only in the POC. Not a medical device: it returns data and provenance, not interpretations. Every response carries `completeness`: absence of data is never a normal reading."
   },
   "servers": [{ "url": "https://macpro16.local:8445", "description": "TLS only; bound to loopback on the POC host (M11 decision)" }],
   "security": [{ "bearer": [] }],
@@ -31,6 +31,35 @@
         ],
         "responses": {
           "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Bands" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/v1/nutrients": {
+      "get": {
+        "operationId": "listNutrients",
+        "summary": "Dietary nutrients a daily total can be requested for (from contract/metrics.json)",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Nutrients" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/v1/patients/{patientId}/nutrition": {
+      "get": {
+        "operationId": "getNutrition",
+        "summary": "Daily intake total for one nutrient, overall and by meal, over days as recorded from..to inclusive",
+        "parameters": [
+          { "name": "patientId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9\\-.]{1,64}$" } },
+          { "name": "nutrient", "in": "query", "required": true, "schema": { "type": "string" }, "description": "An id from /v1/nutrients" },
+          { "name": "from", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "to", "in": "query", "required": true, "schema": { "type": "string", "format": "date" }, "description": "At most 366 days after from" }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Nutrition" } } } },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" }
@@ -142,6 +171,47 @@
           "from": { "type": "string", "format": "date" }, "to": { "type": "string", "format": "date" },
           "nightDefinition": { "type": "string" },
           "sessions": { "type": "array", "items": { "$ref": "#/components/schemas/SleepSession" } },
+          "completeness": { "$ref": "#/components/schemas/Completeness" }
+        }
+      },
+      "Nutrients": {
+        "type": "object", "required": ["contractVersion", "nutrients"],
+        "properties": {
+          "contractVersion": { "type": "string" },
+          "nutrients": { "type": "array", "items": { "$ref": "#/components/schemas/MetricInfo" } }
+        }
+      },
+      "MealTotal": {
+        "type": "object", "required": ["meal", "total", "entries"],
+        "properties": {
+          "meal": { "type": "string", "description": "A meal code from the contract (breakfast, lunch, dinner, snack, other), or `unlabelled` for entries that carry no meal" },
+          "total": { "type": "number" },
+          "entries": { "type": "integer" }
+        }
+      },
+      "IntakeDay": {
+        "type": "object",
+        "required": ["day", "total", "entries", "firstEntry", "lastEntry", "artifactSuspected", "lateArrival", "revision", "byMeal"],
+        "properties": {
+          "day": { "type": "string", "format": "date", "description": "Day as recorded: the date written in the entries' own timestamps" },
+          "total": { "type": "number", "description": "The sum of the day's entries, in the nutrient's unit. 0 means entries that sum to zero; a day with no entries is not in `days` at all" },
+          "entries": { "type": "integer", "description": "How many entries were summed (more than 0)" },
+          "firstEntry": { "type": "string", "format": "date-time", "description": "The earliest entry's instant, in UTC (the recorded offset is not kept). Time of day is indicative: a source may stamp a default time" },
+          "lastEntry": { "type": "string", "format": "date-time" },
+          "artifactSuspected": { "type": "integer", "description": "How many entries carry the stored artifact-suspected flag. The total includes them: a flag is a suspicion, not a removal" },
+          "lateArrival": { "type": "integer", "description": "How many entries carry the stored late-arrival flag" },
+          "revision": { "type": "integer", "description": "Increases when a stored value of the day changes (the largest revision among the day's overall and meal rows)" },
+          "byMeal": { "type": "array", "items": { "$ref": "#/components/schemas/MealTotal" }, "description": "The day split by meal; the totals add up to `total`" }
+        }
+      },
+      "Nutrition": {
+        "type": "object", "required": ["patientId", "nutrient", "from", "to", "dayDefinition", "days", "completeness"],
+        "properties": {
+          "patientId": { "type": "string" },
+          "nutrient": { "$ref": "#/components/schemas/MetricInfo" },
+          "from": { "type": "string", "format": "date" }, "to": { "type": "string", "format": "date" },
+          "dayDefinition": { "type": "string" },
+          "days": { "type": "array", "items": { "$ref": "#/components/schemas/IntakeDay" } },
           "completeness": { "$ref": "#/components/schemas/Completeness" }
         }
       }

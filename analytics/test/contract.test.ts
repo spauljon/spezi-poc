@@ -76,3 +76,35 @@ test("the worker's flag system and codes are exactly the contract's", () => {
   assert.equal(c.flags.artifactSuspected, file.dataQualityFlags.artifactSuspected);
   assert.equal(c.flags.lateArrival, file.dataQualityFlags.lateArrival);
 });
+
+test("the worker's intake list is exactly the contract's intake metrics, each with its own code system and unit", () => {
+  const c = loadContract();
+  const file = JSON.parse(readFileSync(contractFile, "utf8")) as {
+    systems: Record<string, string>;
+    mealTypes: Record<string, { code: string }>;
+    metrics: { id: string; kind: string; loinc?: { code: string }; customCode?: { system: string; code: string }; unit: { ucum: string } }[];
+  };
+  const expected = file.metrics.filter((m) => m.kind === "intake").map((m) => ({
+    id: m.id,
+    codeSystem: m.customCode ? file.systems[m.customCode.system]! : file.systems["loinc"]!,
+    code: (m.customCode ?? m.loinc)!.code,
+    ucum: m.unit.ucum,
+  }));
+  assert.deepEqual(c.intakeMetrics.map(({ display: _d, ...rest }) => rest), expected);
+  assert.ok(expected.length >= 8);
+  assert.ok(expected.some((m) => m.codeSystem === file.systems["nutrient"]), "control: some nutrients are in the contract's own system");
+  assert.ok(expected.some((m) => m.codeSystem === file.systems["loinc"]), "control: and some are LOINC");
+  assert.deepEqual([...c.meals!.codes], Object.values(file.mealTypes).map((m) => m.code));
+  assert.equal(c.meals!.system, file.systems["mealType"]);
+});
+
+test("a contract with intake metrics but no meal types is refused, one with them loads (the control), and a bad code system is refused", () => {
+  const fixture = (name: string) => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url));
+  const ok = loadContract(fixture("contract-intake-ok.json"));
+  assert.deepEqual(ok.intakeMetrics.map((m) => [m.id, m.codeSystem, m.code]),
+    [["e", "http://loinc.org", "2-2"], ["f", "http://example.org/nutrient", "fib"]]);
+  assert.equal(ok.meals!.fallback, "other");
+  assert.throws(() => loadContract(fixture("contract-intake-no-meals.json")), /no meal types/);
+  assert.throws(() => loadContract(fixture("contract-intake-bad-system.json")), /lacks a code, a code system or a unit/);
+  assert.equal(loadContract(fixture("contract-flags-ok.json")).intakeMetrics.length, 0, "an older contract simply has no intake");
+});

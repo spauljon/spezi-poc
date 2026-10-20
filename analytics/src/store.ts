@@ -1,3 +1,4 @@
+import type { IntakeTotal, StoredIntakeTotal } from "./intake.ts";
 import type { SleepSession } from "./sleep.ts";
 
 /** A patient, metric and UTC day: the unit that is recomputed as a whole. */
@@ -38,6 +39,13 @@ export interface Store {
   getWatermark(worker: string): Promise<number | null>;
 
   /**
+   * Forget how far `worker` has read, so its next cycle scans everything again. Needed when the contract gains a
+   * metric: data written before the worker knew its code is older than the watermark and would never be scanned.
+   * Safe to repeat: every step after the scan is idempotent.
+   */
+  resetWatermark(worker: string): Promise<void>;
+
+  /**
    * In ONE transaction: remember `windows` as touched (already-pending ones are left alone) and move the watermark
    * forward (never backward). Either both happen or neither does.
    */
@@ -63,6 +71,16 @@ export interface Store {
   applyNights(window: Window, sessions: readonly SleepSession[]): Promise<boolean>;
 
   nights(patientId?: string): Promise<StoredSleepSession[]>;
+
+  /**
+   * In ONE transaction: make the stored daily-intake rows of (patient, nutrient, day as recorded) exactly `totals`
+   * (insert, change or delete as needed; none at all when the day has no entries) and clear the window's touched
+   * mark. Rows with identical values are left alone, revision included.
+   * @returns whether anything stored changed.
+   */
+  applyIntake(window: Window, totals: readonly IntakeTotal[]): Promise<boolean>;
+
+  intakeTotals(patientId?: string): Promise<StoredIntakeTotal[]>;
 }
 
 export interface StoredSleepSession extends SleepSession {
@@ -74,9 +92,17 @@ export interface StoredSleepSession extends SleepSession {
 export interface Reader {
   bands(patientId: string, metricId: string, from: string, to: string): Promise<StoredRollup[]>;
   sleepNights(patientId: string, from: string, to: string): Promise<StoredSleepSession[]>;
+  /** Daily intake rows (overall and by meal) of one nutrient, days as recorded `from`..`to` inclusive. */
+  intakeDays(patientId: string, metricId: string, from: string, to: string): Promise<StoredIntakeTotal[]>;
   /** Touched windows not yet recomputed (stale risk) in the range, for the patient and metrics. */
   pendingCount(patientId: string, metricIds: readonly string[], from: string, to: string): Promise<number>;
   getWatermark(worker: string): Promise<number | null>;
+}
+
+/** Whether two intake rows hold the same values (the key is the caller's business). */
+export function sameIntake(a: IntakeTotal, b: IntakeTotal): boolean {
+  return a.unit === b.unit && a.total === b.total && a.n === b.n && a.firstMs === b.firstMs && a.lastMs === b.lastMs &&
+    a.nArtifact === b.nArtifact && a.nLate === b.nLate;
 }
 
 /** Equality of everything but the revision. */
@@ -93,9 +119,14 @@ export class MemoryStore implements Store, Reader {
   private readonly touched = new Map<string, Window>();
   private readonly stored = new Map<string, StoredRollup>();
   private readonly sessions = new Map<string, StoredSleepSession>();
+  private readonly intake = new Map<string, StoredIntakeTotal>();
 
   async getWatermark(worker: string): Promise<number | null> {
     return this.watermarks.get(worker) ?? null;
+  }
+
+  async resetWatermark(worker: string): Promise<void> {
+    this.watermarks.delete(worker);
   }
 
   async recordTouched(worker: string, windows: readonly Window[], watermarkMs: number | null): Promise<void> {
@@ -150,6 +181,39 @@ export class MemoryStore implements Store, Reader {
       }
     }
     return changed;
+  }
+
+  async applyIntake(window: Window, totals: readonly IntakeTotal[]): Promise<boolean> {
+    this.touched.delete(windowKey(window));
+    let changed = false;
+    const keep = new Set<string>();
+    for (const t of totals) {
+      const key = `${windowKey(t)}|${t.meal}`;
+      keep.add(key);
+      const existing = this.intake.get(key);
+      if (existing && sameIntake(existing, t)) {
+        continue;
+      }
+      this.intake.set(key, { ...t, revision: (existing?.revision ?? 0) + 1, updatedAtMs: this.clock() });
+      changed = true;
+    }
+    for (const [key, t] of this.intake) {
+      if (windowKey(t) === windowKey(window) && !keep.has(key)) {
+        this.intake.delete(key);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  async intakeTotals(patientId?: string): Promise<StoredIntakeTotal[]> {
+    return [...this.intake.values()]
+      .filter((t) => patientId === undefined || t.patientId === patientId)
+      .sort((a, b) => `${windowKey(a)}|${a.meal}`.localeCompare(`${windowKey(b)}|${b.meal}`));
+  }
+
+  async intakeDays(patientId: string, metricId: string, from: string, to: string): Promise<StoredIntakeTotal[]> {
+    return (await this.intakeTotals(patientId)).filter((t) => t.metricId === metricId && t.day >= from && t.day <= to);
   }
 
   async nights(patientId?: string): Promise<StoredSleepSession[]> {

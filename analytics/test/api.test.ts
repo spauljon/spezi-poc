@@ -3,11 +3,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { AnalyticApi, MAX_RANGE_DAYS, type ApiResponse } from "../src/api.ts";
+import { totalsFor } from "../src/intake.ts";
 import type { Rollup } from "../src/store.ts";
 import { MemoryStore } from "../src/store.ts";
 import { buildSessions } from "../src/sleep.ts";
 import { ISSUER, jwksServer, mint, newKey, verifierFor } from "./jwt-support.ts";
-import { contract } from "./support.ts";
+import { contract, energy, fiber } from "./support.ts";
 
 const key = newKey("api-key");
 const ORIGIN = "https://macpro16.local:3000";
@@ -225,8 +226,18 @@ test("every 200 response conforms to the API description, and the description na
 
   // positive control for the checker: a wrong shape is reported
   assert.notDeepEqual(conforms({ metrics: "x" }, { $ref: "#/components/schemas/Metrics" }), []);
+  await seedIntake(store);
+  for (const [path, schema] of [
+    ["/v1/nutrients", "Nutrients"],
+    [`/v1/patients/p1/nutrition?nutrient=${energy.id}&from=2026-10-18&to=2026-10-21`, "Nutrition"],
+    [`/v1/patients/p1/nutrition?nutrient=${fiber.id}&from=2026-10-18&to=2026-10-21`, "Nutrition"],
+  ] as const) {
+    const res = await get(path);
+    assert.equal(res.status, 200, path);
+    assert.deepEqual(conforms(res.body, { $ref: `#/components/schemas/${schema}` }), [], path);
+  }
   assert.deepEqual(Object.keys(spec.paths).sort(),
-    ["/v1/metrics", "/v1/patients/{patientId}/bands", "/v1/patients/{patientId}/sleep"]);
+    ["/v1/metrics", "/v1/nutrients", "/v1/patients/{patientId}/bands", "/v1/patients/{patientId}/nutrition", "/v1/patients/{patientId}/sleep"]);
 });
 
 
@@ -237,4 +248,93 @@ test("bands carry the flag counts, and the stored values are returned exactly as
   const res = await get("/v1/patients/p1/bands?metric=heartRate&from=2026-10-01&to=2026-10-03");
   const body = res.body as { bands: { artifactSuspected: number; lateArrival: number; max: number }[] };
   assert.deepEqual(body.bands.map((b) => [b.artifactSuspected, b.lateArrival, b.max]), [[3, 5, 75]]);
+});
+
+
+// ---- dietary intake totals (M22) ----
+
+const E = (day: string, entries: { id: string; value: number; meal: string | null; at?: string }[]) =>
+  totalsFor({ patientId: "p1", metricId: energy.id, day }, energy.ucum, entries.map((e) => ({
+    id: e.id, value: e.value, instantMs: Date.parse(e.at ?? `${day}T12:00:00Z`), meal: e.meal, artifactSuspected: false, lateArrival: false,
+  })));
+
+async function seedIntake(store: MemoryStore) {
+  const w = (day: string) => ({ patientId: "p1", metricId: energy.id, day });
+  await store.applyIntake(w("2026-10-19"), E("2026-10-19", [
+    { id: "a", value: 300, meal: "breakfast", at: "2026-10-19T15:00:00Z" }, { id: "b", value: 700, meal: "dinner", at: "2026-10-20T02:30:00Z" },
+    { id: "c", value: 90, meal: null }, { id: "d", value: 150.5, meal: "breakfast" },
+  ]));
+  await store.applyIntake(w("2026-10-20"), E("2026-10-20", [{ id: "z", value: 0, meal: null }])); // a day of zero entries
+  await store.applyIntake({ patientId: "p1", metricId: fiber.id, day: "2026-10-19" }, totalsFor(
+    { patientId: "p1", metricId: fiber.id, day: "2026-10-19" }, fiber.ucum,
+    [{ id: "f", value: 12, instantMs: Date.parse("2026-10-19T12:00:00Z"), meal: null, artifactSuspected: false, lateArrival: false }]));
+}
+
+test("nutrients lists exactly the contract's intake metrics, and bands do not list them", async () => {
+  const { get } = await setup();
+  const body = (await get("/v1/nutrients")).body as { contractVersion: string; nutrients: { id: string; unit: string }[] };
+  assert.deepEqual(body.nutrients.map((m) => [m.id, m.unit]), contract.intakeMetrics.map((m) => [m.id, m.ucum]));
+  assert.ok(body.nutrients.length >= 8);
+  const metrics = (await get("/v1/metrics")).body as { metrics: { id: string }[] };
+  assert.ok(metrics.metrics.every((m) => !body.nutrients.some((n) => n.id === m.id)), "an intake is not a band metric");
+  assert.equal((await get(`/v1/patients/p1/bands?metric=${energy.id}&from=2026-10-01&to=2026-10-02`)).status, 400);
+});
+
+test("nutrition: the stored totals by day as recorded, split by meal in the contract's order, with the absent days listed", async () => {
+  const { store, get } = await setup();
+  await seedIntake(store);
+  const res = await get(`/v1/patients/p1/nutrition?nutrient=${energy.id}&from=2026-10-18&to=2026-10-21`);
+  assert.equal(res.status, 200);
+  const body = res.body as {
+    nutrient: { unit: string }; dayDefinition: string;
+    days: { day: string; total: number; entries: number; firstEntry: string; lastEntry: string; byMeal: { meal: string; total: number; entries: number }[] }[];
+    completeness: { missingDays: string[]; daysWithData: number };
+  };
+  assert.equal(body.nutrient.unit, energy.ucum);
+  assert.match(body.dayDefinition, /day as recorded/);
+  assert.deepEqual(body.days.map((d) => [d.day, d.total, d.entries]), [["2026-10-19", 1240.5, 4], ["2026-10-20", 0, 1]]);
+  assert.deepEqual(body.days[0]!.byMeal.map((m) => [m.meal, m.total, m.entries]), [["breakfast", 450.5, 2], ["dinner", 700, 1], ["unlabelled", 90, 1]]);
+  assert.equal(body.days[0]!.firstEntry, "2026-10-19T12:00:00.000Z");
+  assert.equal(body.days[0]!.lastEntry, "2026-10-20T02:30:00.000Z", "instants are UTC; the day is the recorded one");
+  // a day of zero entries is present with 0; a day with none is in missingDays, never a zero
+  assert.deepEqual(body.completeness.missingDays, ["2026-10-18", "2026-10-21"]);
+  assert.equal(body.completeness.daysWithData, 2);
+});
+
+test("nutrition: another nutrient and another patient never leak into the answer", async () => {
+  const { store, get } = await setup();
+  await seedIntake(store);
+  const fib = (await get(`/v1/patients/p1/nutrition?nutrient=${fiber.id}&from=2026-10-19&to=2026-10-19`)).body as { days: { total: number }[] };
+  assert.deepEqual(fib.days.map((d) => d.total), [12]);
+  const nobody = (await get(`/v1/patients/p2/nutrition?nutrient=${energy.id}&from=2026-10-19&to=2026-10-19`)).body as { days: unknown[]; completeness: { missingDays: string[] } };
+  assert.deepEqual([nobody.days, nobody.completeness.missingDays], [[], ["2026-10-19"]]);
+});
+
+test("nutrition: a day still waiting to be recomputed is reported as pending", async () => {
+  const { store, get } = await setup();
+  await seedIntake(store);
+  await store.recordTouched("w", [{ patientId: "p1", metricId: energy.id, day: "2026-10-19" }], null);
+  const c = ((await get(`/v1/patients/p1/nutrition?nutrient=${energy.id}&from=2026-10-19&to=2026-10-19`)).body as { completeness: { pendingWindows: number } }).completeness;
+  assert.equal(c.pendingWindows, 1);
+  const other = ((await get(`/v1/patients/p1/nutrition?nutrient=${fiber.id}&from=2026-10-19&to=2026-10-19`)).body as { completeness: { pendingWindows: number } }).completeness;
+  assert.equal(other.pendingWindows, 0, "control: another nutrient's window is not counted");
+});
+
+test("nutrition: each bad parameter is a 400 for its own reason, and authentication still comes first", async () => {
+  const { api, get } = await setup();
+  const base = `/v1/patients/p1/nutrition?nutrient=${energy.id}&from=2026-10-01&to=2026-10-02`;
+  assert.equal((await get(base)).status, 200); // control
+  for (const [path, expected] of [
+    [`/v1/patients/p1/nutrition?from=2026-10-01&to=2026-10-02`, /nutrient/],
+    [`/v1/patients/p1/nutrition?nutrient=nope&from=2026-10-01&to=2026-10-02`, /nutrient/],
+    [`/v1/patients/p1/nutrition?nutrient=heartRate&from=2026-10-01&to=2026-10-02`, /nutrient/],
+    [`/v1/patients/p1/nutrition?nutrient=${energy.id}&to=2026-10-02`, /from/],
+    [`/v1/patients/p1/nutrition?nutrient=${energy.id}&from=2026-02-30&to=2026-03-02`, /from/],
+    [`/v1/patients/p1/nutrition?nutrient=${energy.id}&from=2026-10-03&to=2026-10-02`, /after/],
+  ] as [string, RegExp][]) {
+    const res = await get(path);
+    assert.equal(res.status, 400, path);
+    assert.match((res.body as { detail: string }).detail, expected, path);
+  }
+  assert.equal((await api.handle({ method: "GET", url: base, headers: {} })).status, 401);
 });
