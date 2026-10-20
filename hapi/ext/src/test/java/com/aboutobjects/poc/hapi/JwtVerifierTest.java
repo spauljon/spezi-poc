@@ -1,4 +1,4 @@
-package com.blueysoft.poc.hapi;
+package com.aboutobjects.poc.hapi;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;

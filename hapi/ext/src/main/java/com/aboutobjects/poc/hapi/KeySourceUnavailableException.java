@@ -1,4 +1,4 @@
-package com.blueysoft.poc.hapi;
+package com.aboutobjects.poc.hapi;
 
 /**
  * The signing keys could not be obtained (identity provider unreachable). This is NOT the client's

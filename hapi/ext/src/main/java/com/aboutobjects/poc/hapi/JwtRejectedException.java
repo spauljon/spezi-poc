@@ -1,4 +1,4 @@
-package com.blueysoft.poc.hapi;
+package com.aboutobjects.poc.hapi;
 
 /** The presented token is not acceptable. The message is for the server log only, never sent to the client. */
 public class JwtRejectedException extends Exception {

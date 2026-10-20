@@ -102,8 +102,8 @@ hapi:
   fhir:
     fhir_version: R4
     # hapi/ext: discovered here, registered below. Every /fhir request needs a verified bearer token.
-    custom-bean-packages: com.blueysoft.poc.hapi
-    custom-interceptor-classes: com.blueysoft.poc.hapi.PocAuthorizationInterceptor
+    custom-bean-packages: com.aboutobjects.poc.hapi
+    custom-interceptor-classes: com.aboutobjects.poc.hapi.PocAuthorizationInterceptor
     cr:
       enabled: false
     cdshooks:

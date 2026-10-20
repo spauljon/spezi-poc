@@ -1,4 +1,4 @@
-package com.blueysoft.poc.hapi;
+package com.aboutobjects.poc.hapi;
 
 import com.nimbusds.jose.util.Resource;
 import com.nimbusds.jose.util.ResourceRetriever;

@@ -1,4 +1,4 @@
-package com.blueysoft.poc.hapi;
+package com.aboutobjects.poc.hapi;
 
 import ca.uhn.fhir.rest.api.RequestTypeEnum;
 import com.fasterxml.jackson.databind.JsonNode;
