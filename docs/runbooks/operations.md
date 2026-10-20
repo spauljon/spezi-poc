@@ -67,6 +67,7 @@ make analytics-migrate
 | Web page: "Not permitted" | the signed-in user lacks `clinician-reader` | sign in as the clinician user; the UI check is display only, the API enforces |
 | Web trends: "The analytic service's answer was not understood" | an API older or newer than the web build (for example after updating only one) | update both, as above |
 | Worker log shows `fetch failed` | HAPI is down; the worker backs off (30 s then 60 s) and resumes by itself | start HAPI; no action on the worker |
+| A nutrient's totals are missing for data that is in HAPI | the worker's watermark is past that data: it was written before the contract gave the worker the metric's code | `make analytics-rescan`; the running worker re-reads everything within one cycle (about 30 s). Check with `python3 analytics/verify-intake.py [poc-real]` |
 | A new field is missing in the API | the container still runs the old image | the image-id check above |
 | Port 3000 busy for `make web-dev` | the deployed `web` service owns it | `make stack-down` or use the deployed app |
 
@@ -100,6 +101,7 @@ make web-seed-dense-day             # one dense synthetic day, idempotent
 make web-seed-sleep-nights          # three known synthetic nights, idempotent
 make test-ios-integration           # uploads through the app's real code path; needs the simulator booted and trusting the CA
 make test-analytics-live
+python3 analytics/verify-intake.py  # nutrition totals vs an independent sum from HAPI (add `poc-real` for your own data; counts only)
 make test-web-live                  # two checks also need a long synthetic history (daily resting heart rate, more than five nights)
 ```
 
