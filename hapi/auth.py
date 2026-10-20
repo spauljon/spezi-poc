@@ -142,7 +142,9 @@ def retraction_checks(pid, cap, cli, wrk):
     entered-in-error is applied; every other patch, and every other kind of update, is refused. Each refusal is judged
     against the accepted request (the positive control) and then proved to have changed nothing."""
     print("== capture-writer: retract its own Observation (conditional JSON Patch of status), nothing else")
-    a, b = "auth-check-retract-a", "auth-check-retract-b"
+    # unique per run: the check ends with both retracted, so fixed ids would fail on a second run against the same database
+    run = "%x" % int.from_bytes(os.urandom(4), "big")
+    a, b = "auth-check-retract-a-" + run, "auth-check-retract-b-" + run
     for v in (a, b):
         st, _ = call("POST", BASE + "/Observation", cap, sample_observation(pid, v), {"If-None-Exist": "identifier=%s|%s" % (SAMPLE_SYSTEM, v)})
         expect("create the synthetic Observation %s to retract" % v, st, [200, 201])
