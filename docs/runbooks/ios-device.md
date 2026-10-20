@@ -51,3 +51,12 @@ iOS decides when to wake the app. Measured on 2026-10-14: wake-ups about every 4
 ## Start again from nothing
 
 Delete the app from the phone (this removes its queue, HealthKit bookmarks, preferences and sign-in), reinstall from Xcode, sign in, choose Apple Health. The first window is the last seven days.
+
+## Moving from the old app name (`com.blueysoft.spezipoc`) to HealthGate (`com.aboutobjects.healthgate`)
+
+iOS treats a new bundle id as a different app, so the old one stays on the phone with its own queue and permissions.
+
+1. Let the old app finish uploading (Queued 0) before you replace it. Its queue is in its own storage and does not move.
+2. Open the new project (`ios/HealthGate.xcodeproj`, scheme `HealthGate`), check Signing & Capabilities (team, HealthKit), and run it on the phone. Xcode registers the new App ID with your team.
+3. Delete the old app. Open HealthGate, choose Apple Health, grant read access, sign in. The first window is the last seven days; uploads are conditional creates on the sample identifier, so samples the old app already sent are not duplicated.
+4. The Keycloak client `ios-capture` must list `com.aboutobjects.healthgate:/oauth2redirect`. The realm file only applies on an empty database, so an existing stack needs the client updated (kcadm, see `idp/README.md`); `python3 idp/oidc.py check` verifies it.

@@ -168,7 +168,7 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Goal:** The `poc` realm exists from a committed template and issues signed JWTs with role claims for three principals; the discovery document and JWKS are reachable through the proxy from the Mac and the iPhone, and tokens can be obtained and inspected with a script.
 
-**Status (2026-10-09):** built and verified, **waiting on your review**. The realm imports from code on an empty Keycloak volume; `python3 idp/oidc.py check` runs 36 behavior checks (tokens, roles, audience, lifetime, refusals, PKCE, redirect URI, closed admin side), mutation-tested on the PKCE attribute; no secret appears in any log or tracked file. Defaults chosen, to revisit: iOS redirect `com.blueysoft.spezipoc:/oauth2redirect`, web origin `https://macpro16.local:3000`, 10-minute access tokens, 14-day SSO idle.
+**Status (2026-10-09):** built and verified, **waiting on your review**. The realm imports from code on an empty Keycloak volume; `python3 idp/oidc.py check` runs 36 behavior checks (tokens, roles, audience, lifetime, refusals, PKCE, redirect URI, closed admin side), mutation-tested on the PKCE attribute; no secret appears in any log or tracked file. Defaults chosen, to revisit: iOS redirect `com.aboutobjects.healthgate:/oauth2redirect`, web origin `https://macpro16.local:3000`, 10-minute access tokens, 14-day SSO idle.
 
 **Depends on:** Milestone 3a.
 
@@ -237,7 +237,7 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Depends on:** Milestone 4 (for endpoint and auth config).
 
-**Status (2026-10-10):** tasks 1 to 5 and 7 are built, verified and **committed as `m05`**; task 6 (sign in) moved to Milestone 5b below. Template copied from `d52014a` without its `.git` (you approved the download); trimmed from 20 Swift packages to 5; bundle id `com.blueysoft.spezipoc` (matches the realm's redirect URI). Orientation and source-selection screens, a Home that shows the synthetic source, the endpoint and the sign-in URL from configuration, and "Not signed in". 8 unit tests and 1 UI test pass (`make test-ios-ui`). Findings: the template's onboarding presentation rendered **blank** on Xcode 27 / iOS 27 (SpeziViews `ManagedNavigationStack`: "Accessing State<Path>'s value without being installed on a View"), so the flow is a plain state switch; the template's `setup.sh` installs system-wide tooling and was not run. Details: [ios/README.md](../ios/README.md).
+**Status (2026-10-10):** tasks 1 to 5 and 7 are built, verified and **committed as `m05`**; task 6 (sign in) moved to Milestone 5b below. Template copied from `d52014a` without its `.git` (you approved the download); trimmed from 20 Swift packages to 5; bundle id `com.aboutobjects.healthgate` (matches the realm's redirect URI). Orientation and source-selection screens, a Home that shows the synthetic source, the endpoint and the sign-in URL from configuration, and "Not signed in". 8 unit tests and 1 UI test pass (`make test-ios-ui`). Findings: the template's onboarding presentation rendered **blank** on Xcode 27 / iOS 27 (SpeziViews `ManagedNavigationStack`: "Accessing State<Path>'s value without being installed on a View"), so the flow is a plain state switch; the template's `setup.sh` installs system-wide tooling and was not run. Details: [ios/README.md](../ios/README.md).
 
 **Tasks:**
 1. Run `spezi-platform-selection` for the Apple-native path, but copy the Spezi Template Application into `ios/` without its `.git` and record the upstream commit in `ios/README.md`. Do not let the skill move `docs/` (they stay at the repo root).
@@ -268,7 +268,7 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Tasks:**
 1. Add AppAuth as a Swift package dependency (project-file edit, validated as in M5); record version and license in `ios/README.md`.
-2. Discovery from `POC_ISSUER_URL`; authorization code + PKCE (S256) in `ASWebAuthenticationSession`, redirect `com.blueysoft.spezipoc:/oauth2redirect`; `state` and `nonce` checked.
+2. Discovery from `POC_ISSUER_URL`; authorization code + PKCE (S256) in `ASWebAuthenticationSession`, redirect `com.aboutobjects.healthgate:/oauth2redirect`; `state` and `nonce` checked.
 3. Token storage in the Keychain via `SpeziKeychainStorage` (access token, refresh token, expiry); never in `UserDefaults`, logs or the UI.
 4. Refresh before expiry; sign-out clears the Keychain.
 5. Home shows signed-in state (user name, roles claim, expiry) without showing the token.
