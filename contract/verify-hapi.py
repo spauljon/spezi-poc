@@ -7,8 +7,11 @@ HAPI with the synthetic capture user's token, by conditional create, and reports
 What is changed from the fixtures, and why:
   - identifier.value gets the prefix "golden-" so these resources can never collide with the future synthetic
     stream (a conditional create on a clashing id would silently do nothing);
-  - subject/device/patient references are pointed at the real seeded Patient and a real Device (HAPI enforces
-    referential integrity on write, so "Patient/example-patient" would be refused for that reason, not for the shape).
+  - subject/device/patient references are pointed at this script's OWN synthetic Patient (identifier poc-verify) and
+    a real Device (HAPI enforces referential integrity on write, so "Patient/example-patient" would be refused for
+    that reason, not for the shape). The own patient matters: the golden records include intervals on real dates
+    (a sleep interval across the spring-forward night), and on the shared poc-0001 patient they overlapped the web
+    live test's sleep fixture and showed up in every rollup and chart.
 Everything else is posted exactly as the generator wrote it. All data is synthetic. Rerunning is a no-op (conditional
 create). The resources stay in HAPI (no role may delete); `make stack-reset` clears them.
 
@@ -18,6 +21,7 @@ import importlib.util
 import json
 import os
 import sys
+import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
@@ -43,11 +47,29 @@ def conditional_create(token, resource, base=auth.BASE):
     return status, messages
 
 
+VERIFY_PATIENT = "poc-verify"
+
+
+def verify_patient(token):
+    """Find or create (conditional create) the Patient that holds only this script's golden resources."""
+    ident = "%s|%s" % (auth.PATIENT_SYSTEM, VERIFY_PATIENT)
+    resource = {"resourceType": "Patient", "identifier": [{"system": auth.PATIENT_SYSTEM, "value": VERIFY_PATIENT}]}
+    status, text = auth.call("POST", auth.BASE + "/Patient", token, resource, {"If-None-Exist": "identifier=" + ident})
+    if status not in (200, 201):
+        return None, status
+    if status == 201:
+        return json.loads(text)["id"], status
+    q = urllib.parse.urlencode({"identifier": ident, "_elements": "id"})
+    st, t = auth.call("GET", auth.BASE + "/Patient?" + q, token)
+    entries = json.loads(t).get("entry", []) if st == 200 else []
+    return (entries[0]["resource"]["id"] if len(entries) == 1 else None), status
+
+
 def main():
     token = auth.token("capture")
-    pid, status = auth.seed(token)
+    pid, status = verify_patient(token)
     if pid is None:
-        sys.exit("cannot find or create the seeded Patient (HTTP %s)" % status)
+        sys.exit("cannot find or create the verification Patient (HTTP %s)" % status)
     patient_ref = "Patient/" + pid
 
     failures = 0
