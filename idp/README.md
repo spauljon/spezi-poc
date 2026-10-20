@@ -89,7 +89,7 @@ Imported from `realm/poc-realm.json` at the first start on an empty database (`-
 
 | Client | Kind | Used by | Grant |
 |---|---|---|---|
-| `ios-capture` | public, PKCE S256 required | the iOS capture app (M5, M8) | authorization code; `offline_access` allowed. Redirect `com.blueysoft.spezipoc:/oauth2redirect` |
+| `ios-capture` | public, PKCE S256 required | the iOS capture app (M5, M8) | authorization code; `offline_access` allowed. Redirect `com.aboutobjects.healthgate:/oauth2redirect` |
 | `clinician-web` | public, PKCE S256 required | the web app (M12) | authorization code. Redirect `https://macpro16.local:3000/*` (placeholder origin, revisit in M12) |
 | `analytics-worker` | confidential | the aggregation worker (M9) | client credentials only; its service account holds `worker-reader` |
 | `poc-devtest` | public | scripts only (`oidc.py`), **never the apps** | password grant, so a user token can be fetched without a browser |

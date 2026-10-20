@@ -35,7 +35,7 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["com.blueysoft.spezipoc:/oauth2redirect"],
+      "redirectUris": ["com.aboutobjects.healthgate:/oauth2redirect"],
       "webOrigins": [],
       "attributes": { "pkce.code.challenge.method": "S256" },
       "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email"],

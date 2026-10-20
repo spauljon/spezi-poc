@@ -18,7 +18,7 @@ BASE = "https://%s:%d" % (HOST, PORT)
 ISSUER = BASE + "/realms/poc"
 TLS_DIR = os.environ.get("POC_TLS_DIR", os.path.expanduser("~/.poc-ca"))
 ENV_FILE = os.environ.get("POC_IDP_ENV_FILE", os.path.join(HERE, ".env.local"))
-IOS_REDIRECT = "com.blueysoft.spezipoc:/oauth2redirect"
+IOS_REDIRECT = "com.aboutobjects.healthgate:/oauth2redirect"
 TOKEN_PATH = "/realms/poc/protocol/openid-connect/token"
 AUTH_PATH = "/realms/poc/protocol/openid-connect/auth"
 
