@@ -132,13 +132,13 @@ def main():
         check(loinc_valid(code), "LOINC %s has a valid check digit" % code, "LOINC %s fails its check digit (typo?)" % code)
     check(len(custom) == len(set(custom)), "no custom code is used twice", "a custom code is used by two metrics")
     for system in ("observationDomain", "mealType", "nutrient"):
-        check(c["systems"][system].startswith("http://blueysoft.com/fhir/CodeSystem/"), "system %s is in the decided namespace" % system, "system %s is outside the namespace" % system)
+        check(c["systems"][system].startswith("http://aboutobjects.com/fhir/CodeSystem/"), "system %s is in the decided namespace" % system, "system %s is outside the namespace" % system)
     check(set(c["mealTypes"]) >= {"breakfast", "lunch", "dinner", "snack", "other"} and all(k == v["code"] for k, v in c["mealTypes"].items()),
           "meal types include breakfast, lunch, dinner, snack and other, each keyed by its code", "meal types are incomplete or mis-keyed")
     check(all(v in c["mealTypes"] and k == k.lower() for k, v in c["mealTypeAliases"].items()), "every meal-type alias is lowercase and points at a defined code",
           "a meal-type alias is not lowercase or points at an undefined code")
     for url in c["systems"]["identifier"].values():
-        check(url.startswith("http://blueysoft.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % url.rsplit("/", 1)[-1], "identifier system outside the namespace: " + url)
+        check(url.startswith("http://aboutobjects.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % url.rsplit("/", 1)[-1], "identifier system outside the namespace: " + url)
 
     # --- M21: the HAPI retraction rule names the app's own sample-identifier systems; they must equal the contract's
     def retraction_systems(text):

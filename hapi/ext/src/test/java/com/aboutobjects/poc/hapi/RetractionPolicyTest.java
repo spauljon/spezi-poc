@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
  */
 class RetractionPolicyTest {
 
-	private static final String HEALTHKIT = "http://blueysoft.com/fhir/identifier/healthkit-sample";
-	private static final String SYNTHETIC = "http://blueysoft.com/fhir/identifier/synthetic-sample";
+	private static final String HEALTHKIT = "http://aboutobjects.com/fhir/identifier/healthkit-sample";
+	private static final String SYNTHETIC = "http://aboutobjects.com/fhir/identifier/synthetic-sample";
 	private static final String PATCH = "[{\"op\":\"replace\",\"path\":\"/status\",\"value\":\"entered-in-error\"}]";
 
 	private final RetractionPolicy policy = new RetractionPolicy(List.of(HEALTHKIT, SYNTHETIC));

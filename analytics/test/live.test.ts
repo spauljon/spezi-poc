@@ -28,8 +28,8 @@ const codeOf = (stage: string) => [...sleepMetric.stageByCode].find(([, s]) => s
 const live = process.env["POC_ANALYTICS_LIVE"] === "1";
 const issuer = process.env["POC_ISSUER_URL"] ?? "https://macpro16.local:8444/realms/poc";
 const fhirBase = process.env["POC_FHIR_BASE_URL"] ?? "https://macpro16.local:8443/fhir";
-const patientSystem = "http://blueysoft.com/fhir/identifier/poc-patient";
-const sampleSystem = "http://blueysoft.com/fhir/identifier/synthetic-sample";
+const patientSystem = "http://aboutobjects.com/fhir/identifier/poc-patient";
+const sampleSystem = "http://aboutobjects.com/fhir/identifier/synthetic-sample";
 
 function required(name: string): string {
   const v = process.env[name];

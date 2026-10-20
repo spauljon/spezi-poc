@@ -19,20 +19,20 @@
     "ucum": "http://unitsofmeasure.org",
     "observationCategory": "http://terminology.hl7.org/CodeSystem/observation-category",
     "identifier": {
-      "patient": "http://blueysoft.com/fhir/identifier/poc-patient",
-      "synthetic": "http://blueysoft.com/fhir/identifier/synthetic-sample",
-      "healthKit": "http://blueysoft.com/fhir/identifier/healthkit-sample",
-      "deviceKey": "http://blueysoft.com/fhir/identifier/device-key",
-      "appBundleId": "http://blueysoft.com/fhir/identifier/app-bundle-id"
+      "patient": "http://aboutobjects.com/fhir/identifier/poc-patient",
+      "synthetic": "http://aboutobjects.com/fhir/identifier/synthetic-sample",
+      "healthKit": "http://aboutobjects.com/fhir/identifier/healthkit-sample",
+      "deviceKey": "http://aboutobjects.com/fhir/identifier/device-key",
+      "appBundleId": "http://aboutobjects.com/fhir/identifier/app-bundle-id"
     },
     "metaSource": {
-      "synthetic": "http://blueysoft.com/fhir/capture-app/synthetic",
-      "healthKit": "http://blueysoft.com/fhir/capture-app/healthkit"
+      "synthetic": "http://aboutobjects.com/fhir/capture-app/synthetic",
+      "healthKit": "http://aboutobjects.com/fhir/capture-app/healthkit"
     },
-    "dataQualityFlag": "http://blueysoft.com/fhir/CodeSystem/data-quality-flag",
-    "observationDomain": "http://blueysoft.com/fhir/CodeSystem/observation-domain",
-    "mealType": "http://blueysoft.com/fhir/CodeSystem/meal-type",
-    "nutrient": "http://blueysoft.com/fhir/CodeSystem/nutrient"
+    "dataQualityFlag": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+    "observationDomain": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+    "mealType": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+    "nutrient": "http://aboutobjects.com/fhir/CodeSystem/nutrient"
   },
   "dataQualityFlags": {
     "artifactSuspected": "artifact-suspected",

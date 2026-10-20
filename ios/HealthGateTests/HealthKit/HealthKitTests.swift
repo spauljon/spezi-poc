@@ -16,7 +16,7 @@ import Testing
 // below is anyone's measurement.
 
 private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
-private let patientSystem = "http://blueysoft.com/fhir/identifier/poc-patient"
+private let patientSystem = "http://aboutobjects.com/fhir/identifier/poc-patient"
 
 private func registry() throws -> MetricRegistry {
     try MetricRegistry.load(bundle: .main)

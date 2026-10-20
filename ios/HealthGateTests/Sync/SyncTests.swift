@@ -13,7 +13,7 @@ import Testing
 
 // MARK: - Fixtures
 
-private let patientSystem = "http://blueysoft.com/fhir/identifier/poc-patient"
+private let patientSystem = "http://aboutobjects.com/fhir/identifier/poc-patient"
 private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
 private func registry() throws -> MetricRegistry {
@@ -188,12 +188,12 @@ struct BundleBuilderTests {
         #expect(built.bundle.entry.count == 4)
         guard case .device = built.bundle.entry[0].resource else { Issue.record("Device first"); return }
         #expect(built.bundle.entry[0].request.url == "Device")
-        #expect(built.bundle.entry[0].request.ifNoneExist.hasPrefix("identifier=http%3A%2F%2Fblueysoft.com%2Ffhir%2Fidentifier%2Fdevice-key%7C"))
+        #expect(built.bundle.entry[0].request.ifNoneExist.hasPrefix("identifier=http%3A%2F%2Faboutobjects.com%2Ffhir%2Fidentifier%2Fdevice-key%7C"))
         let deviceURL = built.bundle.entry[0].fullUrl
         for entry in built.bundle.entry.dropFirst() {
             #expect(entry.request.method == "POST")
             #expect(entry.request.url == "Observation")
-            #expect(entry.request.ifNoneExist.hasPrefix("identifier=http%3A%2F%2Fblueysoft.com%2Ffhir%2Fidentifier%2Fsynthetic-sample%7Csyn-test-"))
+            #expect(entry.request.ifNoneExist.hasPrefix("identifier=http%3A%2F%2Faboutobjects.com%2Ffhir%2Fidentifier%2Fsynthetic-sample%7Csyn-test-"))
             guard case .observation(let observation) = entry.resource else { Issue.record("Observation"); continue }
             #expect(observation.device?.reference == deviceURL)
             // The condition must name the entry's OWN identifier, or a resend would not be recognised.

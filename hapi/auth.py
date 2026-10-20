@@ -25,13 +25,13 @@ CONNECT_TO = os.environ.get("POC_HAPI_CONNECT", "127.0.0.1")   # where the name 
 ORIGIN = "https://%s:%d" % (HOST, PORT)
 BASE = ORIGIN + "/fhir"
 TLS_DIR = os.environ.get("POC_TLS_DIR", os.path.expanduser("~/.poc-ca"))
-PATIENT_SYSTEM = "http://blueysoft.com/fhir/identifier/poc-patient"
+PATIENT_SYSTEM = "http://aboutobjects.com/fhir/identifier/poc-patient"
 PATIENT_VALUE = "poc-0001"
-OBS_SYSTEM = "http://blueysoft.com/fhir/identifier/poc-observation"
+OBS_SYSTEM = "http://aboutobjects.com/fhir/identifier/poc-observation"
 OBS_VALUE = "auth-check-0001"
-DEVICE_SYSTEM = "http://blueysoft.com/fhir/identifier/poc-device"
+DEVICE_SYSTEM = "http://aboutobjects.com/fhir/identifier/poc-device"
 DEVICE_VALUE = "auth-check-device-0001"
-TAG_SYSTEM = "http://blueysoft.com/fhir/tag"
+TAG_SYSTEM = "http://aboutobjects.com/fhir/tag"
 
 
 def call(method, url, token=None, body=None, headers=None, raw_auth=None):
@@ -120,7 +120,7 @@ def txn_entry(patient_id):
 
 FAILS = []
 
-SAMPLE_SYSTEM = "http://blueysoft.com/fhir/identifier/synthetic-sample"
+SAMPLE_SYSTEM = "http://aboutobjects.com/fhir/identifier/synthetic-sample"
 RETRACT = '[{"op":"replace","path":"/status","value":"entered-in-error"}]'
 PATCH_TYPE = {"Content-Type": "application/json-patch+json"}
 

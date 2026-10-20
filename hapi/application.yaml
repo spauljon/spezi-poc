@@ -89,7 +89,7 @@ poc:
     # M21: the identifier systems of the app's own sample identifiers (contract/metrics.json systems.identifier
     # synthetic and healthKit; contract/check.py keeps them equal). The capture role may retract (PATCH status to
     # entered-in-error) only an Observation found by one of these. Empty or absent: no retraction at all.
-    retraction-identifier-systems: http://blueysoft.com/fhir/identifier/synthetic-sample,http://blueysoft.com/fhir/identifier/healthkit-sample
+    retraction-identifier-systems: http://aboutobjects.com/fhir/identifier/synthetic-sample,http://aboutobjects.com/fhir/identifier/healthkit-sample
 
 # springdoc serves /v3/api-docs (a Spring MVC endpoint outside the FHIR servlet). Off: nothing uses it.
 springdoc:

@@ -15,7 +15,7 @@ import Testing
 // All identifiers are synthetic. The HealthKit-shaped ids below are made up for these tests; none is a real sample.
 
 private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
-private let patientSystem = "http://blueysoft.com/fhir/identifier/poc-patient"
+private let patientSystem = "http://aboutobjects.com/fhir/identifier/poc-patient"
 private let idA = "0A1B2C3D-0000-4000-8000-00000000000A"
 private let idB = "0A1B2C3D-0000-4000-8000-00000000000B"
 private let idC = "0A1B2C3D-0000-4000-8000-00000000000C"

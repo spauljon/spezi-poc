@@ -12,7 +12,7 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "synthetic-simulator"
           }
         ],
@@ -46,7 +46,7 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "e6e81c93680bf7b928774101baff724230f4a4f637576041dd28a46c32a53c21"
           }
         ],
@@ -95,7 +95,7 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "e6e81c93680bf7b928774101baff724230f4a4f637576041dd28a46c32a53c21"
           }
         ],
@@ -140,7 +140,7 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "1504eec16fda3ba3384ea0b077db9a35e1774bbd1c9dbdced64789538873a2c8"
           }
         ],
@@ -179,11 +179,11 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
           },
           {
-            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "system": "http://aboutobjects.com/fhir/identifier/app-bundle-id",
             "value": "com.example.nutritionapp"
           }
         ],
@@ -213,11 +213,11 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
           },
           {
-            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "system": "http://aboutobjects.com/fhir/identifier/app-bundle-id",
             "value": "com.example.nutritionapp"
           }
         ],
@@ -247,11 +247,11 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
           },
           {
-            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "system": "http://aboutobjects.com/fhir/identifier/app-bundle-id",
             "value": "com.example.nutritionapp"
           }
         ],
@@ -280,11 +280,11 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "5ac1c53f28c7f7b6a90700c057d57c659d5f0d695b015e3390d95f1f67502177"
           },
           {
-            "system": "http://blueysoft.com/fhir/identifier/app-bundle-id",
+            "system": "http://aboutobjects.com/fhir/identifier/app-bundle-id",
             "value": "com.example.nutritionapp"
           }
         ],
@@ -307,7 +307,7 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "a1fa35703a77afbe08131a2b25bbe61d7f0368c0650344cfd482e857f0c51c7f"
           }
         ],
@@ -337,7 +337,7 @@
         "resourceType": "Device",
         "identifier": [
           {
-            "system": "http://blueysoft.com/fhir/identifier/device-key",
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
             "value": "a1fa35703a77afbe08131a2b25bbe61d7f0368c0650344cfd482e857f0c51c7f"
           }
         ],
