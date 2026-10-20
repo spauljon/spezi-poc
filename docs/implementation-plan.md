@@ -42,7 +42,7 @@ spezi/
 ## Planning Inputs
 
 - **`docs/planning/ux-brief.md` (approved):** capture-app and clinician journeys, three initial metrics (resting heart rate, heart rate/HRV, sleep), three views (longitudinal trend + flowsheet, sleep, intraday), synthetic-source controls on a simulator screen, risks.
-- **`docs/planning/fhir-data-model.md` (approved, assumptions A1-A13):** base R4, no `meta.profile`, LOINC/UCUM mappings, sleep as per-stage interval Observations, `Device`, no Provenance, namespace `http://blueysoft.com/fhir`, search patterns, analytic projection.
+- **`docs/planning/fhir-data-model.md` (approved, assumptions A1-A13):** base R4, no `meta.profile`, LOINC/UCUM mappings, sleep as per-stage interval Observations, `Device`, no Provenance, namespace `http://aboutobjects.com/fhir`, search patterns, analytic projection.
 - **Not run (gaps):** `digital-health-compliance-planning` (see Compliance Integration: CLAUDE.md data rules stand in), `health-data-model-planning`, `biodesign-needs-finding`, `digital-health-study-planning`. `fasten-ehr-integration` is intentionally excluded (external service).
 
 ## Feature List

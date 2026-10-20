@@ -54,7 +54,7 @@ Consequences:
 
 | Field | Type | Notes |
 |---|---|---|
-| `identifier` | Identifier[] 1..* | `system` = `http://blueysoft.com/fhir/identifier/poc-patient`. |
+| `identifier` | Identifier[] 1..* | `system` = `http://aboutobjects.com/fhir/identifier/poc-patient`. |
 | `name` | HumanName[] 0..* | Synthetic, optional. |
 
 Multi-patient is a future extension: every Observation search uses `subject=Patient/{id}`; nothing may assume a single patient.
@@ -79,14 +79,14 @@ Multi-patient is a future extension: every Observation search uses `subject=Pati
 | `valueQuantity` | Quantity 1..1 (ours) | `value` decimal, `unit` `/min`, `system` `http://unitsofmeasure.org`, `code` `/min` (profile-fixed). |
 | `device` | Reference(Device) 0..1 | The emitting device. |
 | `meta.tag` | Coding 0..* | Optional data-quality flags (A8). |
-| `meta.source` | uri 0..1 | Writing system: `http://blueysoft.com/fhir/capture-app/healthkit` or `...:synthetic` (A9). |
+| `meta.source` | uri 0..1 | Writing system: `http://aboutobjects.com/fhir/capture-app/healthkit` or `...:synthetic` (A9). |
 
 **Sample (synthetic):**
 
 ```json
 {
   "resourceType": "Observation",
-  "identifier": [{ "system": "http://blueysoft.com/fhir/identifier/synthetic-sample", "value": "syn-000001" }],
+  "identifier": [{ "system": "http://aboutobjects.com/fhir/identifier/synthetic-sample", "value": "syn-000001" }],
   "status": "final",
   "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "vital-signs", "display": "Vital Signs" }] }],
   "code": { "coding": [{ "system": "http://loinc.org", "code": "8867-4", "display": "Heart rate" }] },
@@ -149,7 +149,7 @@ Stage mapping (every row below is an assumption, A4 and A5):
 ```json
 {
   "resourceType": "Observation",
-  "identifier": [{ "system": "http://blueysoft.com/fhir/identifier/synthetic-sample", "value": "syn-sleep-0001" }],
+  "identifier": [{ "system": "http://aboutobjects.com/fhir/identifier/synthetic-sample", "value": "syn-sleep-0001" }],
   "status": "final",
   "category": [{ "coding": [{ "system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "activity", "display": "Activity" }] }],
   "code": { "coding": [{ "system": "http://loinc.org", "code": "93831-6", "display": "Deep sleep duration" }] },
@@ -189,13 +189,13 @@ One `Observation` per nutrient per food entry (FHIR R4 has no food-intake resour
 ```json
 {
   "resourceType": "Observation",
-  "identifier": [{ "system": "http://blueysoft.com/fhir/identifier/healthkit-sample", "value": "b0000000-0000-4000-8000-000000000008" }],
+  "identifier": [{ "system": "http://aboutobjects.com/fhir/identifier/healthkit-sample", "value": "b0000000-0000-4000-8000-000000000008" }],
   "status": "final",
   "category": [
-    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain", "code": "nutrition", "display": "Nutrition" }] },
-    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/meal-type", "code": "lunch" }], "text": "Lunch" }
+    { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain", "code": "nutrition", "display": "Nutrition" }] },
+    { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type", "code": "lunch" }], "text": "Lunch" }
   ],
-  "code": { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/nutrient", "code": "sodium" }], "text": "Dietary sodium" },
+  "code": { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient", "code": "sodium" }], "text": "Dietary sodium" },
   "subject": { "reference": "Patient/example-patient" },
   "effectiveDateTime": "2026-01-15T11:30:00-08:00",
   "issued": "2026-01-15T11:31:00.000-08:00",
@@ -238,7 +238,7 @@ Decision: no `Provenance` resources. The ingest transaction and app version are 
 | Which device emitted it? | `Observation.device` -> `Device` |
 | Which original sample? | `Observation.identifier` (HealthKit UUID or synthetic id) |
 | When produced vs. received? | `Observation.issued` vs `meta.lastUpdated` |
-| Which system wrote it (real vs. simulated)? | `Observation.meta.source` (URI), e.g. `http://blueysoft.com/fhir/capture-app/healthkit` or `http://blueysoft.com/fhir/capture-app/synthetic` (A9) |
+| Which system wrote it (real vs. simulated)? | `Observation.meta.source` (URI), e.g. `http://aboutobjects.com/fhir/capture-app/healthkit` or `http://aboutobjects.com/fhir/capture-app/synthetic` (A9) |
 
 Not tracked: which mapping-registry version produced the data. If a mapping later changes (e.g. the sleep-stage mapping, A4), add a `meta.tag` then. Re-adding Provenance would be additive.
 
@@ -258,22 +258,22 @@ SNOMED CT is not used (no license or code lookup needed).
 
 ## Custom Code Systems
 
-Namespace: `http://blueysoft.com/fhir` (decided). Form: `http://blueysoft.com/fhir/CodeSystem/<name>` and `http://blueysoft.com/fhir/identifier/<name>`. These are names, not endpoints, and need not resolve. FHIR compares `system` as an exact string, so the scheme (`http`, not `https`) and the case are permanent: never change them after the first write.
+Namespace: `http://aboutobjects.com/fhir` (decided). Form: `http://aboutobjects.com/fhir/CodeSystem/<name>` and `http://aboutobjects.com/fhir/identifier/<name>`. These are names, not endpoints, and need not resolve. FHIR compares `system` as an exact string, so the scheme (`http`, not `https`) and the case are permanent: never change them after the first write.
 
 | Name | URI | Purpose |
 |---|---|---|
-| Data quality flag | `http://blueysoft.com/fhir/CodeSystem/data-quality-flag` | `artifact-suspected`, `duplicate-resolved`, `late-arrival` |
-| Source kind | `http://blueysoft.com/fhir/CodeSystem/source-kind` | `healthkit`, `synthetic` |
-| Observation domain | `http://blueysoft.com/fhir/CodeSystem/observation-domain` | what kind of data: a taxonomy of the form `vital-signs`, `laboratory`, `daily-activity-summary`, `workout`, `nutrition`; only `nutrition` is used so far |
-| Meal type | `http://blueysoft.com/fhir/CodeSystem/meal-type` | `breakfast`, `lunch`, `dinner`, `snack`, `other` |
-| Nutrient | `http://blueysoft.com/fhir/CodeSystem/nutrient` | `fiber`, `sugar`, `sodium` (the nutrients with no per-entry LOINC code) |
+| Data quality flag | `http://aboutobjects.com/fhir/CodeSystem/data-quality-flag` | `artifact-suspected`, `duplicate-resolved`, `late-arrival` |
+| Source kind | `http://aboutobjects.com/fhir/CodeSystem/source-kind` | `healthkit`, `synthetic` |
+| Observation domain | `http://aboutobjects.com/fhir/CodeSystem/observation-domain` | what kind of data: a taxonomy of the form `vital-signs`, `laboratory`, `daily-activity-summary`, `workout`, `nutrition`; only `nutrition` is used so far |
+| Meal type | `http://aboutobjects.com/fhir/CodeSystem/meal-type` | `breakfast`, `lunch`, `dinner`, `snack`, `other` |
+| Nutrient | `http://aboutobjects.com/fhir/CodeSystem/nutrient` | `fiber`, `sugar`, `sodium` (the nutrients with no per-entry LOINC code) |
 
 | Identifier system | URI |
 |---|---|
-| HealthKit sample UUID | `http://blueysoft.com/fhir/identifier/healthkit-sample` |
-| Synthetic sample id | `http://blueysoft.com/fhir/identifier/synthetic-sample` |
-| Device key | `http://blueysoft.com/fhir/identifier/device-key` |
-| App bundle identifier | `http://blueysoft.com/fhir/identifier/app-bundle-id` |
+| HealthKit sample UUID | `http://aboutobjects.com/fhir/identifier/healthkit-sample` |
+| Synthetic sample id | `http://aboutobjects.com/fhir/identifier/synthetic-sample` |
+| Device key | `http://aboutobjects.com/fhir/identifier/device-key` |
+| App bundle identifier | `http://aboutobjects.com/fhir/identifier/app-bundle-id` |
 
 ## Resource Relationships
 
@@ -299,7 +299,7 @@ Base: `GET|POST {base}/...` where base is `https://macpro16.local:8443/fhir` (lo
 ```
 POST {base}   (Bundle type=transaction)
   entry[].request: { method: "POST", url: "Observation",
-                     ifNoneExist: "identifier=http://blueysoft.com/fhir/identifier/healthkit-sample|<uuid>" }
+                     ifNoneExist: "identifier=http://aboutobjects.com/fhir/identifier/healthkit-sample|<uuid>" }
 ```
 Re-sending the same sample is then a no-op. Include Device (conditional create by `device-key`) in the same Bundle.
 
@@ -354,10 +354,10 @@ Edition limits for CPU, RAM and data size should be checked for your specific Or
 | A6 | `effective[x]` carries a timezone offset. HealthKit samples carry absolute times and sometimes a timezone in metadata; where absent, the offset used is the device's at ingest, which can be wrong across travel or DST. "Day" for aggregation uses patient-local time. | Daily boundaries, DST edge cases. |
 | A7 | `Observation.issued` = capture-app production time; `meta.lastUpdated` = server time. **On every Observation, including sleep intervals** (the sleep sample printed above omitted it until M6 found the disagreement while testing the mapper against the spec). | Late-arrival detection. |
 | A8 | Data-quality flags as `meta.tag` with a custom CodeSystem. **Written by the capture app at ingest (M19, contract 1.4.0)**: artifact-suspected (a value outside the metric's plausible range), late-arrival (issued more than 24 h after the sample ended), duplicate-resolved (two deliveries met in the queue before upload), user-entered. Absence of a flag means none stored, never "verified". See contract A30 to A33. Alternatives: `Observation.interpretation`, `Observation.note`, `dataAbsentReason`. Flagged values are stored, not dropped. | How artifacts surface to clinicians. |
-| A9 | No Provenance. Source system is recorded in `Observation.meta.source` as a placeholder URI scheme (`http://blueysoft.com/fhir/capture-app/{healthkit|synthetic}`), and mapping version is not tracked. | Can't tell which mapping version produced old data; can't group by ingest batch. |
+| A9 | No Provenance. Source system is recorded in `Observation.meta.source` as a placeholder URI scheme (`http://aboutobjects.com/fhir/capture-app/{healthkit|synthetic}`), and mapping version is not tracked. | Can't tell which mapping version produced old data; can't group by ingest batch. |
 | A10 | Cardinality: `Observation.value[x]` is always `valueQuantity` (1..1 in practice). No `component`, no `referenceRange`, no `interpretation` stored; reference bands are a UI concern. `performer` omitted (device-originated). | Search and UI don't depend on these. |
 | A11 | Deleted HealthKit samples map to `status=entered-in-error` on the existing Observation (found by identifier), not hard delete. | Audit trail vs. clean data; HAPI delete semantics. |
-| A12 | Namespace `http://blueysoft.com/fhir` is a domain the developer controls (not independently verified). It uses `http`, and string identity is permanent. | Changing it later means rewriting every stored `identifier.system` and `code.system`. |
+| A12 | Namespace `http://aboutobjects.com/fhir` is a domain the developer controls (not independently verified). It replaced the developer's earlier placeholder domain on 2026-10-20, together with a full stack reset (stored data was not migrated). It uses `http`, and string identity is permanent. | Changing it later means rewriting every stored `identifier.system` and `code.system`. |
 | A13 | HAPI validates `meta.profile` claims only if request validation is enabled. Whether to enable it belongs to the HAPI TLS/auth project. **[UNVERIFIED]** for 7.6.0 configuration. | Profile claims are only as good as validation. |
 | A14 | **Dietary intake** (M20): the decisions and the unverified points are in the nutrition brief (N1 to N12) and the contract's assumptions A34 to A41: energy's LOINC property is a rate; water maps to fluid intake; fiber, sugar and sodium use custom codes; the meal-label normalization is a guess at how sources name meals; zero is valid; a source application is a Device keyed by bundle identifier. | Terminology fidelity and interoperability of nutrition data. |
 

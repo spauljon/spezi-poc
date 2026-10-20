@@ -62,7 +62,7 @@ Read dietary data that MyFitnessPal (MFP) writes to Apple Health, carry it throu
 | Sugar | custom `sugar` | No usable LOINC found (only a deprecated PhenX measure `62262-1`). |
 | Sodium | custom `sodium` | LOINC sodium intake (`9086-0`, `9087-8`) measures *amount of substance* (mmol) and the other codes are 24-hour rates; converting HealthKit's mg to mmol would change the stored value, so the value is kept in mg under a custom code. |
 
-**New custom code systems** (namespace as decided in A12; names are permanent once written): `http://blueysoft.com/fhir/CodeSystem/nutrient` (codes `fiber`, `sugar`, `sodium`), `.../observation-domain` (`nutrition`) and `.../meal-type` (see "Category and meal type"). `code.text` carries the display. For LOINC-coded nutrients the Observation carries the LOINC coding only.
+**New custom code systems** (namespace as decided in A12; names are permanent once written): `http://aboutobjects.com/fhir/CodeSystem/nutrient` (codes `fiber`, `sugar`, `sodium`), `.../observation-domain` (`nutrition`) and `.../meal-type` (see "Category and meal type"). `code.text` carries the display. For LOINC-coded nutrients the Observation carries the LOINC coding only.
 
 **UCUM:** `kcal`, `[Cal]`, `cal`, `g`, `mg` and `mL` are all valid UCUM strings (checked on the NLM UCUM service, 2026-10-16). `kcal` is chosen to match HealthKit's kilocalorie.
 
@@ -71,11 +71,11 @@ Read dietary data that MyFitnessPal (MFP) writes to Apple Health, carry it throu
 ```json
 {
   "resourceType": "Observation",
-  "identifier": [{ "system": "http://blueysoft.com/fhir/identifier/healthkit-sample", "value": "00000000-0000-4000-8000-000000000001" }],
+  "identifier": [{ "system": "http://aboutobjects.com/fhir/identifier/healthkit-sample", "value": "00000000-0000-4000-8000-000000000001" }],
   "status": "final",
   "category": [
-    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain", "code": "nutrition" }] },
-    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/meal-type", "code": "lunch" }], "text": "Lunch" }
+    { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain", "code": "nutrition" }] },
+    { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type", "code": "lunch" }], "text": "Lunch" }
   ],
   "code": { "coding": [{ "system": "http://loinc.org", "code": "9052-2", "display": "Calorie intake total" }] },
   "subject": { "reference": "Patient/example-real" },
@@ -89,12 +89,12 @@ Read dietary data that MyFitnessPal (MFP) writes to Apple Health, carry it throu
 ```json
 {
   "resourceType": "Observation",
-  "identifier": [{ "system": "http://blueysoft.com/fhir/identifier/healthkit-sample", "value": "00000000-0000-4000-8000-000000000002" }],
+  "identifier": [{ "system": "http://aboutobjects.com/fhir/identifier/healthkit-sample", "value": "00000000-0000-4000-8000-000000000002" }],
   "status": "final",
   "category": [
-    { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/observation-domain", "code": "nutrition" }] }
+    { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain", "code": "nutrition" }] }
   ],
-  "code": { "coding": [{ "system": "http://blueysoft.com/fhir/CodeSystem/nutrient", "code": "sodium" }], "text": "Dietary sodium" },
+  "code": { "coding": [{ "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient", "code": "sodium" }], "text": "Dietary sodium" },
   "subject": { "reference": "Patient/example-real" },
   "effectiveDateTime": "2026-01-15T19:30:00-05:00",
   "issued": "2026-01-15T19:31:00.000-05:00",
@@ -110,14 +110,14 @@ MFP samples carry **no `HKDevice`**; they come from a *source application*. This
 | HealthKit | Meaning | Becomes |
 |---|---|---|
 | `HKSource.name` | the app's display name (for example the brand) | `Device.deviceName` with **type `other`** (no `DeviceNameType` code covers a software brand: `user-friendly-name` is the nearest, `other` is the strictly safe choice, and `other` matches the developer's existing mapping of source-app names) |
-| `HKSource.bundleIdentifier` | the iOS app's **bundle identifier**: a unique, developer-assigned reverse-domain id (`com.<developer>.<product>`, `CFBundleIdentifier`), unchanged by renames and translations | a second `Device.identifier`, system `http://blueysoft.com/fhir/identifier/app-bundle-id`, **and the basis of the device key** |
+| `HKSource.bundleIdentifier` | the iOS app's **bundle identifier**: a unique, developer-assigned reverse-domain id (`com.<developer>.<product>`, `CFBundleIdentifier`), unchanged by renames and translations | a second `Device.identifier`, system `http://aboutobjects.com/fhir/identifier/app-bundle-id`, **and the basis of the device key** |
 
 ```json
 {
   "resourceType": "Device",
   "identifier": [
-    { "system": "http://blueysoft.com/fhir/identifier/device-key", "value": "<hash>" },
-    { "system": "http://blueysoft.com/fhir/identifier/app-bundle-id", "value": "com.example.nutritionapp" }
+    { "system": "http://aboutobjects.com/fhir/identifier/device-key", "value": "<hash>" },
+    { "system": "http://aboutobjects.com/fhir/identifier/app-bundle-id", "value": "com.example.nutritionapp" }
   ],
   "status": "active",
   "deviceName": [{ "name": "Example Nutrition App", "type": "other" }],
@@ -139,8 +139,8 @@ MFP organises a day into meals and snacks and writes that into each sample's met
 
 | Entry in `category` | System | Codes | When |
 |---|---|---|---|
-| Domain | `http://blueysoft.com/fhir/CodeSystem/observation-domain` | `nutrition` (the system is a domain taxonomy of the form `vital-signs`, `laboratory`, `daily-activity-summary`, `workout`, `nutrition`; only `nutrition` is used by this project for now) | always, for nutrition Observations |
-| Meal | `http://blueysoft.com/fhir/CodeSystem/meal-type` | `breakfast`, `lunch`, `dinner`, `snack`, `other`; `text` keeps the original label | only when MFP supplied a label |
+| Domain | `http://aboutobjects.com/fhir/CodeSystem/observation-domain` | `nutrition` (the system is a domain taxonomy of the form `vital-signs`, `laboratory`, `daily-activity-summary`, `workout`, `nutrition`; only `nutrition` is used by this project for now) | always, for nutrition Observations |
+| Meal | `http://aboutobjects.com/fhir/CodeSystem/meal-type` | `breakfast`, `lunch`, `dinner`, `snack`, `other`; `text` keeps the original label | only when MFP supplied a label |
 
 - **Codes are lowercase and hyphenated** (FHIR codes are case-sensitive; HL7's own category codes use this style).
 - **Absence is omitted, never invented.** No label means no meal entry (not `other`, not `unknown`). If the two metadata keys (`meal` and `Meal`) ever disagree, the entry is omitted and the case is counted internally.
