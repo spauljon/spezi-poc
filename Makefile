@@ -6,8 +6,9 @@
 test: test-contract test-db test-idp test-hapi test-ios test-analytics test-web
 
 # Placeholders until each project has tests (replaced milestone by milestone).
-test-contract:  ## offline contract checks: structure, LOINC check digits, bundled copy, golden fixtures
+test-contract:  ## offline contract checks: structure, LOINC check digits, bundled copy, golden fixtures, retired app names
 	@python3 contract/check.py
+	@./scripts/check-names.sh
 # Static checks only: no containers are started.
 test-db:
 	@bash -n db/init.sh db/init-status.sh db/startup/10-poc-init.sh db/make-env.sh db/verify.sh scripts/make-tls.sh idp/make-env.sh scripts/isolation.sh scripts/compose.sh scripts/bootstrap.sh scripts/reset.sh && echo "db: shell syntax ok"
