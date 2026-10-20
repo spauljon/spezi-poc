@@ -1,4 +1,4 @@
-# iOS capture app (Spezi POC Capture)
+# iOS capture app (HealthGate)
 
 Swift 6, SwiftUI, [Spezi](https://github.com/StanfordSpezi/Spezi). It will capture cardiovascular measurements from a
 synthetic source (now) or Apple Health (later) and send them as FHIR `Observation`s to the POC's HAPI server. This
@@ -15,10 +15,15 @@ Copied from the [Spezi Template Application](https://github.com/StanfordSpezi/Sp
 |---|---|
 | Upstream commit | `d52014a54cbfe68ef1f1c364e81a97edecf5e4a8` (2026-06-28, "Migrate unit tests from XCTest to Swift Testing (#121)") |
 | Copied | 2026-10-10 |
-| Kept as is | `LICENSE.md`, `LICENSES/`, `CONTRIBUTORS.md`, `REUSE.toml`, `.swiftlint.yml`, `TemplateApplication.xctestplan`, the `.icon` asset |
+| Kept as is | `LICENSE.md`, `LICENSES/`, `CONTRIBUTORS.md`, `REUSE.toml`, `.swiftlint.yml`, `HealthGate.xctestplan`, the `.icon` asset |
 
-The target and module are still named `TemplateApplication` (renaming a target by hand in the project file is risky and
-buys nothing); the product is **Spezi POC Capture**, bundle id `com.blueysoft.spezipoc`.
+**Naming (renamed in the post-M21 rename change).** The Xcode project, target, module, scheme, test targets and
+folders are all `HealthGate`, and so are the product name on the home screen and the bundle id
+`com.aboutobjects.healthgate` (also the OAuth redirect scheme and the Keychain service prefix). The template's own
+name survives only in this provenance section. In the architecture vocabulary of the HL7
+[Personal Health Device IG](https://build.fhir.org/ig/HL7/phd/en/), the app is a *Personal Health Gateway*: it
+receives measurements from a source (HealthKit), translates them to FHIR and uploads them to a receiving system
+(HAPI). It does not claim that guide's profiles or its IEEE 11073 (MDC) terminology; the contract uses LOINC and UCUM.
 
 ### What was removed from the template, and why
 
@@ -64,7 +69,7 @@ HealthKit both produce) to FHIR. Everything it knows comes from the bundled `met
 | `Metrics/FHIRDateTime.swift` | Hand-written `dateTime`: offset at the sample's own instant, no `Z`, fraction only when non-zero |
 | `Metrics/FHIRResources.swift` | The minimal Codable FHIR shapes it writes |
 
-Tests (`TemplateApplicationTests/Metrics`): the contract and its refusals, the independent golden fixtures
+Tests (`HealthGateTests/Metrics`): the contract and its refusals, the independent golden fixtures
 (`contract/golden/`), the spec's own printed samples, device keys, determinism, and that no date string ever uses `Z`.
 
 ## Synthetic source and simulator (M7)
@@ -194,7 +199,7 @@ The app reads five settings from its Info.plist, which Xcode fills from build se
 | `POC_ISSUER_URL` | `https://macpro16.local:8444/realms/poc` |
 | `POC_CLIENT_ID` | `ios-capture` (a public client: no secret exists) |
 | `POC_PATIENT_IDENTIFIER` | `poc-0001` (synthetic business identifier of the capture patient; its system is `systems.identifier.patient` in the contract) |
-| `POC_REDIRECT_SCHEME` | `com.blueysoft.spezipoc` (redirect URI `com.blueysoft.spezipoc:/oauth2redirect`, registered in the realm) |
+| `POC_REDIRECT_SCHEME` | `com.aboutobjects.healthgate` (redirect URI `com.aboutobjects.healthgate:/oauth2redirect`, registered in the realm) |
 
 To override for your setup copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` (git-ignored). **No
 credential is ever configured here**: the user types the synthetic user's password into Keycloak's own login page.
@@ -206,11 +211,11 @@ credential is ever configured here**: the user types the synthetic user's passwo
 cd ios
 # Simulator build. -skipMacroValidation is the command-line form of Xcode's "Trust & Enable" for the Swift macro in
 # the ThreadLocal package (a StanfordBDHG dependency of Spezi); -skipPackagePluginValidation is kept for future plugins.
-xcodebuild -project TemplateApplication.xcodeproj -scheme TemplateApplication \
+xcodebuild -project HealthGate.xcodeproj -scheme HealthGate \
   -destination 'generic/platform=iOS Simulator' -skipMacroValidation -skipPackagePluginValidation build
 ```
 
-From the repo root: `POC_IOS_ONLY=<target/suite>` narrows a run while iterating (for example `TemplateApplicationUITests/AccessibilityTests`); it still fails if nothing matched. `make test-ios` runs the 27 unit tests and `make test-ios-ui` adds the 2 UI tests
+From the repo root: `POC_IOS_ONLY=<target/suite>` narrows a run while iterating (for example `HealthGateUITests/AccessibilityTests`); it still fails if nothing matched. `make test-ios` runs the 27 unit tests and `make test-ios-ui` adds the 2 UI tests
 ([scripts/ios-test.sh](../scripts/ios-test.sh): picks the first available iPhone simulator, or `$POC_IOS_SIMULATOR`;
 fails if no tests ran or xcodebuild stalls; reports skipped tests). It SKIPs loudly on a host without macOS and Xcode.
 
@@ -258,9 +263,9 @@ records.
 
 | Piece | What it does |
 |---|---|
-| `continueInBackground: true` | The four collectors use an observer query plus HealthKit background delivery, so iOS can wake the app when new samples arrive. Entitlement: `com.apple.developer.healthkit.background-delivery` in `Config/TemplateApplication.entitlements`. |
+| `continueInBackground: true` | The four collectors use an observer query plus HealthKit background delivery, so iOS can wake the app when new samples arrive. Entitlement: `com.apple.developer.healthkit.background-delivery` in `Config/HealthGate.entitlements`. |
 | `HealthKitResume` (Spezi module) | Background delivery needs the observer re-registered at **every** launch, and a background launch has no screen. If the user has chosen Apple Health (and HealthKit is available, the server is https, a separate patient is configured), it starts the collectors at launch. It never opens the gate on its own beyond that. |
-| Sign-in at launch | `AuthService.restore` runs in `TemplateApplication.init`, not only when Home appears, so a wake-up can upload. The tokens sit in the Keychain at `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (the library default without user presence), readable with the phone locked once it has been unlocked after boot. |
+| Sign-in at launch | `AuthService.restore` runs in `HealthGate.init`, not only when Home appears, so a wake-up can upload. The tokens sit in the Keychain at `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (the library default without user presence), readable with the phone locked once it has been unlocked after boot. |
 | Acknowledged handoff | `HealthKitBridge.receive` returns only after `SyncModel.enqueueDurably` has committed the batch. SpeziHealthKit saves its anchor the moment the callback returns, so returning earlier could lose a sample for good. A batch that could not be stored is kept in memory, shown as "received but not yet saved", and retried (next arrival, or the Home refresh). |
 | Hold, do not drop | SpeziHealthKit has no pause that keeps its anchor (`resetSampleCollection` clears it). So while the only thing closing the gate is being signed out, samples are still queued locally and **nothing is uploaded** (the engine says "Sign in to upload."). Other closed-gate reasons still drop. |
 | Records before wiring | A background launch is quick: records that arrive before the bridge is wired are buffered and processed when it is. |
@@ -304,7 +309,7 @@ The contract's eight `intake` metrics (energy, protein, carbohydrates, fat, fibe
 
 | Piece | What it does |
 |---|---|
-| `TemplateApplicationDelegate` | Eight more `CollectSamples` (dietary energy, protein, carbohydrates, fat total, fiber, sugar, sodium, water): same fixed window, same acknowledged handoff, same `poc-real` patient. |
+| `HealthGateDelegate` | Eight more `CollectSamples` (dietary energy, protein, carbohydrates, fat total, fiber, sugar, sodium, water): same fixed window, same acknowledged handoff, same `poc-real` patient. |
 | `HomeView` | While Apple Health is in effect, `askForAuthorization()` is called once more if HealthKit says not every configured type was asked about; the sheet lists only the new types, and nothing is shown when all were asked. |
 | `SampleQueue` | `pending_deletions` gained `state`, `attempts`, `next_attempt`, `last_error` (a file from before M21 is migrated in place and its recorded deletions stay pending); `withdrawDeletedUploads()`, `dueDeletions`, `markDeletion`, `recordDeletionFailure`, `deletionCounts()`. A sample delivered after its deletion was reported is queued as skipped. |
 | `SyncEngine` | After the uploads of a run, each pending deletion is one conditional `PATCH Observation?identifier=<healthKit system>\|<uuid>` (see `hapi/README.md`, "Retraction"): 200 retracted, 404 nothing on the server, 5xx or offline backs off, 403 stays pending with a reason and does not block uploads, other 4xx is recorded as refused. |

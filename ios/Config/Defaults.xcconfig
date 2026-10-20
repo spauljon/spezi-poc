@@ -9,7 +9,7 @@ POC_HOST = macpro16.local
 POC_FHIR_BASE_URL = https:/$()/$(POC_HOST):8443/fhir
 POC_ISSUER_URL = https:/$()/$(POC_HOST):8444/realms/poc
 POC_CLIENT_ID = ios-capture
-POC_REDIRECT_SCHEME = com.blueysoft.spezipoc
+POC_REDIRECT_SCHEME = com.aboutobjects.healthgate
 // The capture patient's business identifier (value only; the system comes from contract/metrics.json). Synthetic.
 POC_PATIENT_IDENTIFIER = poc-0001
 // The patient that holds REAL Apple Health data. It must differ from the synthetic one above: real and synthetic data

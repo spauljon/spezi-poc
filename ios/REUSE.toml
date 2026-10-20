@@ -1,6 +1,6 @@
 version = 1
 
 [[annotations]]
-path = ["TemplateApplication.xcodeproj/**", "TemplateApplication/Resources/**", "TemplateApplication/Supporting Files/**"]
+path = ["HealthGate.xcodeproj/**", "HealthGate/Resources/**", "HealthGate/Supporting Files/**"]
 SPDX-FileCopyrightText = "2025 Stanford University and the project authors (see CONTRIBUTORS.md)"
 SPDX-License-Identifier = "MIT"

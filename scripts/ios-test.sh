@@ -33,12 +33,12 @@ for runtime, devices in sorted(json.load(sys.stdin)["devices"].items()):
 fi
 [ -n "$dest" ] || { echo "ios: no iPhone simulator available (xcrun simctl list devices available)" >&2; exit 1; }
 
-dd="$(mktemp -d "${TMPDIR:-/tmp}/spezipoc-ios.XXXXXX")"
+dd="$(mktemp -d "${TMPDIR:-/tmp}/healthgate-ios.XXXXXX")"
 trap 'rm -rf "$dd"' EXIT
 
-only=(-only-testing:TemplateApplicationTests)
-$ui && only+=(-only-testing:TemplateApplicationUITests)
-# POC_IOS_ONLY narrows a run while iterating, for example POC_IOS_ONLY=TemplateApplicationUITests/AccessibilityTests (the script still
+only=(-only-testing:HealthGateTests)
+$ui && only+=(-only-testing:HealthGateUITests)
+# POC_IOS_ONLY narrows a run while iterating, for example POC_IOS_ONLY=HealthGateUITests/AccessibilityTests (the script still
 # fails if that matched nothing).
 [ -n "${POC_IOS_ONLY:-}" ] && only=(-only-testing:"$POC_IOS_ONLY")
 
@@ -59,7 +59,7 @@ fi
 # finishes nor prints for $POC_IOS_TEST_STALL seconds (it can fail to exit after a failed test).
 log="$dd/xcodebuild.log"
 stall="${POC_IOS_TEST_STALL:-240}"
-xcodebuild test -project TemplateApplication.xcodeproj -scheme TemplateApplication \
+xcodebuild test -project HealthGate.xcodeproj -scheme HealthGate \
     -destination "id=$dest" -derivedDataPath "$dd" -skipPackagePluginValidation -skipMacroValidation \
     "${only[@]}" > "$log" 2>&1 &
 pid=$!
