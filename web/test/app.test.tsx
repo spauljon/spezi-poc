@@ -219,4 +219,22 @@ describe("navigation between the views", () => {
     renderApp(signedIn());
     expect(await screen.findByRole("heading", { name: /Night of 2026-09-28/ })).toBeTruthy();
   });
+
+  it("shows the nutrition tab at its own address, with the nutrient the address names, and the data-set switch re-reads for the other patient", async () => {
+    const fake = fakeHapi([], { analytics: {}, analyticsOver: { nutrition: {} } });
+    vi.stubGlobal("fetch", fake);
+    window.location.hash = "#/nutrition?nutrient=dietaryFat";
+    renderApp(signedIn());
+    expect(await screen.findByRole("heading", { name: "Nutrition" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Nutrition" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Trends" }).getAttribute("aria-current")).toBeNull();
+    expect(await screen.findByRole("heading", { name: /^Fat \(g\)/ })).toBeTruthy();
+    const before = fake.urls.filter((u) => u.includes("/nutrition?")).length;
+    expect(before).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Real data (Apple Health)" }));
+    // the patient is looked up again by the real data set's identifier, and the nutrition view is read afresh
+    await waitFor(() => expect(fake.urls.some((u) => u.includes("Patient?") && u.includes(config.healthKitPatientIdentifier))).toBe(true));
+    await waitFor(() => expect(fake.urls.filter((u) => u.includes("/nutrition?")).length).toBeGreaterThan(before));
+  });
 });

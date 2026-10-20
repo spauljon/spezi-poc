@@ -167,3 +167,32 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .dataset { display: flex; gap: 0.5rem; margin: 0.75rem 0; }
 .dataset button[aria-pressed="true"] { font-weight: 600; border: 2px solid var(--accent); }
 .real-data { border-left: 4px solid var(--accent); padding: 0.4rem 0.75rem; margin: 0.5rem 0; }
+
+/* --- Nutrition (M23). A nutrient wears the categorical slot of its position in the contract; a meal wears slot 1 to 5 in
+   the contract's meal order and "no meal recorded" the muted ink. No colour is new (slots 1 to 8 are the validated palette);
+   identity is also in the key, the readout and the table, never in the colour alone. --- */
+.nutrition-plot { border-radius: 6px; overflow-x: auto; }
+.nutrition-chart { min-width: 640px; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.nutrition-plot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.nutrition-chart .hit { fill: transparent; }
+.nutrition-chart .active-col { fill: color-mix(in srgb, var(--accent) 14%, transparent); }
+.nutrition-bar { stroke: var(--viz-surface); stroke-width: 1; }
+.nutrition-bar.slot-1 { fill: var(--viz-1); } .nutrition-bar.slot-2 { fill: var(--viz-2); }
+.nutrition-bar.slot-3 { fill: var(--viz-3); } .nutrition-bar.slot-4 { fill: var(--viz-4); }
+.nutrition-bar.slot-5 { fill: var(--viz-5); } .nutrition-bar.slot-6 { fill: var(--viz-6); }
+.nutrition-bar.slot-7 { fill: var(--viz-7); } .nutrition-bar.slot-8 { fill: var(--viz-8); }
+.zero-mark { stroke-width: 3; }
+.zero-mark.slot-1 { stroke: var(--viz-1); } .zero-mark.slot-2 { stroke: var(--viz-2); }
+.zero-mark.slot-3 { stroke: var(--viz-3); } .zero-mark.slot-4 { stroke: var(--viz-4); }
+.zero-mark.slot-5 { stroke: var(--viz-5); } .zero-mark.slot-6 { stroke: var(--viz-6); }
+.zero-mark.slot-7 { stroke: var(--viz-7); } .zero-mark.slot-8 { stroke: var(--viz-8); }
+.flag-mark { fill: var(--viz-ink); stroke: var(--viz-surface); stroke-width: 1; }
+.gap-dot { fill: none; stroke: var(--viz-muted); stroke-width: 1.5; }
+.value-label { fill: var(--viz-ink); font: 11px system-ui, sans-serif; }
+.meal-slot-1 { --meal: var(--viz-1); } .meal-slot-2 { --meal: var(--viz-2); } .meal-slot-3 { --meal: var(--viz-3); }
+.meal-slot-4 { --meal: var(--viz-4); } .meal-slot-5 { --meal: var(--viz-5); } .meal-none { --meal: var(--viz-muted); }
+.nutrition-bar.meal { fill: var(--meal); }
+.swatch.meal-slot-1, .swatch.meal-slot-2, .swatch.meal-slot-3, .swatch.meal-slot-4, .swatch.meal-slot-5, .swatch.meal-none { background: var(--meal); }
+.nutrition-key { display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; list-style: none; margin: 0.5rem 0; padding: 0; }
+.nutrition-busy { opacity: 0.55; }

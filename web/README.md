@@ -270,6 +270,32 @@ on every field for all three, and the live test holds the web to it too.
 - **S10 The page lists what HAPI returned for the session's window,** excluding an interval that merely touches it
   (HAPI matches overlapping periods, so such an interval is returned and discarded here; there is a test).
 
+## What M23 adds: nutrition
+
+A **Nutrition** tab (`#/nutrition`, optionally `?nutrient=<contract id>`) shows daily dietary totals from the analytic API's `/v1/patients/{id}/nutrition` (M22). It honours the data-set switch (the real set has the nutrition; the synthetic one has the seeded days) and never shows one patient's totals while another's load.
+
+- **Day as recorded, said everywhere.** Days are the date written in each entry's own timestamp, not the UTC day Trends and Sleep use: the page says so, the axis says so, and the table's first column is "Day (as recorded)". The last day shown is today's date in UTC (a later recorded date east of UTC appears once UTC reaches it; stated on the page).
+- **One nutrient in detail** (Energy, Protein, Carbohydrates, Fat, Fiber, Sugar, Sodium, Water, in the contract's order; each wears its contract slot): a text summary, an SVG bar chart from 0, a key, an arrow-key readout (Left, Right, Home, End: one day in words, with its meals and flags) and a table twin. 7, 14, 30 or 90 days.
+- **A gap is a gap.** A day with no entries is an empty slot with a hollow marker, "No entries" in the table and "no entries (nothing recorded, not a total of 0)" in the readout, and it is left out of the average. A day whose entries add up to 0 is a different thing: a baseline mark, the figure 0, "entries that add up to nothing" in the summary.
+- **Split by meal (D5).** One toggle stacks each bar by meal (breakfast, lunch, dinner, snack, other in the contract's order; "No meal recorded" last), with a key; the table twin always has the meal columns, and the meals add up to the day (the parser refuses an answer where they do not).
+- **Energy and macronutrients** in one table, newest first, with **estimated** shares of energy from protein, carbohydrates and fat (grams times 4, 4 and 9 kcal per gram over the day's reported energy). The column headings, a note and the dashes all say these are estimates; a share is not worked out when a nutrient has no entries that day or energy is 0.
+- **Flags** are the stored ones from the analytic API (M19 rules): a sentence says how many entries are flagged and that the totals include them, and a triangle marks the day on the chart. Nothing is flagged by its size (the seeded 7,200 kcal entry carries the capture app's tag; without it, it would show no mark).
+- **Failures are explained, not drawn over:** an answer of the wrong shape (a negative total, meals that do not add up, a day both present and listed as missing) is an error; an unreachable service offers "Try again"; a contract without intake metrics says so.
+
+**Verification data:** `make web-seed-nutrition-days` seeds 24 known synthetic days (382 Observations, idempotent): three gaps, a day of zero entries, an evening entry at 23:40 UTC-7 that is the next day in UTC, an entry with no meal, a dessert created then retracted as the app does, and one flagged absurd entry. `make test-web-live` compares the API, the view's own cells and an independent decimal sum of the FHIR Observations for every nutrient and day (the seed's own sums are a third implementation).
+
+**Found in a real browser (and why a unit test could not):** with the real page in a browser (Chromium engine, light and dark, 750 px and desktop widths) the bars, hollow gap markers, zero marks, stacked meals, focus ring and highlighted column, and arrow-key readout all drew as intended. It showed three things the jsdom tests cannot see: a single flagged outlier (9,060 kcal) flattened the other bars with nothing on the chart pointing at it (now a triangle on that day and a key entry); at phone width the chart's text shrank to unreadable and the macronutrient table pushed the whole page sideways (now each scrolls inside its own box, and the page does not); and the long day-definition sentence repeated itself (shortened). **How it was checked, honestly:** the built-in browser pane blocks the sign-in server (`ERR_BLOCKED_BY_CLIENT`), so the deployed page could not be signed in to from there. The real `NutritionPage` was instead served by a throwaway loopback-only Vite harness (removed afterwards) answering with a capture of the synthetic patient's API responses, so layout and interaction are real-browser verified; the deployed, signed-in page is for you to look at (the steps are in the plan).
+
+### Assumptions made in M23 (review these)
+
+- **W1 The range ends on today's date in UTC.** An entry recorded at a later calendar date east of UTC is not shown until UTC reaches that date. Said on the page.
+- **W2 Averages are over days with entries only,** and are labelled so; a gap is never counted as 0. A "typical day" is therefore not a per-calendar-day mean.
+- **W3 The estimates use fixed general factors** (4, 4, 9 kcal per gram). They ignore fibre, alcohol and sugar alcohols, so shares need not total 100%; they are labelled as estimates and are never stored.
+- **W4 Time of day is not shown.** The API gives UTC instants for the first and last entry, not the recorded offset, so a local clock time cannot be shown honestly (nutrition brief N5: time of day is indicative anyway).
+- **W5 Meal colours reuse categorical slots 1 to 5 and the muted ink,** nutrients use slots 1 to 8 by contract position: no new colour, so no new validation. The same hue therefore means "breakfast" in the split chart and "Energy" in the plain one; the key, the readout and the table always name it.
+- **W6 One nutrient per chart, four extra requests.** The page asks for the selected nutrient plus the four the table needs (energy, protein, carbohydrates, fat): at most five small requests per view.
+- **W7 Not tried:** a screen reader, touch gestures, and the deployed page signed in (see above); the first two are as in M15 and M16 (S8).
+
 ## What M19 adds: data-quality flags and an accessibility audit
 
 - **Flowsheet:** a **Flags** column with each Observation's stored flags in words (artifact suspected, late arrival, duplicate resolved, entered by hand), or *none stored*. A value is **never flagged by how it looks**; *none stored* does not mean checked (contract A31). A tag in another system, or an unknown code, is shown as unrecognised, never hidden.
@@ -301,7 +327,8 @@ while the deployed service owns it (`docker stop spezi-poc-web` first).
 
 ```bash
 make web-dev          # https://macpro16.local:3000 (TLS, all interfaces); Ctrl-C stops
-make test-web         # typecheck + 82 unit and component tests (no stack needed)
+make test-web         # typecheck + unit and component tests (no stack needed)
+make web-seed-nutrition-days   # 24 known synthetic dietary intake days for the nutrition view (idempotent)
 make test-web-live    # read-only: banner and flowsheet against the live HAPI with a clinician token
 ```
 

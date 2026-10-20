@@ -11,6 +11,22 @@ export interface QuantityMetric {
   readonly unit: string;
 }
 
+/** One dietary intake metric (contract `kind: "intake"`): a daily total, never a band. */
+export interface IntakeMetric {
+  readonly id: string;
+  /** A short name for the nutrient, from its contract id (`dietaryEnergy` is "Energy"), so the contract stays the one source. */
+  readonly label: string;
+  /** The contract's own name for the code (a LOINC display or the project's code display). */
+  readonly display: string;
+  readonly unit: string;
+}
+
+/** A meal the contract defines, in the contract's order. */
+export interface MealType {
+  readonly code: string;
+  readonly display: string;
+}
+
 export interface WebContract {
   readonly version: string;
   readonly loincSystem: string;
@@ -19,6 +35,10 @@ export interface WebContract {
   /** The project's data-quality flag system (an Observation.meta.tag coding system) and its codes. */
   readonly dataQualityFlag: { readonly system: string; readonly artifactSuspected: string; readonly duplicateResolved: string; readonly lateArrival: string; readonly userEntered: string };
   readonly quantityMetrics: readonly QuantityMetric[];
+  /** Dietary intake metrics (contract 1.5.0), in the contract's order. */
+  readonly intakeMetrics: readonly IntakeMetric[];
+  /** The contract's meal types, in its order. */
+  readonly mealTypes: readonly MealType[];
   /** Sleep stage codes (used for "last data received"). */
   readonly sleepStageCodes: readonly string[];
   /** Sleep stages: one duration Observation per stage interval. */
@@ -36,6 +56,7 @@ interface RawMetric {
   id: string;
   kind: string;
   loinc?: { code: string; display: string };
+  customCode?: { code: string; display: string };
   unit: { ucum: string; display: string };
   stages?: Record<string, { code: string; display?: string }>;
 }
@@ -52,6 +73,7 @@ export function parseContract(file: unknown): WebContract {
       dataQualityFlag?: string;
     };
     dataQualityFlags?: { artifactSuspected?: string; duplicateResolved?: string; lateArrival?: string; userEntered?: string };
+    mealTypes?: Record<string, { code?: string; display?: string }>;
     metrics: RawMetric[];
   };
   if (Number(c.contractVersion.split(".")[0]) !== SUPPORTED_MAJOR) {
@@ -64,6 +86,18 @@ export function parseContract(file: unknown): WebContract {
   const quantityMetrics = c.metrics
     .filter((m) => m.kind === "quantity" && m.loinc)
     .map((m) => ({ id: m.id, loincCode: m.loinc!.code, display: m.loinc!.display, unit: m.unit.ucum }));
+  const intakeMetrics: IntakeMetric[] = c.metrics
+    .filter((m) => m.kind === "intake")
+    .map((m) => {
+      const named = m.customCode ?? m.loinc;
+      if (!named) throw new Error(`contract intake metric ${m.id} has no code`);
+      // `dietaryEnergy` -> "Energy": the id without its prefix, capitalised
+      const bare = m.id.replace(/^dietary/, "");
+      return { id: m.id, label: bare.charAt(0).toUpperCase() + bare.slice(1), display: named.display, unit: m.unit.ucum };
+    });
+  const mealTypes: MealType[] = Object.values(c.mealTypes ?? {})
+    .filter((m): m is { code: string; display?: string } => typeof m.code === "string")
+    .map((m) => ({ code: m.code, display: m.display ?? m.code }));
   const sleep = c.metrics.find((m) => m.kind === "sleepStage");
   const sleepStages: SleepStage[] = Object.entries(sleep?.stages ?? {}).map(([id, s]) => ({
     id, loincCode: s.code, display: s.display ?? id,
@@ -82,6 +116,8 @@ export function parseContract(file: unknown): WebContract {
       userEntered: flags.userEntered,
     },
     quantityMetrics,
+    intakeMetrics,
+    mealTypes,
     sleepStageCodes,
     sleepStages,
     sleepUnit: sleep?.unit.ucum ?? "",

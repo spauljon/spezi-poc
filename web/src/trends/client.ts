@@ -1,3 +1,4 @@
+import { NutritionShapeError, parseNutrition, type NutritionResponse } from "../nutrition/api.ts";
 import { parseSleep, SleepShapeError, type SleepResponse } from "../sleep/api.ts";
 import { parseBands, TrendShapeError, type BandsResponse, type MetricInfo } from "./model.ts";
 
@@ -58,6 +59,20 @@ export class AnalyticsClient {
       return parseSleep(body);
     } catch (error) {
       if (error instanceof SleepShapeError) {
+        throw new AnalyticsError("shape", `The analytic service's answer was not understood (${error.message})`);
+      }
+      throw error;
+    }
+  }
+
+  /** Daily intake totals for one nutrient, by day as recorded (not the UTC day of bands and sleep). */
+  async nutrition(patientId: string, nutrient: string, from: string, to: string): Promise<NutritionResponse> {
+    const q = new URLSearchParams({ nutrient, from, to });
+    const body = await this.get(`v1/patients/${encodeURIComponent(patientId)}/nutrition?${q.toString()}`);
+    try {
+      return parseNutrition(body);
+    } catch (error) {
+      if (error instanceof NutritionShapeError) {
         throw new AnalyticsError("shape", `The analytic service's answer was not understood (${error.message})`);
       }
       throw error;

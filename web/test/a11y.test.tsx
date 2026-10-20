@@ -1,13 +1,14 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../src/auth/AuthProvider.tsx";
 import type { AppUser, AuthClient } from "../src/auth/client.ts";
 import type { Observation } from "../src/fhir/types.ts";
 import { Flowsheet } from "../src/flowsheet/Flowsheet.tsx";
+import { NutritionPage } from "../src/nutrition/NutritionPage.tsx";
 import { TrendsPage } from "../src/trends/TrendsPage.tsx";
 import { audit } from "./a11y-audit.ts";
 import { FakeUPlot } from "./uplot-fake.ts";
-import { NOW, config, contract, fakeHapi, obs, type BandRow } from "./support.ts";
+import { NOW, config, contract, fakeHapi, obs, type BandRow, type NutritionRow } from "./support.ts";
 
 const user: AppUser = { username: "clinician-user", roles: ["clinician-reader"], expiresAt: Date.now() + 600_000 };
 const client = (): AuthClient => ({
@@ -60,6 +61,33 @@ describe("pages that can be mounted without the stack", () => {
     );
     await waitFor(() => expect(container.querySelectorAll("section.trend-card").length, container.textContent ?? "").toBe(contract.quantityMetrics.length));
     await waitFor(() => expect(container.querySelector(".trend-flags")).not.toBeNull());
+    expect(audit(container)).toEqual([]);
+  });
+
+  it("nutrition, with gaps, a zero day, flags, meals and the split on, has no audit findings", async () => {
+    const iso = (n: number) => new Date(Date.UTC(2026, 9, 12) + n * 86_400_000).toISOString().slice(0, 10);
+    const meal = (m: string, total: number) => ({ meal: m, total, entries: 1 });
+    const nutrition: Record<string, NutritionRow[]> = {
+      dietaryEnergy: [
+        { day: iso(0), byMeal: [meal("breakfast", 400), meal("lunch", 650), meal("unlabelled", 90)], artifactSuspected: 1 },
+        { day: iso(-2), byMeal: [meal("dinner", 800)] },
+        { day: iso(-3), byMeal: [meal("unlabelled", 0)] },
+      ],
+      dietaryProtein: [{ day: iso(0), byMeal: [meal("unlabelled", 80)] }],
+      dietaryCarbohydrates: [{ day: iso(0), byMeal: [meal("unlabelled", 200)] }],
+      dietaryFat: [{ day: iso(0), byMeal: [meal("unlabelled", 50)] }],
+    };
+    vi.stubGlobal("fetch", fakeHapi([], { analytics: {}, analyticsOver: { nutrition } }));
+    const { container } = render(
+      <AuthProvider client={client()} location={location} history={{ replaceState: vi.fn() }}>
+        <NutritionPage config={config} contract={contract} patientId="42" nutrient={null} now={() => NOW} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(container.querySelector("svg.nutrition-chart"), container.textContent ?? "").not.toBeNull());
+    await waitFor(() => expect(container.querySelector(".trend-flags")).not.toBeNull());
+    expect(audit(container)).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Split by meal" }));
+    expect(container.querySelectorAll(".nutrition-bar.meal").length).toBeGreaterThan(0);
     expect(audit(container)).toEqual([]);
   });
 

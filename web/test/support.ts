@@ -86,12 +86,55 @@ export interface SleepRow {
   intervalCount: number; revision?: number;
 }
 
+/** One day of one nutrient as the analytic API serves it; the total is the sum of the meal rows. */
+export interface NutritionRow {
+  day: string;
+  byMeal: Array<{ meal: string; total: number; entries: number }>;
+  artifactSuspected?: number;
+  lateArrival?: number;
+  revision?: number;
+}
+
 export function analyticsAnswer(
   url: string,
   data: Record<string, BandRow[]> = {},
-  over: { pendingWindows?: number; metrics?: Array<{ id: string; display: string; unit: string }>; sleep?: SleepRow[] } = {},
+  over: {
+    pendingWindows?: number; metrics?: Array<{ id: string; display: string; unit: string }>; sleep?: SleepRow[];
+    /** Per nutrient id. Read at request time, so a test can change it between two requests (a retraction). */
+    nutrition?: Record<string, NutritionRow[]>;
+  } = {},
 ): Response {
   const u = new URL(url, "https://web.test");
+  const nu = /\/v1\/patients\/([^/]+)\/nutrition$/.exec(u.pathname);
+  if (nu) {
+    const id = u.searchParams.get("nutrient") ?? "";
+    const from = u.searchParams.get("from") ?? "";
+    const to = u.searchParams.get("to") ?? "";
+    const info = contract.intakeMetrics.find((x) => x.id === id);
+    if (!info) return json(400, { error: "bad_request", detail: "unknown nutrient" });
+    const days = eachDay(from, to);
+    const rows = (over.nutrition?.[id] ?? []).filter((r) => r.day >= from && r.day <= to);
+    const have = new Set(rows.map((r) => r.day));
+    return json(200, {
+      patientId: nu[1],
+      nutrient: { id, display: info.display, unit: info.unit },
+      from, to,
+      dayDefinition: "Calendar date written in each entry's own timestamp, in the offset it carries (day as recorded); not the UTC day of bands and sleep. A day with no entries is absent (missingDays), never a total of zero",
+      days: rows.map((r) => ({
+        day: r.day,
+        total: Math.round(r.byMeal.reduce((t, m) => t + m.total, 0) * 1e6) / 1e6,
+        entries: r.byMeal.reduce((n, m) => n + m.entries, 0),
+        firstEntry: `${r.day}T08:00:00.000Z`, lastEntry: `${r.day}T20:00:00.000Z`,
+        artifactSuspected: r.artifactSuspected ?? 0, lateArrival: r.lateArrival ?? 0, revision: r.revision ?? 1,
+        byMeal: r.byMeal,
+      })),
+      completeness: {
+        requestedDays: days.length, daysWithData: rows.length, missingDays: days.filter((d) => !have.has(d)),
+        pendingWindows: over.pendingWindows ?? 0, lastComputedAt: rows.length ? "2026-10-12T11:59:00.000Z" : null,
+        workerWatermark: "2026-10-12T11:59:30.000Z", generatedAt: "2026-10-12T12:00:00.000Z",
+      },
+    });
+  }
   const sl = /\/v1\/patients\/([^/]+)\/sleep$/.exec(u.pathname);
   if (sl) {
     const from = u.searchParams.get("from") ?? "";

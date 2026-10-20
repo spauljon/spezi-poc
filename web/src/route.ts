@@ -11,6 +11,7 @@ export interface DateRange {
 export type Route =
   | { readonly view: "trends"; readonly range: DateRange | null }
   | { readonly view: "flowsheet" }
+  | { readonly view: "nutrition"; readonly nutrient: string | null }
   | { readonly view: "sleep"; readonly night: string | null; readonly start: number | null }
   | { readonly view: "day"; readonly day: string; readonly metric: string | null; readonly range: DateRange | null };
 
@@ -28,6 +29,10 @@ export function parseHash(hash: string): Route {
   const [path = "", query = ""] = h.split("?", 2);
   const q = new URLSearchParams(query);
   if (path === "/flowsheet") return { view: "flowsheet" };
+  if (path === "/nutrition") {
+    const nutrient = q.get("nutrient");
+    return { view: "nutrition", nutrient: nutrient && /^[A-Za-z0-9]+$/.test(nutrient) ? nutrient : null };
+  }
   if (path === "/sleep") return { view: "sleep", night: null, start: null };
   const sl = /^\/sleep\/([^/]+)$/.exec(path);
   if (sl && isDay(sl[1])) {
@@ -46,6 +51,8 @@ const rangeQuery = (range: DateRange | null | undefined): string =>
   range ? `from=${range.from}&to=${range.to}` : "";
 
 export const flowsheetHref = "#/flowsheet";
+export const nutritionHref = (nutrient?: string | null): string =>
+  nutrient ? `#/nutrition?nutrient=${encodeURIComponent(nutrient)}` : "#/nutrition";
 export const sleepHref = (night?: string | null, startSeconds?: number | null): string =>
   night ? `#/sleep/${night}${startSeconds ? `?s=${startSeconds}` : ""}` : "#/sleep";
 export const trendsHref = (range?: DateRange | null): string => (range ? `#/trends?${rangeQuery(range)}` : "#/trends");

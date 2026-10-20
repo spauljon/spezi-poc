@@ -11,6 +11,7 @@ import { AnalyticsClient, AnalyticsError } from "../src/trends/client.ts";
 import { addDays, buildChartData, compareMetrics, daysBetween, presetRange, todayUtc } from "../src/trends/model.ts";
 import { loadDay } from "../src/intraday/load.ts";
 import { dayStart } from "../src/intraday/model.ts";
+import { buildCells, mealKeys, withEntries } from "../src/nutrition/model.ts";
 import { disagreement, loadNight } from "../src/sleep/load.ts";
 import { clockNote, nightSummary, offsetsIn } from "../src/sleep/model.ts";
 import type { Observation } from "../src/fhir/types.ts";
@@ -494,5 +495,112 @@ describe.skipIf(!live)("sleep against the live stack (the known nights, and ever
       checked++;
     }
     console.log(`sleep: ${checked} sessions cross-checked, intervals vs summary`);
+  }, 300_000);
+});
+
+
+describe.skipIf(!live)("nutrition against the live stack (the seeded days, `make web-seed-nutrition-days`)", () => {
+  type Seed = {
+    FIRST_DAY: string; DAYS: number; FIXTURE_DAYS: { day: string; i: number; entries: { key: string; nutrient: string; retract?: boolean }[] }[];
+    expectedTotals: () => Map<string, { micro: bigint; entries: number; byMeal: Map<string, bigint>; flagged: number }>;
+    microToNumber: (m: bigint) => number;
+  };
+
+  /** Every nutrition Observation of the patient in the window, read straight from HAPI: final only, by the date written in each timestamp. */
+  async function independentTotals(token: string, patientId: string, from: string, to: string) {
+    const raw = rawContract as { metrics: { id: string; kind: string; loinc?: { code: string }; customCode?: { code: string } }[] };
+    const idOfCode = new Map(raw.metrics.filter((m) => m.kind === "intake").map((m) => [(m.customCode ?? m.loinc)!.code, m.id]));
+    const domain = (rawContract as unknown as { systems: { observationDomain: string } }).systems.observationDomain;
+    const totals = new Map<string, bigint>();
+    const retracted: string[] = [];
+    const q = new URLSearchParams({ subject: `Patient/${patientId}`, category: `${domain}|nutrition`, _count: "100", date: `ge${addDays(from, -1)}T00:00:00Z` });
+    q.append("date", `lt${addDays(to, 2)}T00:00:00Z`);
+    let url: string | null = `${fhirBase}/Observation?${q.toString()}`;
+    while (url) {
+      const bundle = (await (await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/fhir+json", "Cache-Control": "no-cache" } })).json()) as {
+        entry?: { resource: Observation & { identifier?: { value: string }[] } }[]; link?: { relation: string; url: string }[];
+      };
+      for (const { resource: r } of bundle.entry ?? []) {
+        if (r.status !== "final") { retracted.push(r.identifier?.[0]?.value ?? ""); continue; }
+        const id = idOfCode.get(r.code?.coding?.[0]?.code ?? "")!;
+        const [whole = "0", frac = ""] = String(r.valueQuantity!.value).split(".");
+        const micro = BigInt(whole) * 1_000_000n + BigInt((frac + "000000").slice(0, 6));
+        const key = `${id}|${(r.effectiveDateTime ?? "").slice(0, 10)}`;
+        totals.set(key, (totals.get(key) ?? 0n) + micro);
+      }
+      url = bundle.link?.find((l) => l.relation === "next")?.url ?? null;
+    }
+    return { totals, retracted };
+  }
+
+  it("the API's daily totals equal the seeded expectations and an independent sum of the FHIR Observations; the view's cells agree, gaps and the zero day included, and the retracted dessert is out", async () => {
+    process.env["POC_CAPTURE_USER_PASSWORD"] ??= "unused-here";
+    const seed = (await import(new URL("../tools/seed-nutrition-days.mjs", import.meta.url).href)) as Seed;
+    const token = await clinicianToken();
+    const fhir = new FhirClient(fhirBase, async () => token);
+    const patient = await loadPatient(fhir, { ...config, patientIdentifier: process.env["POC_PATIENT_IDENTIFIER"] ?? "poc-0001" }, contract);
+    const api = new AnalyticsClient("https://macpro16.local", async () => token, apiFetch);
+    const from = seed.FIRST_DAY;
+    const to = addDays(from, seed.DAYS - 1);
+    const expected = seed.expectedTotals();
+    const energyDays = new Set([...expected.keys()].filter((k) => k.startsWith("dietaryEnergy|")).map((k) => k.slice("dietaryEnergy|".length)));
+    expect(energyDays.size, "control: the fixture has days with energy").toBeGreaterThan(10);
+    expect(energyDays.size).toBeLessThan(seed.DAYS); // and gaps
+
+    // the worker scans every 30 s: wait for it to have caught up with the seed
+    let energy = await api.nutrition(patient.id, "dietaryEnergy", from, to);
+    for (let i = 0; i < 24 && (energy.completeness.pendingWindows > 0 || energy.days.length !== energyDays.size); i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      energy = await api.nutrition(patient.id, "dietaryEnergy", from, to);
+    }
+    expect(energy.days.length, "the stack holds the seeded days (run `make web-seed-nutrition-days`)").toBe(energyDays.size);
+
+    const independent = await independentTotals(token, patient.id, from, to);
+    expect(independent.retracted.some((id) => id.endsWith("dessert-e")), "control: the dessert really is retracted in HAPI").toBe(true);
+
+    let compared = 0;
+    for (const m of contract.intakeMetrics) {
+      const res = m.id === "dietaryEnergy" ? energy : await api.nutrition(patient.id, m.id, from, to);
+      expect(res.completeness.pendingWindows, m.id).toBe(0);
+      const cells = buildCells(res);
+      expect(cells).toHaveLength(seed.DAYS);
+      for (const d of seed.FIXTURE_DAYS) {
+        const exp = expected.get(`${m.id}|${d.day}`);
+        const cell = cells.find((c) => c.day === d.day)!;
+        if (!exp) {
+          expect(cell.kind, `${m.id} ${d.day}: nothing was recorded, so a gap and not a 0`).toBe("none");
+          expect(independent.totals.has(`${m.id}|${d.day}`), `${m.id} ${d.day}`).toBe(false);
+          continue;
+        }
+        expect(cell.kind, `${m.id} ${d.day}`).toBe("entries");
+        if (cell.kind !== "entries") continue;
+        expect(cell.total, `${m.id} ${d.day} total vs the seed's own sum`).toBeCloseTo(seed.microToNumber(exp.micro), 6);
+        expect(cell.entries, `${m.id} ${d.day} entries`).toBe(exp.entries);
+        expect(cell.artifactSuspected, `${m.id} ${d.day} flags`).toBe(exp.flagged);
+        expect(new Set(cell.byMeal.map((x) => x.meal)), `${m.id} ${d.day} meals`).toEqual(new Set(exp.byMeal.keys()));
+        for (const part of cell.byMeal) expect(part.total).toBeCloseTo(seed.microToNumber(exp.byMeal.get(part.meal)!), 6);
+        const fromHapi = independent.totals.get(`${m.id}|${d.day}`)!;
+        expect(Math.abs(cell.total - seed.microToNumber(fromHapi)), `${m.id} ${d.day} total vs HAPI`).toBeLessThan(1e-6);
+        compared++;
+      }
+      // the extra days the API reports are exactly the seeded ones
+      expect(withEntries(cells).length).toBe([...expected.keys()].filter((k) => k.startsWith(`${m.id}|`)).length);
+    }
+    expect(compared).toBeGreaterThan(100);
+
+    // the named days, by name: a zero total is a day with entries; the evening entry stays on its recorded day; no meal is a bucket
+    const day = (i: number) => energy.days.find((d) => d.day === seed.FIXTURE_DAYS[i]!.day);
+    expect(day(9)?.total, "the zero day is present, as 0").toBe(0);
+    expect(day(9)?.entries).toBe(2);
+    expect(day(5), "a gap day is not in the list").toBeUndefined();
+    expect(energy.completeness.missingDays).toEqual(expect.arrayContaining([seed.FIXTURE_DAYS[5]!.day, seed.FIXTURE_DAYS[6]!.day, seed.FIXTURE_DAYS[13]!.day]));
+    expect(day(11)!.byMeal.some((x) => x.meal === "snack" && x.total >= 220), "23:40 UTC-7 is the 2nd, not the 3rd (UTC)").toBe(true);
+    expect(energy.days.find((d) => d.day === addDays(seed.FIXTURE_DAYS[11]!.day, 1))!.byMeal.reduce((n, x) => n + x.total, 0)).toBeLessThan(2000);
+    expect(day(15)!.byMeal.map((x) => x.meal)).toContain("unlabelled");
+    expect(day(17)!.total, "the retracted 999 kcal dessert is not in the day").toBeLessThan(2000);
+    expect(day(19)!.total, "the flagged absurd entry is in the total, and counted as suspect").toBeGreaterThan(7200);
+    expect(day(19)!.artifactSuspected).toBe(1);
+    expect(mealKeys(buildCells(energy), contract.mealTypes.map((m) => m.code))).toEqual(["breakfast", "lunch", "dinner", "snack", "unlabelled"]);
+    console.log(`nutrition: ${compared} (nutrient, day) totals agree with the seed and with HAPI`);
   }, 300_000);
 });
