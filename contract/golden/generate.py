@@ -3,7 +3,7 @@
 
 This is a SECOND, INDEPENDENT implementation of the rules in contract/metrics.json: Python's own time-zone
 database (zoneinfo), its own decimal arithmetic and its own SHA-256, nothing shared with the Swift mapper. The Swift
-tests (ios/TemplateApplicationTests/Metrics) check the mapper against these files, so a bug has to be made twice,
+tests (ios/HealthGateTests/Metrics) check the mapper against these files, so a bug has to be made twice,
 identically, to slip through. All data is synthetic.
 
   python3 contract/golden/generate.py            rewrite the fixtures

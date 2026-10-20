@@ -18,7 +18,7 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CONTRACT = os.path.join(ROOT, "contract", "metrics.json")
-BUNDLED = os.path.join(ROOT, "ios", "TemplateApplication", "Resources", "metrics.json")
+BUNDLED = os.path.join(ROOT, "ios", "HealthGate", "Resources", "metrics.json")
 fails = []
 
 
