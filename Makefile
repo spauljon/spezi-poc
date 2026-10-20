@@ -1,4 +1,4 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-run analytics-api web-dev web-seed-dense-day web-seed-sleep-nights test-web-live test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-rescan analytics-run analytics-api web-dev web-seed-dense-day web-seed-sleep-nights test-web-live test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
@@ -37,6 +37,8 @@ test-analytics-live:  ## rollups against the live stack: HAPI + Keycloak + Oracl
 	@./analytics/live-test.sh
 analytics-migrate:  ## (re)apply the analytic store schema: reruns the database init in the oracle container (idempotent)
 	@docker exec spezi-poc-oracle bash /opt/poc/db/init.sh
+analytics-rescan: ## make the deployed worker re-read every Observation on its next cycle (run after a contract change adds a metric)
+	@./analytics/run.sh rescan
 analytics-run:  ## one worker cycle on the host (the deployed worker already scans every 30 s; this is for ad hoc runs)
 	@./analytics/run.sh once
 analytics-api:  ## DEV: the analytic API on the host (port 8445); the deployed stack already serves it, so stop that first
