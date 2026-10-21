@@ -349,6 +349,88 @@ A thin slice serving **synthetic** series (the existing dense-day and meal gener
 3. Where is the durable-ack point, and is eventual consistency after a write acceptable to clinicians?
 4. Is the view one deployment per organization or shared, and who owns the series store?
 
+## 5c. Persistence behind the view: what the series store must do
+
+Continues 5b (2026-10-21). 5b fixed the interface; this section derives what the store under it must provide, so a store can be chosen (or swapped) on requirements. Planning only. Every product named is a candidate to evaluate, not a decision, and none is installed or approved.
+
+### The shape: an append-only journal with read-side resolution
+
+Proposed by the developer 2026-10-21: most time-series engines perform best append-only, so **every write is an appended entry** (a new point, a retraction, a flag change, a late amendment), never an update. Writes cost the same whatever the history; the **reader resolves** each key `(source kind, uuid)` to its entry with the highest revision and ignores the superseded ones. A background **compaction** writes resolved, immutable segments so that reads and aggregates do not pay for journal depth. The journal's offset is the `ingest_seq` of the point model, so the change feed is "read the journal after offset N". The rest of this section works out what that implies; the earlier shapes (update in place, correction rows only) are subsumed by it.
+
+### The store's interface (small on purpose)
+
+Whatever sits underneath, the view needs exactly these operations; if a store can do them, the FHIR layer does not change:
+
+| Operation | Used by (5b) | Shape |
+|---|---|---|
+| `append(entries[])` | write (5), retraction (6) | pure append, no lookup; entries carry `(source kind, uuid, revision)`; idempotency is by resolution on read |
+| `range(patient, metric, from, to, cursor, limit)` | search (1) | ordered by event time, cursor on `(time, ingest_seq)` |
+| `latest(patient, metric, n)` | `$lastn` (3) | newest n by event time |
+| `aggregate(patient, metric, from, to, fn[])` and `bucket(…, resolution)` | `$stats` (2), `$series` (4) | min, max, count, median, mean by bucket |
+| `get(uuid)` and `find(source kind, uuid)` | read by id, retraction | point lookup by the key, resolved to the latest revision (a lookup is needed here and for retraction's `200` versus `404`, but not for ingest) |
+| `retract(source kind, uuid)` | retraction (6) | appends an entry with `status` entered-in-error and the next revision; a repeat appends another and resolves to the same state |
+| `changes(after_seq, limit)` | change feed (7) | ordered by `ingest_seq`; no point is missed |
+
+### Four requirements that drive the choice
+
+1. **Idempotent ingest: moved off the write path.** Uniqueness on `(source kind, uuid)` across all history would need a lookup per point, the cost that made per-resource storage heavy **[ESTIMATE]**. In a journal a re-delivered sample is simply appended again and **collapses on read**, because duplicates share their event time and so sit together in a time-bounded range: resolving a range is a local operation, not a global one. This removes the dedupe-horizon decision (no "no duplicates inside N days" deviation) at three costs: (a) **aggregates must run on the resolved view** or `count` and `median` are wrong, so `$stats` is dearer than a plain `GROUP BY` until compaction has run; (b) storage grows with re-deliveries until compaction (expected small, to be measured); (c) **the `200` versus `201` answer** for a conditional create needs to know whether the point existed, which is the lookup the journal avoided (see the open question below).
+2. **The change feed needs a total order that commits in order.** A global `ingest_seq` from one sequence serialises writers; per-shard sequences are cheap but a consumer that reads "after seq N" can skip a point whose transaction commits late with a lower number. Known fixes: a visibility watermark (the feed serves only up to the lowest in-flight sequence), a short delay window, or reading by `(ingest_ts, shard, seq)` with overlap and dedupe on the consumer. Which one is acceptable depends on the feed's consumers (the worker is idempotent, so overlap is safe for it) **[UNVERIFIED]**.
+3. **Retraction and flags are further entries, not updates.** A retraction appends the next revision of the key; resolution picks the highest revision (never the latest arrival), so out-of-order delivery of two revisions still resolves right. Segments stay immutable (good for columnar files and object storage), retraction reaches the feed for free, and a per-point history becomes cheap should `_history` ever be wanted (5b declares it not offered). Cost: every read pays a resolve step until compaction, and a heavily amended key is slower until then (rare for samples).
+4. **Deletion and consent withdrawal.** Per-patient erase must be possible. A layout partitioned by time makes retention cheap (drop a partition) and patient erase expensive (rewrite every partition); a layout keyed by patient makes erase cheap and retention a per-patient range delete. Pick by which happens more often and under which rule (section 8, question 4). A common compromise is time partitions with patient-ordered segments inside, and erase done as a batched rewrite job **[UNVERIFIED]**. **A journal does not remove this:** a tombstone entry hides a point but does not physically delete it, so physical erase still means a compaction rewrite, and any older journal segments must be included in it.
+
+### Layout (independent of product)
+
+- **Key:** `(patient, metric, event time, uuid)`. Reads are almost always one patient and one metric over a window (5b: patient-scoped, time-bounded by assumption), so clustering by that key is what turns a read from a scan into a short range.
+- **Partition:** by event-time month (retention, archive and compaction unit), and optionally by a patient hash bucket to spread writes and bound a segment's size.
+- **Tiers:** a hot tier (the journal tail, recent days or weeks, resolved at read) and cold segments (resolved by compaction, immutable, compressed, columnar). A2's bounded raw window is then "stop serving point reads from segments older than N and keep aggregates", and C's archive is "move the cold segments to cheaper storage".
+- **Pre-aggregates:** the existing `daily_rollup` already answers most clinical reads. `$stats` over a day is a range aggregate; whether to keep per-hour buckets materialised is a measurement (section 7), not a default.
+- **Row size [ESTIMATE]:** uuid 16 B, event start 8 B, offset 2 B, value 8 B (4 B if the unit permits float), status and flags 2 B, revision 1 B, issued as a delta 4 B, device key 4 B, ingest seq 8 B: about 53 B raw. Delta and dictionary encoding in a columnar store plausibly bring this to 10 to 25 B, with the uuid (incompressible) dominating **[UNVERIFIED]**. If the uuid is the largest cost, a derived 8 B key is not an option for idempotency across sources, so the uuid stays. Against 5 KB per stored Observation (S2) the ratio is 100 to 500, to be measured.
+
+### Candidate stores (to evaluate, none approved)
+
+| Candidate | For | Against | Fit with the interface |
+|---|---|---|---|
+| **A plain table in the existing Oracle** (index-organized or partitioned, keyed as above) | no new service; the first step in 5b's test; shares backup and auth; the analytics schema already lives there | Oracle Free's size cap (section 4) stops it near the interesting range; row-store overhead per point; no columnar compression | all seven operations, `changes` via a sequence |
+| **PostgreSQL with a time-series extension** (for example TimescaleDB) | SQL, continuous aggregates, compression of old chunks, mature operations; Health Samurai describes this shape for FHIR Observations (section 5a) | a second database engine to run and back up; extension licensing and features to check **[UNVERIFIED]**; unique constraints across chunks must include the partition column | all seven; `bucket` and `aggregate` are native |
+| **A columnar analytical database** (for example ClickHouse) | very high compression and scan speed; aggregates are its strength | updates and unique keys are weak (correction rows and a dedupe tier needed); point lookups are not its strength **[UNVERIFIED]** | `range`, `aggregate`, `bucket` excellent; `append` idempotency, `find` and `retract` need a helper |
+| **Files on object storage** (columnar files per patient-month, plus a small index for the dedupe key and the feed) | cheapest bytes; natural archive; immutable segments suit retraction as correction rows | read latency, small-file management and compaction jobs to build; the hot tier still needs a mutable store | the cold half of any design above |
+| **A wide-row or key-value store** | writes and key range reads scale out | aggregates and the feed are application code; operational weight | `range`, `latest`, `get` natural; the rest is code |
+
+**Ranking for a journal-then-compact design:** the criterion becomes how cheaply an engine appends, merges a journal tail into a resolved read, and runs the compaction. Engines that merge in the background by design (ClickHouse-style merge trees, Timescale compression policies) are natural fits; a plain Oracle table can hold the journal and a resolve view but pays row-store overhead and has no columnar compaction **[UNVERIFIED]**. Treat this as a hypothesis for the measurement.
+
+**Reading of the table:** the first step costs nothing new (Oracle table) and proves the interface; the realistic target at the large end is probably a time-series or columnar engine for the hot tier plus object storage for cold segments (option C underneath option E), but that rests on volume figures that are still assumptions (S1). I would not pick the engine before the section 7 measurements and the answers to section 8.
+
+### Write path and the ack point
+
+With the journal as the shape, the three write-path variants of the earlier draft reduce to one question: **where is the ack?** The write is an append either way.
+
+1. **Ack after the journal commit (direct):** read-your-writes holds, throughput is the journal's, no queue to run. Offset commit order across concurrent writers still needs the visibility watermark of requirement 2.
+2. **Ack after a durable queue, journal applied by a consumer:** absorbs the morning and evening bursts (S6); a single-writer log gives ordered offsets for free but is a service to run. Reads are eventually consistent, and a transaction response must still answer `200` or `201` per entry, so this is a declared deviation. The POC phone retries until success and is idempotent, so it is safe for the app; the web view would show up to the queue lag (5b question 3).
+
+Read path in both: the journal tail (not yet compacted) is merged with resolved segments and resolved by revision; compaction runs behind and its lag is a metric.
+
+**The `200` versus `201` question (checked in the code 2026-10-21).** The app's `SyncEngine` counts per-entry `201`s as "created" and the rest as "already present" for the Uploaded count (`ios/HealthGate/Sync/SyncEngine.swift` lines 350 to 351 and 502), and `contract/verify-hapi.py` (line 60) and `hapi/auth.py` (line 93) branch on `201`. So the distinction is used for a user-visible count and for two checks, but nothing observed depends on it for correctness. Options: (a) answer `201` always and change the count's meaning to "sent"; (b) keep a bounded "seen recently" cache in the ingest tier only to choose the status code, accepting that a duplicate outside the cache answers `201`; (c) look up per entry and give up the journal's write advantage. (b) is the cheapest honest option and should be stated in the `CapabilityStatement`.
+
+### Failure and operations
+
+- **Ingest idempotency under retry** is checked by the existing live suites unchanged, but "no new points" now means **no new points after resolution** (the journal may hold the duplicate entries): the test counts through the resolved read. A negative control: two different uuids both land. A positive control: the same uuid appended twice reads as one, and a retraction appended before its target resolves correctly once the target arrives.
+- **Backfill and replay:** because HAPI no longer holds series points, the view's store is the only copy. The record of truth for the series metrics therefore moves; backup, restore and a restore drill are part of the cost (5b, risk 7). The phone's local HealthKit store is a second source for a short time, not a backup.
+- **Reference integrity** (5b, two stores): the ingest tier checks the `Patient` against HAPI with a cache; a cached negative or a stale positive after a patient delete or merge is a stated limit.
+- **Observability:** per-stream point counts, ingest lag, feed lag and dedupe-hit rate as metrics, with a check that counts agree between what the view returns by `$stats` `count` and by paging the range (a built-in consistency probe).
+
+### What this adds to the cheap test (5b)
+
+The synthetic slice gains one more purpose: run the **same operation suite against two stores**, written as a journal with compaction, (the Oracle table, then a second engine only if approved) and report, per store: bytes per point after compression, append throughput at concurrency 1, 4 and 8 (section 7's grid), p50 and p99 of `range`, `latest`, a day `aggregate`, a 5-minute `bucket` over a day, read cost against journal depth (0, 1 and 10 duplicates or amendments per point) before and after compaction, feed lag under concurrent writers, and the time to retract a point and to erase a patient. Success criterion: the operation suite and the FHIR-level checks pass unchanged on both stores; the numbers decide, not the table above.
+
+### Questions this section raises
+
+1. **`201` semantics:** may a repeat answer `201`, or must the view tell a new point from a repeat (a lookup or a bounded cache; options (a) to (c) above)?
+2. **Erase rule:** does consent withdrawal require physical deletion of series points, and within what time? (Drives time-partitioned versus patient-keyed layout.)
+3. **Hot window:** how many days of point reads must be mutable and read-your-writes before points freeze into cold segments?
+4. **Second engine:** may a second database engine (or object storage) be introduced for a measurement? This is the "installs or connects external services" rule of the root CLAUDE.md, so it is an approval, not an assumption.
+5. **Compaction lag:** how stale may an aggregate be in the worst case (the journal tail is merged at read, so the answer is correct but slower; the question is the latency budget)?
+6. **Store ownership:** the series store is now the only copy of a metric class; who owns its backup, restore drills and access policy?
+
 ## 6. Recommendation
 
 1. **Do not change the data model yet.** M20 to M23 (per-nutrient Observations) are right at the volumes the POC handles and for the clinical features built on them (retraction, flags, totals).
@@ -399,6 +481,8 @@ Synthetic data only, on this stack, in its own synthetic patients, never touchin
 | S8 | `SampledData` blocks cannot be amended in this pipeline (the capture role cannot update). | Whether blocks must be closed and immutable. |
 | S9 | Keycloak and token verification are not the bottleneck on the data path. | The auth design at scale. |
 | S10 | V1 (a router) is expensive because responses and bundles mix resource types (developer's experience; our own upload bundle mixes `Device` and `Observation`). HAPI JPA lets the `Observation` resource provider be replaced at bootstrap, and the replacement must implement the whole interaction surface itself (developer's experience: a near-complete attempt took considerable effort and was not finished; not tried here). The DAO-level features listed in section 5b may be left behind. | Whether a drop-in view (V1 or V2) is worth its cost, or a separate base (V3) is enough. |
+| S11 | The series store can meet the seven-operation interface of section 5c at the needed cost; the row size (about 53 B raw, 10 to 25 B compressed), the dedupe approach and the feed-ordering fix are estimates. | Store choice, section 7 measurements. |
+| S12 | Resolution on read is cheap because duplicates and revisions of one key share an event time and sit together; compaction keeps journal depth small. | Whether the journal shape holds its read cost. |
 
 ## 10. What this does not decide
 
