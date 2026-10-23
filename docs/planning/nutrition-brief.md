@@ -232,20 +232,22 @@ A Nutrition view (daily energy and macronutrients, a table twin, "No entries" da
 
 A comparison table requested by the developer: for each metric in Validic's `Nutrition` category, the LOINC per-entry code (the kind this project stores, one amount per logged item) and the LOINC 24-hour code (a daily total). Each cell shows **Estimated / Measured**, LOINC's two method variants of the same concept. Sources: the "Commonly Found" column of the [Validic metrics table](https://developer.validic.com/docs/metrics) (12 rows, all `Nutrition`), and NLM's [Clinical Tables LOINC lookup](https://clinicaltables.nlm.nih.gov/api/loinc_items/v3/search) (`loinc_items` v3), searched 2026-10-23 by nutrient name. The lookup results were read through a summarizing fetch, not raw, and cross-checked against the codes already verified for the contract (`verification.nutrientLoinc`: 9079-5, 9059-7, 9066-2, 8984-7, 9052-2), which agree. This does not change the contract; it records what exists.
 
-| Validic `Nutrition` type (standard unit) | LOINC per-entry code (Estimated / Measured) | LOINC 24-hour code (Estimated / Measured) |
-|---|---|---|
-| `calcium` (mg) | 9045-6 / 9046-4 (property `Sub`) | 81137-2 / 80975-6 |
-| `carbohydrate` (g) | 9059-7 / 9060-5 | 75296-4 / 81953-2 |
-| `cholesterol` (mg) | none found | 81021-8 / 81022-6 |
-| `dietary_fiber` (g) | none found (only a panel, 81926-8, and a deprecated PhenX code, 61548-4) | 81133-1 / 81057-2 |
-| `energy_consumed` (kcal) | 9052-2 "Calorie intake total" (no method variant; property `EngRat`) | 75298-0 / 80494-8 |
-| `fat` (g) | 9066-2 / 9067-0 | 75297-2 / 81952-4 |
-| `protein` (g) | 9079-5 / 9080-3 | 75299-8 / 82156-1 |
-| `saturated_fat` (g) | none found | 81033-3 / 81136-4 |
-| `sodium` (mg) | 9086-0 / 9087-8 (property `Sub`) | 81011-9 / 81012-7 |
-| `sugars` (g) | none found (only a deprecated PhenX code, 62262-1) | none found |
-| `unsaturated_fat` (g) | none found (no generic code) | no generic code (monounsaturated 81897-1 / 81899-7 and polyunsaturated 81131-5 / 81036-6 exist at 24 hours only) |
-| `water` (mL) | 8984-7 / 8985-4 ("Fluid intake", all fluids; also 9102-5 / 9103-3 "Fluid intake total", not compared with 8984-7) | 75301-2 / 81951-6 |
+| Validic `Nutrition` type (unit) | Per-entry Estimated | Per-entry Measured | LOINC property | 24-hour Estimated | 24-hour Measured | 24-hour, no method | Other intervals (1 / 8 / 10 / 12 h) | Also found |
+|---|---|---|---|---|---|---|---|---|
+| `calcium` (mg) | 9045-6 | 9046-4 | `Sub` (substance) | 81137-2 | 80975-6 | 35264-1; 9051-4 (moles per time) | 9047-2 / 9048-0 / 9049-8 / 9050-6 | PhenX 61436-2 (pediatric), 62289-4 (adult); deprecated 61435-4, 61458-6 |
+| `carbohydrate` (g) | 9059-7 | 9060-5 | `Mass` | 75296-4 | 81953-2 | 9065-4 | 9061-3 / 9062-1 / 9063-9 / 9064-7 | panel 81940-9; complex carbohydrate 24 h: 81025-9 Est, 81026-7 Meas |
+| `cholesterol` (mg) | none found | none found | n/a | 81021-8 | 81022-6 | none found | none found | |
+| `dietary_fiber` (g) | none found | none found | n/a | 81133-1 | 81057-2 | none found | none found | panel 81926-8; deprecated PhenX 61548-4; soluble 24 h: 81058-0 Est, 81059-8 Meas; insoluble 24 h: 81060-6 Est, 81061-4 Meas |
+| `energy_consumed` (kcal) | 9052-2 "Calorie intake total" (no method variant) | none found | `EngRat` | 75298-0 | 80494-8 | 9057-1 (total); 75302-0 | 9053-0 / 9054-8 / 9055-5 / 9056-3 | panel 80443-5 |
+| `fat` (g) | 9066-2 | 9067-0 | `Mass` | 75297-2 | 81952-4 | 9072-0 | 9068-8 / 9069-6 / 9070-4 / 9071-2; 72 h: 32544-9 | panel 81896-3 |
+| `protein` (g) | 9079-5 | 9080-3 | `Mass` | 75299-8 | 82156-1 | 9085-2 | 9081-1 / 9082-9 / 9083-7 / 9084-5 | panel 81904-5; soy 24 h: 80480-7 Est, 80481-5 Meas; high biological value 24 h: 81905-2 Est, 81906-0 Meas; per body weight 24 h: 81910-2 Est, 81911-0 Meas |
+| `saturated_fat` (g) | none found | none found | n/a | 81033-3 | 81136-4 | none found | none found | |
+| `sodium` (mg) | 9086-0 | 9087-8 | `Sub` (substance) | 81011-9 | 81012-7 | 9092-8 (`SRat`) | 9088-6 / 9089-4 / 9090-2 / 9091-0 | |
+| `sugars` (g) | none found | none found | n/a | none found | none found | none found | none found | deprecated PhenX 62262-1 only |
+| `unsaturated_fat` (g) | none found | none found | n/a | no generic code | no generic code | none found | none found | monounsaturated 24 h: 81897-1 Est, 81899-7 Meas; polyunsaturated 24 h: 81131-5 Est, 81036-6 Meas (also trans 81034-1 / 81035-8, omega-3 81900-3 / 81901-1) |
+| `water` (mL) | 8984-7 "Fluid intake" (all fluids) | 8985-4 | `Vol` | 75301-2 | 81951-6 | 8990-4; deprecated 75300-4 | 8986-2 / 8987-0 / 8988-8 / 8989-6 | "Fluid intake total": 9102-5 Est, 9103-3 Meas (not compared with 8984-7); route-specific codes exist (for example oral, 9000-1 Measured) |
+
+Each code column pair shows the LOINC method variants of one concept. "Other intervals" are LOINC rate codes for 1, 8, 10 and 12 hours, listed in that order. The `Sub` property is my recollection of an amount of substance (moles), not checked against LOINC documentation; the 24-hour codes are rates over a day.
 
 **Reading the table**
 
