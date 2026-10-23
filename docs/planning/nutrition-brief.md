@@ -228,6 +228,34 @@ A Nutrition view (daily energy and macronutrients, a table twin, "No entries" da
 - Only the eight sample types above are requested (a new authorization sheet appears once).
 - Same rules as the other real data: separate `poc-real` Patient, TLS and token only, nothing in logs.
 
+## Code survey: Validic nutrition types against LOINC (2026-10-23)
+
+A comparison table requested by the developer: for each metric in Validic's `Nutrition` category, the LOINC per-entry code (the kind this project stores, one amount per logged item) and the LOINC 24-hour code (a daily total). Each cell shows **Estimated / Measured**, LOINC's two method variants of the same concept. Sources: the "Commonly Found" column of the [Validic metrics table](https://developer.validic.com/docs/metrics) (12 rows, all `Nutrition`), and NLM's [Clinical Tables LOINC lookup](https://clinicaltables.nlm.nih.gov/api/loinc_items/v3/search) (`loinc_items` v3), searched 2026-10-23 by nutrient name. The lookup results were read through a summarizing fetch, not raw, and cross-checked against the codes already verified for the contract (`verification.nutrientLoinc`: 9079-5, 9059-7, 9066-2, 8984-7, 9052-2), which agree. This does not change the contract; it records what exists.
+
+| Validic `Nutrition` type (standard unit) | LOINC per-entry code (Estimated / Measured) | LOINC 24-hour code (Estimated / Measured) |
+|---|---|---|
+| `calcium` (mg) | 9045-6 / 9046-4 (property `Sub`) | 81137-2 / 80975-6 |
+| `carbohydrate` (g) | 9059-7 / 9060-5 | 75296-4 / 81953-2 |
+| `cholesterol` (mg) | none found | 81021-8 / 81022-6 |
+| `dietary_fiber` (g) | none found (only a panel, 81926-8, and a deprecated PhenX code, 61548-4) | 81133-1 / 81057-2 |
+| `energy_consumed` (kcal) | 9052-2 "Calorie intake total" (no method variant; property `EngRat`) | 75298-0 / 80494-8 |
+| `fat` (g) | 9066-2 / 9067-0 | 75297-2 / 81952-4 |
+| `protein` (g) | 9079-5 / 9080-3 | 75299-8 / 82156-1 |
+| `saturated_fat` (g) | none found | 81033-3 / 81136-4 |
+| `sodium` (mg) | 9086-0 / 9087-8 (property `Sub`) | 81011-9 / 81012-7 |
+| `sugars` (g) | none found (only a deprecated PhenX code, 62262-1) | none found |
+| `unsaturated_fat` (g) | none found (no generic code) | no generic code (monounsaturated 81897-1 / 81899-7 and polyunsaturated 81131-5 / 81036-6 exist at 24 hours only) |
+| `water` (mL) | 8984-7 / 8985-4 ("Fluid intake", all fluids; also 9102-5 / 9103-3 "Fluid intake total", not compared with 8984-7) | 75301-2 / 81951-6 |
+
+**Reading the table**
+
+- **Estimated, not Measured, applies to every nutrient from a food-logging app, not only to the four codes that say so.** MyFitnessPal's amounts come from a food database, so even calories are estimates; the LOINC code for energy simply has no Estimated/Measured pair at the per-entry level, and our three custom nutrient codes (fibre, sugar, sodium) carry no method at all. The `Estimated` suffix in a code's display is therefore not a reliable signal that the others are measured. The contract has no `method` on any intake metric; R4's `Observation.method` is a candidate for stating it uniformly (an open design question, not decided).
+- **Gaps.** No per-entry LOINC code exists for cholesterol, fibre, saturated fat, sugars or unsaturated fat. Sugars has no intake code in either form. Validic describes its `sugars` as added or packaged sugars (paraphrased), a narrower concept than total sugars, so the mapping would need a decision even if a code existed.
+- **Units.** The per-entry calcium and sodium codes have LOINC property `Sub`, which I believe is an amount of substance (moles), not mass; Validic's unit is mg. This is why the contract uses its own code system and mg for sodium (assumption A37). I have not checked the property definition against LOINC's documentation.
+- **Energy.** `9052-2` has the property `EngRat` (an energy rate) although it is used per entry here (assumption A35); its Estimated and Measured variants exist only as 24-hour codes.
+- **24-hour codes are rates** (property such as `MRat`), a total over a day: they are not what this project stores per entry. Our daily totals (M22) are computed, not stored under these codes.
+- **Count.** Validic lists 12 nutrition types; the contract ingests 8 (energy, protein, carbohydrates, fat, fibre, sugar, sodium, water; decision D1). Validic's four others are calcium, cholesterol, saturated fat and unsaturated fat. How many nutrients MyFitnessPal actually writes to Apple Health was recalled by the developer as 14 and is not verified here; the app asks HealthKit for the eight only, so any others are not uploaded.
+
 ## Assumptions to review (flagged per CLAUDE.md)
 
 | # | Assumption | Why it matters |
