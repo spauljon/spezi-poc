@@ -71,7 +71,7 @@ From GitHub's API on 2026-10-29 (the commit list was truncated, so only the newe
 
 **Go/no-go criteria for the spike.** SpeziKt stays only if all of these hold; if one fails, the app uses the Health Connect client directly and the brief is updated:
 
-1. `sample-app` builds with the current stable Android Studio (its bundled JDK, expected 21) and with the installed JDK 21.0.2 and 17.0.6, without forcing build-tool versions that conflict with what the rest of the app needs. Record which JDKs pass. Command-line builds set `JAVA_HOME` or a Gradle toolchain explicitly, never the machine's default JDK (the developer's machine has 17, 21 and 22 installed; 22 is not an LTS). App bytecode targets Java 17 or lower.
+1. `sample-app` builds with the current stable Android Studio (its bundled JetBrains Runtime, JDK 25.0.4 in Android Studio 2026.2.2.9, checked on install 2026-11-11) and with the installed JDK 21.0.2 and 17.0.6, without forcing build-tool versions that conflict with what the rest of the app needs. Record which JDKs pass. Command-line builds set `JAVA_HOME` or a Gradle toolchain explicitly, never the machine's default JDK (the developer's machine has 17, 21 and 22 installed; 22 is not an LTS). App bytecode targets Java 17 or lower.
 2. `sample-app` installs and runs on the Galaxy A15 5G (One UI 8.5, Android 16).
 3. The Health Connect permission flow works on the phone (the requests appear, grants are honoured, the rationale screen opens).
 4. The `health` module can read all five record types we need (heart rate, resting heart rate, HRV RMSSD, sleep session, nutrition) on the phone, counts only.
@@ -182,10 +182,10 @@ Should the capture role be allowed to update, since the FHIR API supports it? Co
 | # | Question | My recommendation |
 |---|---|---|
 | A4 | Android data under the iPhone data's patient, or its own? | **decided:** its own patient, `poc-android-01`, with its own Keycloak login (see "The Android persona") |
-| A5 | Collector: our own over the Health Connect client (a), patch SpeziKt (b), or as is (c)? | (a) |
-| A6 | HRV: a new `hrvRmssd` metric with a project code, or skip HRV on Android? | the new metric (you chose all five) |
+| A5 | Collector: our own over the Health Connect client (a), patch SpeziKt (b), or as is (c)? | **decided (plan approved 2026-11-11): (a)** |
+| A6 | HRV: a new `hrvRmssd` metric with a project code, or skip HRV on Android? | **decided (plan approved 2026-11-11):** the new metric |
 | A7 | Sample identity for edited and growing records | **decided:** record id + sample time + value hash, not the record version (the version would duplicate every sample of a growing record); see section 5 |
-| A8 | Ask for the history permission, to read more than 30 days back? | no for the first milestones (30 days is enough to prove the path); revisit |
+| A8 | Ask for the history permission, to read more than 30 days back? | **decided (plan approved 2026-11-11):** no for the first milestones (30 days is enough to prove the path); revisit |
 | A9 | Group identifier for a record's Observations | **decided: now.** The record id is a second identifier on every Observation; the server is the ledger for deletions and edits; the app keeps only a per-record watermark |
 
 ## 9. Non-goals
