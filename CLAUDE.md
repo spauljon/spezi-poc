@@ -32,7 +32,7 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 
 ## Repository layout and conventions
 - Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `compose.yaml` (the POC stack, project `spezi-poc`), `db/` (Oracle bootstrap SQL), `hapi/`, `idp/` (Keycloak and its proxy, created in M3a), `ios/`, `android/` (planned, M26: native Kotlin with SpeziKt, see `docs/planning/android-brief.md`), `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
-- Commit prefixes: `docs:`, `contract:`, `db:`, `hapi:`, `idp:`, `ios:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
+- Commit prefixes: `docs:`, `contract:`, `db:`, `hapi:`, `idp:`, `ios:`, `android:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
 - Never hand-copy codes, units or categories into a project: read `contract/metrics.json` or test against it, and change it and all consumers in one commit.
 - Run `make hooks` once per clone to enable the pre-commit data-leak guard. It is a backstop for obvious secret and export patterns, not proof that no real data is present.
 - `make test` runs every project's tests; `make guard-all` scans the whole working tree.
