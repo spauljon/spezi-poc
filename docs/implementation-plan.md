@@ -641,6 +641,68 @@ Ordering rationale: server trust first (it gates real data); the synthetic pipel
 
 **Status (2026-10-20):** built and verified, committed and tagged `m23`; **the signed-in check on the deployed page is not recorded** (it was left to the developer). **Contract reader:** the web's contract now lists the eight intake metrics (short label from the id, unit, the contract's own display) and the meal types in order. **API client and parser:** `nutrition()` and `parseNutrition`, which refuses a negative total, a day with no entries, a day outside the range, flag counts above the entries, meals that do not add up to the day (amount or count), a meal or a day twice, and a day both present and listed as missing, each with a control. **The view** (`#/nutrition[?nutrient=]`, a new tab): range 7/14/30/90 days, nutrient buttons (the contract's order and slots), one SVG bar chart from 0 with a text summary, key, arrow-key readout (Left/Right/Home/End) and table twin; a gap is an empty slot with a hollow marker and "No entries", a total of 0 is a baseline mark and the figure 0, and neither is ever averaged as 0; **split by meal** stacks the bars in the contract's meal order; an **energy and macronutrient table** with estimated shares labelled as estimates (4, 4, 9 kcal per gram, shown only when energy is above 0 and all three macronutrients have entries); stored flags in words and a triangle on the chart; "day as recorded" in the page text, the axis and the first column. **Tests:** 343 (282 before; 9 live skipped offline): 37 for the model, parser, contract, route and scale; 24 component tests (what is asked for, gap versus zero in the chart and the table, the summary in words, the keyboard, split by meal and its segment heights, flags, the estimate table, the day-as-recorded wording, a retraction disappearing after Refresh, wrong shape and unreachable service, a contract without intake, and the data-set switch: another patient's totals are fetched for that patient and the first patient's stay off the screen while they load); the accessibility audit passes with gaps, a zero day, flags, meals and the split on; the app test opens the tab by address and switches data sets. **Mutations caught:** fourteen offline (a missing day filled with zero, gaps averaged as 0, an estimate without energy, meal order, the flag sentence, the meal-sum and present-and-missing checks, the gap marker, the zero mark, the chart's name, the End key, another patient's totals staying up, the macronutrient requests, a gap row reading 0) and one live (gaps as zero). **Live:** `make web-seed-nutrition-days` seeds 24 known days (382 synthetic Observations: three gaps, a zero day, an evening entry at 23:40 UTC-7, an entry with no meal, a retracted dessert, a flagged 7,200 kcal entry); `make test-web-live` compares, for all eight nutrients and every day, the API, the view's own cells, the seed's own integer-micro sums and an independent decimal sum of the Observations in HAPI (the dessert is shown to be `entered-in-error` in HAPI and absent from the day): it passes. **Real browser:** the real page code, served in a Chromium-engine browser by a throwaway loopback-only harness with a capture of the synthetic patient's answers (removed afterwards; the pane blocks the sign-in server, so the deployed page could not be signed in to there): bars, gaps, zero marks, stacked meals, focus ring, highlighted column and readout all drew correctly in dark and light and at 750 px and desktop. **Found there (and fixed):** one flagged outlier flattened the other bars with nothing pointing at it (a triangle on that day and a key entry); at phone width the chart's text became unreadable and the macronutrient table pushed the page sideways (each now scrolls in its own box); the long day-definition sentence repeated itself. **Not verified:** the deployed page signed in, a screen reader, touch. **The web service was already rebuilt and recreated.** **To check the deployed page:** sign in at https://macpro16.local:3000 as the clinician, open **Nutrition**, and on the synthetic data set look at the 30-day view: gaps on 09-26, 09-27 and 10-04, the zero day on 09-30, the flagged day on 10-10 (a triangle), the evening snack on 10-02 (it is the 2nd, not the 3rd); press the arrow keys in the chart; **Split by meal**; then switch to **Real data** to see your own totals (they will show on your screen only; please do not paste them or a screenshot into the chat). **Known, unchanged:** two web live checks need synthetic history this stack does not hold (resting heart rate, more than five sleep nights) and one sleep check collides with the golden fixtures that `contract/verify-hapi.py` wrote to the same patient (fixed in `26d99d3`, to be proven on the next reset).
 
+## Android capture (proposed; awaiting review)
+
+Planned 2026-10-29 in [docs/planning/android-brief.md](planning/android-brief.md): an Android capture app (native Kotlin with SpeziKt) that reads the developer's own **Health Connect** data on a Samsung Galaxy A16 (One UI 8.5, Android 16) and sends it to the developer's own HAPI, as the iOS app does for HealthKit. Decisions taken: native Kotlin with SpeziKt (A1), the real-data rule extended to Health Connect (A2, applied to the root `CLAUDE.md`), all five metrics including HRV (A3), and a persona with its own patient `poc-android-01` and its own Keycloak login (A4, 2026-11-11). **No code until you have reviewed the brief and these entries.** Open decisions: A5 (our own collector, because SpeziKt's `health` module advances the changes token before the handler runs and polls in a coroutine only), A6 (HRV is RMSSD in Health Connect, a new metric rather than SDNN), A8 (history permission). **Decided 2026-11-11:** A7 (a sample's identity is record id + sample time + a hash of the value, not the record version, so both patterns work: records with their own period, and one record that grows), A9 (the record id is a second identifier on every Observation, now; the server is the ledger for deletions and edits), and an update rule for the capture role is considered and deferred (the brief's section 5). One milestone at a time, then stop.
+
+### Milestone 24: Android environment, SpeziKt spike and Health Connect probe [android/]
+
+**Goal:** Replace the brief's unverified platform assumptions with what the phone actually shows, and decide whether SpeziKt is used, before anything is built on either.
+
+**Tasks:** a read-only probe on the phone, counts and field presence only (never a value, a food name or an app's data): which apps write to Health Connect (by package name), the record types and how many, the shape of heart-rate series, sleep stages, nutrition and hydration records, whether zone offsets and the metadata fields exist, `recordingMethod`; **samples per record and the time span each record covers, whether records carry a client record id, whether a record's last-modified time is later than its end (updated after writing), how often the same record appears in successive changes, and how often two data origins overlap in time**; the Health Connect version; whether `macpro16.local` resolves from an app and whether the POC CA can be trusted through a network security configuration; whether background work survives on One UI on this 4 GB phone; the Android toolchain installed (Android Studio, JDK 17; installing it needs your approval). **SpeziKt spike (go/no-go):** clone SpeziKt at a pinned commit and, against the criteria in the brief's section 2, check that `sample-app` builds with the current Android Studio and JDK 17 without conflicting build-tool versions, installs and runs on the Galaxy A16, shows a working Health Connect permission flow, reads the five record types we need (counts only), and how long background collection runs with the app closed on One UI; note whether `main` has moved since 2026-09-13. If any gating criterion fails, the app uses the Health Connect client directly and the brief is updated; the decision is recorded either way.
+
+**Verify:** the brief's **[UNVERIFIED]** items are each marked verified or corrected, with counts only; the SpeziKt go/no-go is recorded with its reasons; nothing leaves the phone.
+
+### Milestone 25: Contract 1.6.0 and Health Connect golden fixtures [contract/, hapi/, idp/]
+
+**Goal:** The contract describes Health Connect data exactly, with a second implementation checking it.
+
+**Tasks:** `healthConnect` fields per metric, the Health Connect sample identity rule (**record id + sample time + a hash of the value; not the record version**, which would duplicate a growing record's samples), the **record id as a second identifier (a group identifier)** on every Observation, `systems.identifier.healthConnect` and `systems.metaSource.healthConnect`, the new `hrvRmssd` metric (own code system, no LOINC code found), the nutrient group identifier, the source-package and device rules; the independent generator's Health Connect cases (pattern (a), records that each cover their own period; pattern (b), one record delivered several times as it grows; an edited sample value; a deleted record; a nutrition record with all nutrients; sleep stages; null zone offsets) and `contract/check.py` with a control for each refusal; the HAPI retraction rule for the new identifier system (and the contract check that keeps it equal); a Keycloak public client `android-capture`, a Keycloak user for the Android persona (proposed `android-user`, role `capture-writer`, password generated into the git-ignored `idp/.env.local`), and `hapi/auth.py seed` extended to create the Patient `poc-android-01` (the app also creates it on first upload).
+
+**Verify:** `make test-contract`; `contract/verify-hapi.py` accepts the new shapes on the live stack; `hapi/auth.py check` shows the retraction of a Health Connect identifier; the analytics and web suites still pass.
+
+### Milestone 26: Android skeleton [android/]
+
+**Goal:** A SpeziKt project that signs in, trusts the POC CA, maps with the contract and uploads synthetic data.
+
+**Tasks:** the project (SpeziKt as project dependencies, pinned to a commit), the Compose home screen, OIDC sign-in with AppAuth and a token store in the Keystore, the network security configuration, the Kotlin mapper tested against the shared golden fixtures, the synthetic source behind the same ingest interface, the SQLite queue and the upload to the synthetic patient. Packages beyond SpeziKt need your approval (candidates in the brief).
+
+**Verify:** the mapper equals every golden fixture; a synthetic upload appears on the live stack; the Android tests and the repo's guard pass.
+
+### Milestone 27: Health Connect ingest [android/]
+
+**Goal:** Real Health Connect records reach the queue without loss.
+
+**Tasks:** permissions, our own collector with an acknowledged hand-off (the changes token advances only after the queue write commits), the five metrics, series samples, a per-record watermark (the last sample time sent, an optimisation: the record-id group identifier on the server is the source of truth for deletions and edits), **bounded page and batch sizes**, the fixed start window, the data-source screen, and **a test writer of synthetic Health Connect records** covering both patterns, an edit and a deletion.
+
+**Verify:** the seven scenarios in the brief's section 10 with a fake Health Connect, then the synthetic writer on the phone: unique records; a record delivered three times as it grows (each sample created once); a changed sample value (retract and recreate); an identical redelivery (no change); a record deleted after upload (all retracted); a record deleted before upload (nothing sent); a handler failure (the token does not advance, the retry converges); a test with a large synthetic record that bounds memory; on the phone with real Health Connect data, counts only.
+
+### Milestone 28: Background sync, retraction and diagnostics [android/]
+
+**Goal:** Data flows with the app closed, and edits and deletions are retracted, not double counted.
+
+**Tasks:** WorkManager scheduling, retry with backoff, retraction from deletion changes and superseded records, sign-in resumes a blocked upload, the attempt history, pause, the runbook lines.
+
+**Verify:** the iOS M18 to M21 behaviours reproduced on Android with the same kind of tests and mutations; **a process-death test** (the app force-stopped between reading a change and committing it to the queue loses nothing, and the retry converges); a measurement on the phone (counts and times only) including **peak memory during an upload** on this 4 GB phone.
+
+### Milestone 29: Server, analytics and web alignment [analytics/, web/, docs/]
+
+**Goal:** Android data is visible and correct in the clinician view.
+
+**Tasks:** `hrvRmssd` through analytics and the web charts, the persona's data set (`poc-android-01`) as a third choice in the web switch with its own wording (neither synthetic nor the developer's real data), the nutrition group identifier, `make analytics-rescan` where needed, the runbooks.
+
+**Verify:** the live suites and `analytics/verify-intake.py` pass for the Android patient; nothing double counts.
+
+### Milestone 30: Real data on the phone and verification [android/]
+
+**Goal:** The developer's own Health Connect data runs end to end under the same rules as the HealthKit data.
+
+**Tasks:** the real-data path on the phone, the accessibility checks, the `android-device` runbook, a source test that no file handling real samples logs or prints.
+
+**Verify:** counts only; the totals agree with an independent sum; nothing real in the repo, logs or conversation.
+
+---
+
 ## Data Model Integration
 
 | Entity | FHIR Resource | Milestone | Notes |
