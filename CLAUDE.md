@@ -3,10 +3,10 @@
 Learning project: spec-first, agent-driven app development with Stanford Spezi (SpeziVibe skills). The developer is an experienced engineer with deep EHR/FHIR background but is new to Spezi and agent workflows. Don't explain healthcare or FHIR basics; do explain Spezi concepts and what each skill is doing.
 
 ## Data
-- Real health data is allowed only as the developer's own HealthKit data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
-- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. Token verification passed in M4: every `/fhir` request needs a verified Keycloak bearer token (only `GET /fhir/metadata` is anonymous), so real HealthKit data may go to that endpoint and only that one. There is no plain-HTTP FHIR endpoint.
+- Real health data is allowed only as the developer's own HealthKit data and, since 2026-10-29 (decision A2 in `docs/planning/android-brief.md`), the developer's own Android Health Connect data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
+- Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. Token verification passed in M4: every `/fhir` request needs a verified Keycloak bearer token (only `GET /fhir/metadata` is anonymous), so real HealthKit and Health Connect data may go to that endpoint and only that one. There is no plain-HTTP FHIR endpoint.
 - Everything else is synthetic or sandbox only: tests, fixtures, docs, and example data. Never real patient identifiers or anyone else's data.
-- Keep a synthetic data source behind the same ingest interface as HealthKit for development, tests, and the simulator.
+- Keep a synthetic data source behind the same ingest interface as HealthKit (and Health Connect) for development, tests, and the simulator or emulator.
 
 ## Isolation
 - This project must never write to, reconfigure, restart, reset, or share volumes or ports with the governance project's stack (`~/repositories/pghd-governance-mapping-tool-service`). Copy and adapt its files; never mount or reference them. Reading them is fine.
@@ -31,7 +31,7 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 - Platform choices (React Native vs Apple-native), and anything that installs or connects external services (packages beyond the template, accounts, cloud, EHR sandboxes, MCP servers).
 
 ## Repository layout and conventions
-- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `compose.yaml` (the POC stack, project `spezi-poc`), `db/` (Oracle bootstrap SQL), `hapi/`, `idp/` (Keycloak and its proxy, created in M3a), `ios/`, `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
+- Monorepo: `docs/` (planning briefs, FHIR spec, implementation plan), `contract/` (`metrics.json`, the single machine-readable code table), `compose.yaml` (the POC stack, project `spezi-poc`), `db/` (Oracle bootstrap SQL), `hapi/`, `idp/` (Keycloak and its proxy, created in M3a), `ios/`, `android/` (planned, M26: native Kotlin with SpeziKt, see `docs/planning/android-brief.md`), `analytics/`, `web/`. Each project directory has its own `CLAUDE.md`; these root rules apply everywhere.
 - Commit prefixes: `docs:`, `contract:`, `db:`, `hapi:`, `idp:`, `ios:`, `analytics:`, `web:`, `repo:`. Tag each approved milestone `m00`, `m01`, ...
 - Never hand-copy codes, units or categories into a project: read `contract/metrics.json` or test against it, and change it and all consumers in one commit.
 - Run `make hooks` once per clone to enable the pre-commit data-leak guard. It is a backstop for obvious secret and export patterns, not proof that no real data is present.
