@@ -75,6 +75,9 @@ class MainActivity : ComponentActivity() {
             addView(button("5. Read changes since the token") {
                 lifecycleScope.launch { client()?.let { show(changes.readChanges(it)) } }
             })
+            addView(button("6. Check the network (HAPI, TLS trust)") {
+                lifecycleScope.launch { show(NetworkProbe().check()) }
+            })
             addView(output)
         }
         setContentView(

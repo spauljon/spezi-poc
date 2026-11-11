@@ -1,7 +1,7 @@
-# Same Gradle, AGP and Kotlin as SpeziKt's sample-app, which M24 verified builds on JDK 17 and 21 (not on JDK 25).
+# AGP, Kotlin and Gradle (the wrapper) as upgraded by Android Studio on 2026-11-11; see android/CLAUDE.md.
 [versions]
-agp = "8.13.0"
-kotlin = "2.1.21"
+agp = "9.5.1"
+kotlin = "2.2.10"
 connectClient = "1.1.0"
 coreKtx = "1.15.0"
 activity = "1.10.1"
