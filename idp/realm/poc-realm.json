@@ -50,6 +50,30 @@
       ]
     },
     {
+      "clientId": "android-capture",
+      "name": "POC Android capture app",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["com.aboutobjects.healthgate.android:/oauth2redirect"],
+      "webOrigins": [],
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        { "name": "hapi-fhir-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "hapi-fhir", "id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true" } },
+        { "name": "poc-roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "id.token.claim": "false", "access.token.claim": "true", "userinfo.token.claim": "false", "introspection.token.claim": "true" } }
+      ]
+    },
+    {
       "clientId": "clinician-web",
       "name": "POC clinician web app",
       "enabled": true,
@@ -143,6 +167,16 @@
       "firstName": "Capture",
       "lastName": "Synthetic",
       "credentials": [{ "type": "password", "value": "${POC_CAPTURE_USER_PASSWORD}", "temporary": false }],
+      "realmRoles": ["capture-writer"]
+    },
+    {
+      "username": "android-user",
+      "enabled": true,
+      "email": "android-user@example.invalid",
+      "emailVerified": true,
+      "firstName": "Android",
+      "lastName": "Synthetic",
+      "credentials": [{ "type": "password", "value": "${POC_ANDROID_USER_PASSWORD}", "temporary": false }],
       "realmRoles": ["capture-writer"]
     },
     {

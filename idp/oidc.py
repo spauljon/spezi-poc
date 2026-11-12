@@ -19,6 +19,7 @@ ISSUER = BASE + "/realms/poc"
 TLS_DIR = os.environ.get("POC_TLS_DIR", os.path.expanduser("~/.poc-ca"))
 ENV_FILE = os.environ.get("POC_IDP_ENV_FILE", os.path.join(HERE, ".env.local"))
 IOS_REDIRECT = "com.aboutobjects.healthgate:/oauth2redirect"
+ANDROID_REDIRECT = "com.aboutobjects.healthgate.android:/oauth2redirect"
 TOKEN_PATH = "/realms/poc/protocol/openid-connect/token"
 AUTH_PATH = "/realms/poc/protocol/openid-connect/auth"
 
@@ -74,6 +75,7 @@ def fetch_token(who):
                 "client_secret": env["POC_WORKER_CLIENT_SECRET"]}
     else:
         user = {"capture": ("capture-user", "POC_CAPTURE_USER_PASSWORD"),
+                "android": ("android-user", "POC_ANDROID_USER_PASSWORD"),
                 "clinician": ("clinician-user", "POC_CLINICIAN_USER_PASSWORD")}[who]
         form = {"grant_type": "password", "client_id": "poc-devtest", "username": user[0], "password": env[user[1]]}
     status, _, body = http("POST", TOKEN_PATH, form)
@@ -85,8 +87,8 @@ def fetch_token(who):
 
 
 def cmd_token(argv):
-    if not argv or argv[0] not in ("worker", "capture", "clinician"):
-        sys.exit("usage: oidc.py token worker|capture|clinician [--raw]")
+    if not argv or argv[0] not in ("worker", "capture", "android", "clinician"):
+        sys.exit("usage: oidc.py token worker|capture|android|clinician [--raw]")
     status, data = fetch_token(argv[0])
     if status != 200 or "access_token" not in data:
         print(json.dumps({"status": status, "error": data.get("error"), "error_description": data.get("error_description")}))
@@ -149,6 +151,7 @@ def cmd_check():
     # --- tokens: who gets what
     for who, want_role, other_roles, user in (("worker", "worker-reader", ("capture-writer", "clinician-reader"), None),
                                               ("capture", "capture-writer", ("worker-reader", "clinician-reader"), "capture-user"),
+                                              ("android", "capture-writer", ("worker-reader", "clinician-reader"), "android-user"),
                                               ("clinician", "clinician-reader", ("capture-writer", "worker-reader"), "clinician-user")):
         status, data = fetch_token(who)
         if status != 200 or "access_token" not in data:
@@ -184,7 +187,7 @@ def cmd_check():
     status, _, body = http("POST", TOKEN_PATH, {"grant_type": "password", "client_id": "poc-devtest", "username": "nobody", "password": "x"})
     err = json.loads(body).get("error") if body.startswith("{") else None
     expect(status in (400, 401) and err == "invalid_grant", "unknown user / bad password is rejected (%s)" % err, "bad user: status %s error %r" % (status, err))
-    for client in ("ios-capture", "clinician-web"):
+    for client in ("ios-capture", "android-capture", "clinician-web"):
         status, _, body = http("POST", TOKEN_PATH, {"grant_type": "password", "client_id": client, "username": "capture-user", "password": env["POC_CAPTURE_USER_PASSWORD"]})
         err = json.loads(body).get("error") if body.startswith("{") else None
         expect(status in (400, 401) and err == "unauthorized_client", "%s cannot use the password grant (%s)" % (client, err), "%s password grant: status %s error %r" % (client, status, err))
@@ -193,7 +196,7 @@ def cmd_check():
         expect(status in (400, 401) and err in ("unauthorized_client", "invalid_client"), "%s cannot use client credentials (%s)" % (client, err), "%s client credentials: status %s error %r" % (client, status, err))
 
     # --- PKCE is enforced (the attribute name was unverified: only behavior proves it)
-    for client, redirect in (("ios-capture", IOS_REDIRECT), ("clinician-web", "https://macpro16.local:3000/cb")):
+    for client, redirect in (("ios-capture", IOS_REDIRECT), ("android-capture", ANDROID_REDIRECT), ("clinician-web", "https://macpro16.local:3000/cb")):
         status, headers, body = http("GET", auth_query(client, redirect))
         loc = headers.get("location", "")
         expect(status == 302 and "error=" in loc and "code_challenge" in urllib.parse.unquote_plus(loc),
@@ -206,6 +209,10 @@ def cmd_check():
         expect(status == 200 and "<form" in body, "%s: a PKCE S256 request reaches the login page" % client, "%s: S256 request returned %s (no login form)" % (client, status))
 
     # --- redirect URI must match exactly
+    status, headers, body = http("GET", auth_query("android-capture", IOS_REDIRECT, code_challenge=pkce_pair(), code_challenge_method="S256"))
+    loc = headers.get("location", "")
+    expect(not (status == 200 and "<form" in body), "android-capture refuses the iOS app's redirect_uri (each client has its own)",
+           "android-capture accepted the iOS redirect_uri: status %s location %r" % (status, loc[:120]))
     status, headers, body = http("GET", auth_query("ios-capture", "https://evil.example/cb", code_challenge=pkce_pair(), code_challenge_method="S256"))
     loc = headers.get("location", "")
     expect("evil.example" not in loc and not (status == 200 and "<form" in body), "a foreign redirect_uri is refused (no redirect, no login form)", "foreign redirect_uri: status %s location %r" % (status, loc[:100]))

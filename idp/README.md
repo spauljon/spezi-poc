@@ -90,6 +90,7 @@ Imported from `realm/poc-realm.json` at the first start on an empty database (`-
 | Client | Kind | Used by | Grant |
 |---|---|---|---|
 | `ios-capture` | public, PKCE S256 required | the iOS capture app (M5, M8) | authorization code; `offline_access` allowed. Redirect `com.aboutobjects.healthgate:/oauth2redirect` |
+| `android-capture` | public, PKCE S256 required | the Android capture app (M25 defines it; M26 builds the app) | authorization code; `offline_access` allowed. Redirect `com.aboutobjects.healthgate.android:/oauth2redirect` (its own: `android-capture` refuses the iOS app's) |
 | `clinician-web` | public, PKCE S256 required | the web app (M12) | authorization code. Redirect `https://macpro16.local:3000/*` (placeholder origin, revisit in M12) |
 | `analytics-worker` | confidential | the aggregation worker (M9) | client credentials only; its service account holds `worker-reader` |
 | `poc-devtest` | public | scripts only (`oidc.py`), **never the apps** | password grant, so a user token can be fetched without a browser |
@@ -97,6 +98,7 @@ Imported from `realm/poc-realm.json` at the first start on an empty database (`-
 | User (synthetic) | Realm role |
 |---|---|
 | `capture-user` | `capture-writer` |
+| `android-user` | `capture-writer` (the Android persona; password `POC_ANDROID_USER_PASSWORD` in `.env.local`) |
 | `clinician-user` | `clinician-reader` |
 | `service-account-analytics-worker` | `worker-reader` |
 

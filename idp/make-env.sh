@@ -7,6 +7,7 @@
 #   POC_WORKER_CLIENT_SECRET      secret of the analytics-worker client (client credentials)
 #   POC_CAPTURE_USER_PASSWORD     password of the synthetic capture-user
 #   POC_CLINICIAN_USER_PASSWORD   password of the synthetic clinician-user
+#   POC_ANDROID_USER_PASSWORD     password of the synthetic android-user (the Android persona, M25)
 #   KC_DB_USERNAME, KC_DB_PASSWORD  Keycloak's Oracle application account (value shared with db/.env.local)
 # The POC_* values are read by Keycloak's realm import as ${ENV} placeholders (idp/realm/poc-realm.json).
 set -euo pipefail
@@ -27,6 +28,7 @@ add KC_BOOTSTRAP_ADMIN_PASSWORD "$(gen)"
 add POC_WORKER_CLIENT_SECRET "$(gen)"
 add POC_CAPTURE_USER_PASSWORD "$(gen)"
 add POC_CLINICIAN_USER_PASSWORD "$(gen)"
+add POC_ANDROID_USER_PASSWORD "$(gen)"
 
 # Keycloak's database account (M3c). The password is the one db/make-env.sh generated for the Oracle user, so the
 # account the init script creates and the one Keycloak logs in with are the same by construction.
