@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "healthgate-android"
+include(":probe")
 include(":app")
