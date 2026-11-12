@@ -1,9 +1,9 @@
-.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-analytics-live analytics-migrate analytics-rescan analytics-run analytics-api web-dev web-seed-dense-day web-seed-sleep-nights web-seed-nutrition-days test-web-live test-analytics test-web \
+.PHONY: test test-contract test-db test-idp test-hapi test-ios test-ios-ui test-ios-integration test-android test-android-device test-android-livetest-analytics-live analytics-migrate analytics-rescan analytics-run analytics-api web-dev web-seed-dense-day web-seed-sleep-nights web-seed-nutrition-days test-web-live test-analytics test-web \
         guard guard-all guard-selftest hooks \
         stack-env tls stack-up stack-down stack-ps stack-reset stack-verify \
         isolation-before isolation-after
 
-test: test-contract test-db test-idp test-hapi test-ios test-analytics test-web
+test: test-contract test-db test-idp test-hapi test-ios test-android test-analytics test-web
 
 # Placeholders until each project has tests (replaced milestone by milestone).
 test-contract:  ## offline contract checks: structure, LOINC check digits, bundled copy, golden fixtures, retired app names
@@ -31,6 +31,12 @@ test-ios-ui:
 	@./scripts/ios-test.sh --ui
 test-ios-integration:  ## upload to the live POC stack (synthetic data); needs the stack up and the CA trusted in the simulator
 	@./scripts/ios-test.sh --integration
+test-android:  ## Android unit tests on the JVM, no device (JDK 17 or 21 and the Android SDK); `make test-android-live` needs the stack
+	@./scripts/android-test.sh
+test-android-device:  ## the on-device tests (SQLite queue, Keystore) on a connected phone or a running emulator
+	@./scripts/android-test.sh --device
+test-android-live:  ## upload a synthetic window to the live stack with the Kotlin engine (as android-user); needs the stack up
+	@./scripts/android-live-test.sh
 test-analytics:  ## worker unit and contract tests (Node); `make test-analytics-live` needs the stack
 	@./scripts/check-node.sh && cd analytics && { [ -d node_modules ] || npm ci --silent; } && npm test --silent
 test-analytics-live:  ## rollups against the live stack: HAPI + Keycloak + Oracle (synthetic data)
