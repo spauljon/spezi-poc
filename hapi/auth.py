@@ -2,6 +2,7 @@
 """HAPI token verification and authorization: seed and end-to-end checks (M4).
 
   python3 hapi/auth.py seed    create-or-find the one synthetic Patient using a capture-writer token; print its id
+  python3 hapi/auth.py seed android   the same for the Android persona's Patient (poc-android-01), with android-user's token
   python3 hapi/auth.py check   run the authentication/authorization matrix; exit 1 on any FAIL
 
 Real tokens come from the POC realm through the public proxy (idp/oidc.py). Tokens go to curl on STDIN, never on a
@@ -27,6 +28,7 @@ BASE = ORIGIN + "/fhir"
 TLS_DIR = os.environ.get("POC_TLS_DIR", os.path.expanduser("~/.poc-ca"))
 PATIENT_SYSTEM = "http://aboutobjects.com/fhir/identifier/poc-patient"
 PATIENT_VALUE = "poc-0001"
+ANDROID_PATIENT_VALUE = "poc-android-01"
 OBS_SYSTEM = "http://aboutobjects.com/fhir/identifier/poc-observation"
 OBS_VALUE = "auth-check-0001"
 DEVICE_SYSTEM = "http://aboutobjects.com/fhir/identifier/poc-device"
@@ -79,15 +81,15 @@ def parts(tok):
     return json.loads(base64.urlsafe_b64decode(pad(h))), json.loads(base64.urlsafe_b64decode(pad(p))), s
 
 
-def patient_resource():
+def patient_resource(value=PATIENT_VALUE):
     return {"resourceType": "Patient",
-            "identifier": [{"system": PATIENT_SYSTEM, "value": PATIENT_VALUE}],
-            "name": [{"family": "Synthetic", "given": ["Poc"]}]}
+            "identifier": [{"system": PATIENT_SYSTEM, "value": value}],
+            "name": [{"family": "Synthetic", "given": ["Android" if value == ANDROID_PATIENT_VALUE else "Poc"]}]}
 
 
-def seed(tok):
-    ident = "%s|%s" % (PATIENT_SYSTEM, PATIENT_VALUE)
-    status, text = call("POST", BASE + "/Patient", tok, patient_resource(), {"If-None-Exist": "identifier=" + ident})
+def seed(tok, value=PATIENT_VALUE):
+    ident = "%s|%s" % (PATIENT_SYSTEM, value)
+    status, text = call("POST", BASE + "/Patient", tok, patient_resource(value), {"If-None-Exist": "identifier=" + ident})
     if status not in (200, 201):
         return None, status
     if status == 201:
@@ -194,6 +196,41 @@ def retraction_checks(pid, cap, cli, wrk):
     expect("the second Observation can be retracted too (leaves the stack in the retracted state)", st, 200)
 
 
+def retraction_checks_healthconnect(pid, cap):
+    """M25: the same retraction for the Health Connect identifier systems (read from the contract, not copied). An Observation
+    carries a sample identity and a group identity; only the sample identity may retract (it names one Observation), the group
+    identity names every Observation a record produced and is a lookup key. The accepted request is the control for the refusal."""
+    ident = json.load(open(os.path.join(HERE, "..", "contract", "metrics.json")))["systems"]["identifier"]
+    sample_sys, group_sys = ident["healthConnect"], ident["healthConnectGroup"]
+    print("== capture-writer: retract a Health Connect Observation by its sample identity, never by its group")
+    run = "%x" % int.from_bytes(os.urandom(4), "big")
+    a, b, group = "auth-check-hc-a-" + run, "auth-check-hc-b-" + run, "auth-check-hc-group-" + run + "#1"  # a group value can hold '#'
+    for v in (a, b):
+        obs = observation(pid)
+        obs["identifier"] = [{"system": sample_sys, "value": v}, {"system": group_sys, "value": group}]
+        st, _ = call("POST", BASE + "/Observation", cap, obs, {"If-None-Exist": "identifier=%s|%s" % (sample_sys, v)})
+        expect("create the synthetic Health Connect Observation %s to retract" % v, st, [200, 201])
+    by = lambda system, value: BASE + "/Observation?" + urllib.parse.urlencode({"identifier": "%s|%s" % (system, value)})
+
+    def statuses(system, value):
+        st, text = call("GET", by(system, value), cap, None, {"Cache-Control": "no-cache"})
+        return sorted(e["resource"].get("status") for e in json.loads(text).get("entry", [])) if st == 200 else None
+
+    expect("the group lookup the app will use finds both Observations of the record", statuses(group_sys, group), [["final", "final"]])
+    st, _ = call("PATCH", by(group_sys, group), cap, RETRACT, PATCH_TYPE)
+    expect("a retraction found by the GROUP identifier is refused (it would name every Observation of the record)", st, 403)
+    expect("the refusal changed nothing (both still final)", (statuses(sample_sys, a), statuses(sample_sys, b)), [(["final"], ["final"])])
+    st, _ = call("PATCH", by(sample_sys, a), cap, RETRACT, PATCH_TYPE)
+    expect("CONTROL: a retraction found by the Health Connect SAMPLE identifier is accepted", st, 200)
+    expect("only that Observation is entered-in-error", (statuses(sample_sys, a), statuses(sample_sys, b)), [(["entered-in-error"], ["final"])])
+    expect("the group now shows one retracted and one final Observation (what the app compares with the record)", statuses(group_sys, group),
+           [["entered-in-error", "final"]])
+    st, _ = call("PATCH", by(sample_sys, "auth-check-hc-no-such-sample"), cap, RETRACT, PATCH_TYPE)
+    expect("retracting a Health Connect sample the server never received answers 404 (done, for the app)", st, 404)
+    st, _ = call("PATCH", by(sample_sys, b), cap, RETRACT, PATCH_TYPE)
+    expect("the second Observation can be retracted too (leaves the stack in the retracted state)", st, 200)
+
+
 def expect(label, got, want):
     want = want if isinstance(want, (list, tuple, set)) else [want]
     if got in want:
@@ -203,8 +240,8 @@ def expect(label, got, want):
         FAILS.append(label)
 
 
-def cmd_seed():
-    pid, status = seed(token("capture"))
+def cmd_seed(which="capture"):
+    pid, status = seed(token("android"), ANDROID_PATIENT_VALUE) if which == "android" else seed(token("capture"))
     if pid is None:
         sys.exit("seed failed (HTTP %s)" % status)
     print("Patient/%s (HTTP %s)" % (pid, status))
@@ -224,6 +261,12 @@ def cmd_check():
         return 1
     st, _ = call("GET", BASE + "/Patient/" + pid, cli)
     expect("clinician-reader: read Patient/%s" % pid, st, 200)
+    apid, st = seed(token("android"), ANDROID_PATIENT_VALUE)
+    expect("android capture-writer: conditional create of the persona's Patient (poc-android-01)", st, [200, 201])
+    if apid is not None:
+        st, _ = call("GET", BASE + "/Patient/" + apid, cli)
+        expect("clinician-reader: read the persona's Patient/%s" % apid, st, 200)
+        expect("the persona's Patient is a different Patient from poc-0001", apid != pid, True)
 
     print("== no credentials")
     for label, m, path, body in (("GET Patient", "GET", "/Patient", None), ("GET Observation search", "GET", "/Observation?code=8867-4", None),
@@ -320,6 +363,7 @@ def cmd_check():
     expect("a refused Bundle applied nothing (the Patient is still there)", st, 200)
 
     retraction_checks(pid, cap, cli, wrk)
+    retraction_checks_healthconnect(pid, cap)
 
     for who, tok in (("clinician-reader", cli), ("worker-reader", wrk)):
         print("== %s: read-only" % who)
@@ -363,6 +407,8 @@ def cmd_check():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("seed", "check"):
-        sys.exit(__doc__)
-    sys.exit(cmd_seed() if sys.argv[1] == "seed" else cmd_check())
+    if sys.argv[1:2] == ["seed"] and sys.argv[2:] in ([], ["android"]):
+        sys.exit(cmd_seed(*sys.argv[2:]))
+    if sys.argv[1:] == ["check"]:
+        sys.exit(cmd_check())
+    sys.exit(__doc__)

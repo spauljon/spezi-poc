@@ -19,9 +19,11 @@ class RetractionPolicyTest {
 
 	private static final String HEALTHKIT = "http://aboutobjects.com/fhir/identifier/healthkit-sample";
 	private static final String SYNTHETIC = "http://aboutobjects.com/fhir/identifier/synthetic-sample";
+	private static final String HEALTHCONNECT = "http://aboutobjects.com/fhir/identifier/healthconnect-sample";
+	private static final String HEALTHCONNECT_GROUP = "http://aboutobjects.com/fhir/identifier/healthconnect-group";
 	private static final String PATCH = "[{\"op\":\"replace\",\"path\":\"/status\",\"value\":\"entered-in-error\"}]";
 
-	private final RetractionPolicy policy = new RetractionPolicy(List.of(HEALTHKIT, SYNTHETIC));
+	private final RetractionPolicy policy = new RetractionPolicy(List.of(HEALTHKIT, SYNTHETIC, HEALTHCONNECT));
 
 	private String check(RequestTypeEnum type, String resource, String id, Map<String, String[]> params, String contentType, String body) {
 		return policy.refusal(type, resource, id, params, contentType, body == null ? null : body.getBytes(StandardCharsets.UTF_8));
@@ -50,6 +52,16 @@ class RetractionPolicyTest {
 		// white space inside the JSON is not a different operation
 		assertNull(check(RequestTypeEnum.PATCH, "Observation", null, identifier(HEALTHKIT + "|x"), "application/json-patch+json",
 				"[ { \"path\" : \"/status\", \"value\" : \"entered-in-error\", \"op\" : \"replace\" } ]"));
+	}
+
+	@Test
+	void aHealthConnectSampleIsRetractedButItsGroupIsNot() {
+		String sample = "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4";
+		// the control: the Health Connect sample identifier is one of the app's own, so it is accepted
+		assertNull(check(RequestTypeEnum.PATCH, "Observation", null, identifier(HEALTHCONNECT + "|" + sample), "application/json-patch+json", PATCH));
+		// one change: the group identifier system. It names every Observation of a record (a lookup key), so it is refused
+		assertNotNull(check(RequestTypeEnum.PATCH, "Observation", null, identifier(HEALTHCONNECT_GROUP + "|" + sample), "application/json-patch+json", PATCH));
+		assertNotNull(check(RequestTypeEnum.PATCH, "Observation", null, identifier(HEALTHCONNECT_GROUP + "|a53ba29a#1"), "application/json-patch+json", PATCH));
 	}
 
 	@Test

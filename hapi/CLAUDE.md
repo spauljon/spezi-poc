@@ -8,8 +8,9 @@ Follow the root [CLAUDE.md](../CLAUDE.md) (data rules, milestone workflow, FHIR 
 - Changing only `application.yaml` was observed NOT to be picked up by `make stack-up` (the container was left as it was; a mutation test passed vacuously because of it). Run `scripts/compose.sh up -d --force-recreate --no-deps hapi`, then confirm the change inside the container.
 - Do not run write-capable checks against a build with authorization weakened: no role can delete, so stray data needs an Oracle volume reset.
 - Retraction (M21): the capture role's only update is the conditional status patch, guarded by `RetractionPolicy` and carried by `RetractionRule` (see README). Never widen either to make a request pass: HAPI's own patch rule does not match a conditional PATCH in 7.6.0, which is why the rule is ours. A change to the permitted request means changing both, `RetractionPolicyTest`, and the live cases in `hapi/auth.py`, with a refusal proved against the accepted request.
+- Health Connect (M25): `healthconnect-sample` is a retraction system, the `healthconnect-group` system is deliberately NOT (it names every Observation a record produced: a lookup key, never a retraction key). `RetractionPolicyTest` and `retraction_checks_healthconnect` in `hapi/auth.py` pin both, with the accepted sample request as the control; `contract/check.py` keeps the configured list equal to the contract's.
 - Tests: `make test-hapi` (extension unit tests, run in the image build); `python3 hapi/auth.py check` (live matrix, needs the stack); `make test` runs the first and `make stack-verify` runs the second.
 - Never touch the governance project's HAPI or its files; copy and adapt only (provenance is in README.md).
-- Milestones: M1, M2, M4, M21
+- Milestones: M1, M2, M4, M21, M25
 - Contract: codes, units and categories come from `contract/metrics.json` (added in M6), never hand-copied.
 - Commit prefix: `hapi:`
