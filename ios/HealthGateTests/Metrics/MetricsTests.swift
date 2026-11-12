@@ -171,6 +171,19 @@ struct MetricContractTests {
         #expect(throws: MetricRegistry.LoadError.self) { try MetricRegistry(data: data) }
     }
     
+    @Test("a metric coded in the project's own system needs that system: the contract's hrvRmssd (Health Connect only) is read, and dropping the system is refused")
+    func ownCodeSystemIsRequired() throws {
+        // the control: the unchanged contract (which has hrvRmssd, a custom-coded quantity metric) loads, and the app never emits it
+        let registry = try MetricRegistry(data: try mutated { _ in })
+        #expect(registry.customSystem("metric") != nil)
+        let data = try mutated { json in
+            var systems = json["systems"] as? [String: Any] ?? [:]
+            systems.removeValue(forKey: "metric")
+            json["systems"] = systems
+        }
+        #expect(throws: MetricRegistry.LoadError.inconsistent("hrvRmssd: custom code in an unknown system metric")) { try MetricRegistry(data: data) }
+    }
+    
     @Test("every metric that HealthKit can supply names the HealthKit identifier it is read from")
     func healthKitIdentifiers() throws {
         let registry = try registry()

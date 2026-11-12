@@ -1,6 +1,6 @@
 {
-  "contractVersion": "1.5.0",
-  "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app (bundled copy, byte-identical, enforced by tests), and later by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
+  "contractVersion": "1.6.0",
+  "description": "Single source of truth for how abstract capture samples map to FHIR R4 Observations (docs/planning/fhir-data-model.md). Read by the iOS app and the Android app (bundled copies, byte-identical, enforced by tests), and by the analytics worker and the web app. Never hand-copy a code, unit or category from here: read this file.",
   "fhirVersion": "4.0.1",
   "verification": {
     "verifiedOn": "2026-10-10",
@@ -11,6 +11,7 @@
     "heartRateProfile": "http://hl7.org/fhir/StructureDefinition/heartrate (R4, status draft) fixes category vital-signs, valueQuantity.system http://unitsofmeasure.org and valueQuantity.code /min, and requires subject and effective[x]. No meta.profile claim is made (spec: Conformance).",
     "nutrientLoinc": "9052-2 'Calorie intake total', 9079-5 'Protein intake Estimated', 9059-7 'Carbohydrate intake Estimated', 9066-2 'Fat intake Estimated' and 8984-7 'Fluid intake Estimated' each matched exactly in NLM Clinical Tables (loinc_items v3) on 2026-10-19; display is the LONG_COMMON_NAME and each has a valid check digit. LOINC's property for 9052-2 is an energy RATE, not an amount (A35); 8984-7 is all fluid, not only water (A36). No usable per-entry LOINC code was found for fiber, sugar or sodium (only 24-hour rate codes, a deprecated PhenX measure, and a sodium code measured in mmol), so those three use the project's own code system (A37).",
     "nutrientUcum": "kcal, g, mg and mL returned true from the NLM UCUM service (isValidUCUM) on 2026-10-16.",
+    "healthConnect": "On 2026-11-12 every Health Connect record class, property, stage-type, device-type, recording-method and meal-type constant and every unit accessor named in the metrics' healthConnect entries and in the healthConnect rules was read from the classes of androidx.health.connect:connect-client 1.1.0 with javap (HeartRateRecord.Sample.beatsPerMinute, RestingHeartRateRecord.beatsPerMinute, HeartRateVariabilityRmssdRecord.heartRateVariabilityMillis, SleepSessionRecord.stages with Stage.stage, startTime, endTime, NutritionRecord.energy/protein/totalCarbohydrate/totalFat/dietaryFiber/sugar/sodium/mealType, HydrationRecord.volume, Energy.kilocalories, Mass.grams and milligrams, Volume.milliliters, Metadata recording methods 0 to 3, Device types 0 to 8, MealType 0 to 4). Observed on a Galaxy A15 5G on 2026-11-11 (M24): a MyFitnessPal NutritionRecord carries the nutrient fields energy, protein, totalCarbohydrate, totalFat, dietaryFiber, sugar, sodium (mapped) and others (not mapped), a mealType, no food name, no client record id and no device.",
     "ownCodeSystems": "systems.nutrient, observationDomain and mealType are this project's own: there is no external terminology to check them against, and none is claimed.",
     "deviceNameTypeOther": "other is in http://hl7.org/fhir/device-nametype (R4 4.0.1, read 2026-10-17). The value set defines no code for a software brand; user-friendly-name is the nearest and other is the strictly safe choice (A40)."
   },
@@ -22,17 +23,22 @@
       "patient": "http://aboutobjects.com/fhir/identifier/poc-patient",
       "synthetic": "http://aboutobjects.com/fhir/identifier/synthetic-sample",
       "healthKit": "http://aboutobjects.com/fhir/identifier/healthkit-sample",
+      "healthConnect": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+      "healthConnectGroup": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
       "deviceKey": "http://aboutobjects.com/fhir/identifier/device-key",
-      "appBundleId": "http://aboutobjects.com/fhir/identifier/app-bundle-id"
+      "appBundleId": "http://aboutobjects.com/fhir/identifier/app-bundle-id",
+      "appPackageName": "http://aboutobjects.com/fhir/identifier/app-package-name"
     },
     "metaSource": {
       "synthetic": "http://aboutobjects.com/fhir/capture-app/synthetic",
-      "healthKit": "http://aboutobjects.com/fhir/capture-app/healthkit"
+      "healthKit": "http://aboutobjects.com/fhir/capture-app/healthkit",
+      "healthConnect": "http://aboutobjects.com/fhir/capture-app/healthconnect"
     },
     "dataQualityFlag": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
     "observationDomain": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
     "mealType": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
-    "nutrient": "http://aboutobjects.com/fhir/CodeSystem/nutrient"
+    "nutrient": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+    "metric": "http://aboutobjects.com/fhir/CodeSystem/metric"
   },
   "dataQualityFlags": {
     "artifactSuspected": "artifact-suspected",
@@ -69,7 +75,8 @@
     "status": "final",
     "identifierValue": {
       "synthetic": "as given",
-      "healthKit": "lowercase of the sample UUID string"
+      "healthKit": "lowercase of the sample UUID string",
+    "healthConnect": "SHA-256 hex per healthConnect.sampleIdentity (nutrients: healthConnect.nutritionSampleIdentity)"
     },
     "effective": {
       "instantOrPeriod": "effectiveDateTime when start equals end, otherwise effectivePeriod",
@@ -95,6 +102,30 @@
     "appSourceResource": "status active; identifier = [device-key, {system systems.identifier.appBundleId, value the trimmed bundle identifier}]; deviceName = [{name the source's display name, type other}] only when the name is present; no manufacturer, model or version; patient = the capture patient",
     "appSourceFallback": "A source with no bundle identifier (absent or blank) keeps the five-field rule over its name alone, with deviceName type other and no bundle identifier; at least one of name and bundle identifier must be present."
   },
+  "healthConnect": {
+    "description": "How a Health Connect record becomes Observations (contract 1.6.0; docs/planning/android-brief.md sections 4 and 5; M24 probe results). The golden fixtures contract/golden/healthconnect-*.json are produced by an independent implementation of these rules.",
+    "fieldSeparator": "U+001F, as in deviceKey",
+    "canonicalValue": "The text that stands for a value inside a hash. For a quantity it is valueQuantity.value as stored (after the unit rule of the metric's healthConnect entry), written as the shortest decimal that reads back as the same IEEE double, in plain notation (never an exponent), without a trailing '.0' and without a leading '+'; zero is 0. For a sleep stage it is the stage id, a colon and the stage's end as epoch milliseconds.",
+    "sampleIdentity": "For heartRate, restingHeartRate, hrvRmssd, sleepStage and dietaryWater: SHA-256, lowercase hex, over the UTF-8 bytes of these five fields joined by the field separator: the text hc-sample, the record id exactly as Health Connect gives it (not trimmed, not case-changed), the sample time as epoch milliseconds (a decimal integer; a heart-rate sample's own time, an instant record's time, a sleep stage's start, a hydration record's start), the metric id, and the canonical value. It is the Observation's identifier in systems.identifier.healthConnect. The record's version, its last-modified time and its data origin are NOT part of it: a record that grows keeps the identity of its old samples (decision A7).",
+    "groupIdentifier": "Every Observation carries a second identifier in systems.identifier.healthConnectGroup naming the thing that produced it: for heartRate, restingHeartRate, hrvRmssd, sleepStage and dietaryWater the record id as given; for a nutrient of a NutritionRecord the value <contentKey>#<n> (nutritionContentKey and nutritionOrdinal). The server is the ledger: the app asks HAPI for the Observations of one group and retracts those no longer in it.",
+    "nutritionContentKey": "MyFitnessPal deletes and re-creates its records with new record ids on every sync (M24, 2026-11-11), so a NutritionRecord's id is not an identity. Its content key is SHA-256, lowercase hex, over the UTF-8 bytes of these fields joined by the field separator: the text hc-content, the data origin package name (trimmed), the meal type code (a key of mealTypes, or empty when the record has none), the record's start and its end as epoch milliseconds, then, for each metric of kind intake that has a healthConnect entry with record NutritionRecord, in the order the metrics appear in this file, the text <metric id>=<canonical value> if the record carries that nutrient and nothing if it does not (a missing nutrient is not zero). The food name is never read and never hashed (N6). A nutrient the contract does not map does not change the key.",
+    "nutritionOrdinal": "Records with the same content key are interchangeable (the same food logged twice in one meal has one key). The n-th live record of a key, n counted from 1, has group value <contentKey>#<n>; when one of them is deleted the highest n is the one that goes, so the lower ones keep their identifiers.",
+    "nutritionSampleIdentity": "A nutrient Observation's identifier in systems.identifier.healthConnect is SHA-256, lowercase hex, over: the text hc-nutrient, its group value (<contentKey>#<n>) and the metric id, joined by the field separator.",
+    "effective": "A record's own start and end with its own recorded zone offsets, used as given and never recomputed from a time-zone database: effectiveDateTime when start equals end, otherwise effectivePeriod (metric effective rule). A heart-rate sample carries no offset: it uses its record's startZoneOffset. An instant record uses its zoneOffset. A null offset is replaced by the offset of the phone's own zone at that instant (as iOS, assumption A6). A nutrition record spans a window chosen by the writing app, not the meal's time (M24: 720 minutes, both entries starting 10:00 in their own offset), so its Observations carry effectivePeriod and the day as recorded is the start's date in its own offset.",
+    "issued": "As rules.issued: the capture-app production time with exactly 3 fractional digits and the offset used for the sample.",
+    "userEntered": "metadata.recordingMethod MANUAL_ENTRY (3) carries the user-entered tag; UNKNOWN (0), ACTIVELY_RECORDED (1) and AUTOMATICALLY_RECORDED (2) carry none. artifactSuspected, lateArrival and duplicateResolved apply as for any source.",
+    "mealType": "NutritionRecord.mealType 1 is breakfast, 2 lunch, 3 dinner, 4 snack, 0 (unknown) no meal entry; any other code is other. The Observation's meal entry has text equal to the contract's display for the code.",
+    "sleepStages": "SleepSessionRecord.stages: each stage is one Observation (metric sleepStage) with the stage's own start and end; the contract's stage id comes from the metric's healthConnect.stages. A stage type listed in healthConnect.unmapped produces no Observation and is not an error. A stage whose end is not after its start is refused.",
+    "device": "metadata.device with at least one of manufacturer and model (each trimmed): a Device whose identifier in systems.identifier.deviceKey is SHA-256, lowercase hex, over manufacturer, model and the type name (unknown, watch, phone, scale, ring, head_mounted, fitness_band, chest_strap, smart_display), each trimmed, an absent field being empty, joined by the field separator. The Device has status active, manufacturer and modelNumber only when present, type.text equal to the type name, and patient = the capture patient.",
+    "appSource": "A record without a usable device is attributed to its data origin: a Device whose key is SHA-256, lowercase hex, over the UTF-8 bytes of the text hc-app, the field separator and the trimmed package name (NOT the text app of deviceKey.appSourceAlgorithm: an iOS bundle identifier and an Android package name can be the same string, and they must never be one Device), identifier = [device-key, {system systems.identifier.appPackageName, value the package name}], status active, patient = the capture patient, no name. A blank package name is refused.",
+    "retraction": "An Observation is retracted by its sample identity (the existing conditional JSON Patch of status to entered-in-error, systems.identifier.healthConnect added to the HAPI retraction systems). The group identifier is how the app finds what to retract, never the retraction key.",
+    "recordingMethodCodes": {
+      "0": "unknown",
+      "1": "actively recorded",
+      "2": "automatically recorded",
+      "3": "manual entry"
+    }
+  },
   "metrics": [
     {
       "id": "heartRate",
@@ -104,6 +135,7 @@
       "category": "vital-signs",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierHeartRate",
+      "healthConnect": { "record": "HeartRateRecord", "per": "sample", "field": "samples.beatsPerMinute" },
       "plausibleRange": { "min": 30, "max": 220 },
       "claimsProfile": null
     },
@@ -115,6 +147,7 @@
       "category": "vital-signs",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierRestingHeartRate",
+      "healthConnect": { "record": "RestingHeartRateRecord", "per": "record", "field": "beatsPerMinute" },
       "plausibleRange": { "min": 30, "max": 150 },
       "claimsProfile": null
     },
@@ -130,12 +163,24 @@
       "claimsProfile": null
     },
     {
+      "id": "hrvRmssd",
+      "kind": "quantity",
+      "customCode": { "system": "metric", "code": "hrv-rmssd", "display": "Heart rate variability (RMSSD)" },
+      "unit": { "ucum": "ms", "display": "ms" },
+      "category": "vital-signs",
+      "effective": "instantOrPeriod",
+      "healthConnect": { "record": "HeartRateVariabilityRmssdRecord", "per": "record", "field": "heartRateVariabilityMillis" },
+      "plausibleRange": { "min": 5, "max": 500 },
+      "claimsProfile": null
+    },
+    {
       "id": "sleepStage",
       "kind": "sleepStage",
       "unit": { "ucum": "min", "display": "min" },
       "category": "activity",
       "effective": "period",
       "healthKit": "HKCategoryTypeIdentifierSleepAnalysis",
+      "healthConnect": { "record": "SleepSessionRecord", "per": "stage", "field": "stages", "stages": { "asleepCore": ["STAGE_TYPE_LIGHT"], "asleepDeep": ["STAGE_TYPE_DEEP"], "asleepREM": ["STAGE_TYPE_REM"], "asleepUnspecified": ["STAGE_TYPE_SLEEPING"], "awake": ["STAGE_TYPE_AWAKE", "STAGE_TYPE_AWAKE_IN_BED"] }, "unmapped": ["STAGE_TYPE_OUT_OF_BED", "STAGE_TYPE_UNKNOWN"] },
       "stages": {
         "asleepCore": { "code": "93830-8", "display": "Light sleep duration" },
         "asleepDeep": { "code": "93831-6", "display": "Deep sleep duration" },
@@ -154,6 +199,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietaryEnergyConsumed",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "energy", "accessor": "kilocalories" },
       "plausibleRange": { "min": 0, "max": 6000 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -166,6 +212,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietaryProtein",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "protein", "accessor": "grams" },
       "plausibleRange": { "min": 0, "max": 400 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -178,6 +225,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietaryCarbohydrates",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "totalCarbohydrate", "accessor": "grams" },
       "plausibleRange": { "min": 0, "max": 1000 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -190,6 +238,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietaryFatTotal",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "totalFat", "accessor": "grams" },
       "plausibleRange": { "min": 0, "max": 500 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -202,6 +251,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietaryFiber",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "dietaryFiber", "accessor": "grams" },
       "plausibleRange": { "min": 0, "max": 200 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -214,6 +264,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietarySugar",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "sugar", "accessor": "grams" },
       "plausibleRange": { "min": 0, "max": 1000 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -226,6 +277,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietarySodium",
+      "healthConnect": { "record": "NutritionRecord", "per": "record", "field": "sodium", "accessor": "milligrams" },
       "plausibleRange": { "min": 0, "max": 30000 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -238,6 +290,7 @@
       "domain": "nutrition",
       "effective": "instantOrPeriod",
       "healthKit": "HKQuantityTypeIdentifierDietaryWater",
+      "healthConnect": { "record": "HydrationRecord", "per": "record", "field": "volume", "accessor": "milliliters" },
       "plausibleRange": { "min": 0, "max": 6000 },
       "zeroAllowed": true,
       "claimsProfile": null
@@ -263,6 +316,15 @@
     "A38": "The meal-type normalization (the five codes and the alias snacks) is a guess at how the source names meals. Whether a user can rename meals, and what labels MyFitnessPal writes, is unverified (the M21 structure probe lists the labels' shape without values).",
     "A39": "Zero is a valid intake value (a food with none of a nutrient). A missing nutrient is absent, not zero: a day with no entries is no data.",
     "A40": "A source application is a Device keyed by its bundle identifier (stable across renames); its display name is typed 'other' because no DeviceNameType code covers a software brand (user-friendly-name is the nearest). Any server holding Devices made by the earlier name-only rule gets a second Device for the same app: accepted, no migration.",
-    "A41": "An intake sample's effective time is the source's own instant for the entry (start equals end). The time of day is indicative; the day as recorded (the date part in the sample's own offset) is what daily totals use (M22)."
+    "A41": "An intake sample's effective time is the source's own instant for the entry (start equals end). The time of day is indicative; the day as recorded (the date part in the sample's own offset) is what daily totals use (M22).",
+    "A42": "Health Connect record classes, field names, stage and device-type constants and unit accessors in each metric's healthConnect entry were read from connect-client 1.1.0 (the library's own classes), not from memory; the mapping of stage types to contract stages is a judgment (A43).",
+    "A43": "STAGE_TYPE_AWAKE_IN_BED maps to the contract stage awake (awake time is awake time whether or not in bed); STAGE_TYPE_OUT_OF_BED and STAGE_TYPE_UNKNOWN produce no Observation. STAGE_TYPE_SLEEPING (sleep with no stage detail) maps to asleepUnspecified and STAGE_TYPE_LIGHT to asleepCore (as A4).",
+    "A44": "hrvRmssd has no LOINC code (searched in M24's brief; none found for RMSSD) and is coded in the project's own system systems.metric, code hrv-rmssd, with code.text equal to the display. It is never mapped onto SDNN or converted: RMSSD and SDNN measure different things. Its plausibleRange 5 to 500 ms is a chosen bound (like SDNN's), not a clinical one.",
+    "A45": "Zone offsets are used as Health Connect records them and are not recomputed from a time-zone database, so an offset can differ from the zone's rule at that instant if a writer recorded it so. A null offset falls back to the phone's zone, which can be wrong across travel (as A6).",
+    "A46": "MANUAL_ENTRY maps to the user-entered tag. MyFitnessPal writes every entry with this method (M24, 2026-11-11), so all its Observations carry the tag: true to the source's own statement, but it means the tag no longer separates typed values from logged ones for nutrition.",
+    "A47": "Nutrition identity is content-based because MyFitnessPal re-creates its records with new ids on every sync (M24). Two different foods with identical mapped nutrients, meal, window and app are one content key and are told apart only by the ordinal; an edit that changes a mapped nutrient is a different key (the old Observations are retracted and new ones created, never updated in place). Whether MyFitnessPal also rewrites past days on each sync is unobserved.",
+    "A48": "Other record types keep the record id in their identity, which holds when the writer keeps ids (the sample app's step records did; MyFitnessPal's nutrition records did not). A writer that re-creates heart-rate, sleep or hydration records would need the same content-based treatment: unobserved (no source on the test phone writes them).",
+    "A49": "Floating-point values (Health Connect gives doubles) are hashed through their shortest round-trip decimal text; two implementations must produce the same text for the same double. The golden fixtures pin it for the values used, including a value that is not exactly representable.",
+    "A50": "A hydration record is read as dietaryWater (volume in millilitres) and identified by record id. Whether a writer re-creates hydration records is unobserved."
   }
 }

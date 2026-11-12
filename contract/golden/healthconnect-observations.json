@@ -1,0 +1,4403 @@
+{
+  "contractVersion": "1.6.0",
+  "cases": [
+    {
+      "name": "hc-heart-rate-record-three-samples",
+      "note": "Pattern (a): a record of three samples gives three Observations; each carries its sample identity and the record id as the group.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0001",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          },
+          {
+            "time": "2026-01-15T16:30:35Z",
+            "beatsPerMinute": 74
+          },
+          {
+            "time": "2026-01-15T16:31:05Z",
+            "beatsPerMinute": 71
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "0e183fc3eabe8ea06a44fa3fc4df52135bd51f71b954a72b4fb247419194d976"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 72,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "08477b82cbd927ebfa2fe55fe080adcccbf8388fa484053b72a2da8f2f3670fc"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 74,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:35-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "d190a008ebf9838b81b4108f5ca34de79e14636cbbac5a3564eac12b5e2b955e"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 71,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:31:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-decimal-double",
+      "note": "A value that is not exactly representable (72.1) is hashed through its shortest round-trip text (assumption A49).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0002",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72.1
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "d5b425cc3d9e8dd984c90fff806a8d7a799800a52f4708708b3a4ff612dec9c1"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0002"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 72.1,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-null-offsets-use-the-phone-zone",
+      "note": "A record with no zone offsets: the phone's zone at that instant (here Asia/Kolkata, +05:30).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "Asia/Kolkata",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0003",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": null,
+        "endZoneOffset": null,
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "ab88eb268d637a5b172d93405b55205a2591b7af7072416647f8198f50d98c0b"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0003"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T22:01:00.000+05:30",
+          "valueQuantity": {
+            "value": 72,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T22:00:05+05:30",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-recorded-offset-is-used-as-given",
+      "note": "The recorded offset wins over the phone's zone (a record written in Tokyo, read in Los Angeles).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0004",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "+09:00",
+        "endZoneOffset": "+09:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "597d9bab195b531f4172528408920cc372347346e05f10a24313345a67e2954c"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0004"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-16T01:31:00.000+09:00",
+          "valueQuantity": {
+            "value": 72,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-16T01:30:05+09:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-utc-offset-z-is-plus-zero",
+      "note": "An offset of Z is written +00:00, never Z.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0005",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "Z",
+        "endZoneOffset": "Z",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "10e1794885144e84e934aba62d9a9552f996b596afbd7ace2ce71f03466f6091"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0005"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T16:31:00.000+00:00",
+          "valueQuantity": {
+            "value": 72,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T16:30:05+00:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-manual-entry-is-user-entered",
+      "note": "MANUAL_ENTRY carries the user-entered tag (assumption A46).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0006",
+        "origin": "com.example.wearable",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "93a215b35cae559835f80e28827ce0da19bf7b85903dcdef231961c056603c62"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0006"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 72,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-artifact-and-late",
+      "note": "An implausible value from a record delivered days later: both quality flags, in code order.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-20T00:00:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0007",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 280
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "artifact-suspected"
+              },
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "late-arrival"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "8beb58370d6f12af8b90276f9685081f26c94b290953ab89d3413200eb47f7cf"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0007"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-19T16:00:00.000-08:00",
+          "valueQuantity": {
+            "value": 280,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-heart-rate-no-device-reference",
+      "note": "Without a device reference there is no device element.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": null,
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-hr-0008",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "1f8a0bcdd66f05d2c4a3a3a7da0d861309d9b8912503c7050f64a9a73b7449ff"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hr-0008"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8867-4",
+                "display": "Heart rate"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 72,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00"
+        }
+      ]
+    },
+    {
+      "name": "hc-resting-heart-rate-instant",
+      "note": "An instant record: effectiveDateTime at the record's own offset.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "RestingHeartRateRecord",
+        "id": "rec-rhr-0001",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "time": "2026-01-15T16:30:05Z",
+        "zoneOffset": "-08:00",
+        "beatsPerMinute": 58
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "1890b708789e8eb8553dc56f129a2f6c780d3885e197ea097fad6fbde5c4a588"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-rhr-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "40443-4",
+                "display": "Heart rate --resting"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 58,
+            "unit": "/min",
+            "system": "http://unitsofmeasure.org",
+            "code": "/min"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-hrv-rmssd-own-code",
+      "note": "RMSSD has no LOINC code: the project's metric system, code hrv-rmssd, display in code.text; never SDNN.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateVariabilityRmssdRecord",
+        "id": "rec-hrv-0001",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "time": "2026-01-15T16:30:05Z",
+        "zoneOffset": "-08:00",
+        "heartRateVariabilityMillis": 48.3
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "9ae55f6c3cdba606aa44ce6864af799fa46c916d3419f08007696cfd03f2f27a"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hrv-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "vital-signs",
+                  "display": "Vital Signs"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/metric",
+                "code": "hrv-rmssd"
+              }
+            ],
+            "text": "Heart rate variability (RMSSD)"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 48.3,
+            "unit": "ms",
+            "system": "http://unitsofmeasure.org",
+            "code": "ms"
+          },
+          "effectiveDateTime": "2026-01-15T08:30:05-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-sleep-session-stages",
+      "note": "Each mapped stage is one duration Observation; awake in bed maps to awake; out of bed and unknown give none (A43).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "SleepSessionRecord",
+        "id": "rec-sleep-0001",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T07:00:00Z",
+        "endTime": "2026-01-15T09:55:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "stages": [
+          {
+            "stageType": "STAGE_TYPE_AWAKE",
+            "startTime": "2026-01-15T07:00:00Z",
+            "endTime": "2026-01-15T07:10:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_LIGHT",
+            "startTime": "2026-01-15T07:10:00Z",
+            "endTime": "2026-01-15T08:00:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_DEEP",
+            "startTime": "2026-01-15T08:00:00Z",
+            "endTime": "2026-01-15T08:45:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_REM",
+            "startTime": "2026-01-15T08:45:00Z",
+            "endTime": "2026-01-15T09:15:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_SLEEPING",
+            "startTime": "2026-01-15T09:15:00Z",
+            "endTime": "2026-01-15T09:30:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_AWAKE_IN_BED",
+            "startTime": "2026-01-15T09:30:00Z",
+            "endTime": "2026-01-15T09:40:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_OUT_OF_BED",
+            "startTime": "2026-01-15T09:40:00Z",
+            "endTime": "2026-01-15T09:50:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_UNKNOWN",
+            "startTime": "2026-01-15T09:50:00Z",
+            "endTime": "2026-01-15T09:55:00Z"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "ab8bcee1cf91dfd62f8516ea7810610a454fdb4d67eb5ba7ac2b28708c6854e8"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "103210-1",
+                "display": "Awakening duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 10,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-14T23:00:00-08:00",
+            "end": "2026-01-14T23:10:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "214c6832bd9a4f3fe6bdfd0af96f13ea28be14a6da8eccec8d39e2a29bb0b5de"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "93830-8",
+                "display": "Light sleep duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 50,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-14T23:10:00-08:00",
+            "end": "2026-01-15T00:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "38a10d893ff1f14d5933caeacbbda8afbeac043befbdc29da6513cc7640e4471"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "93831-6",
+                "display": "Deep sleep duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 45,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T00:00:00-08:00",
+            "end": "2026-01-15T00:45:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "5744ff74e2e191ba9b62bb96078fe4e4cb529c4acca33f598d7fcb606a657aab"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "93829-0",
+                "display": "REM sleep duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 30,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T00:45:00-08:00",
+            "end": "2026-01-15T01:15:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "7aa43367a1d611611f8ad82a320e8c8e2ddcc65d8c4dc196759a2f15faf32cf0"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "93832-4",
+                "display": "Sleep duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 15,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T01:15:00-08:00",
+            "end": "2026-01-15T01:30:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "2a486b115e51942493455f30fa3756c7d5080f8ff077c27f866f86fd91ad8a26"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "103210-1",
+                "display": "Awakening duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 10,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T01:30:00-08:00",
+            "end": "2026-01-15T01:40:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-sleep-session-null-offsets",
+      "note": "Sleep with no offsets uses the phone's zone for each end.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "SleepSessionRecord",
+        "id": "rec-sleep-0002",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T07:00:00Z",
+        "endTime": "2026-01-15T08:00:00Z",
+        "startZoneOffset": null,
+        "endZoneOffset": null,
+        "stages": [
+          {
+            "stageType": "STAGE_TYPE_AWAKE",
+            "startTime": "2026-01-15T07:00:00Z",
+            "endTime": "2026-01-15T07:10:00Z"
+          },
+          {
+            "stageType": "STAGE_TYPE_LIGHT",
+            "startTime": "2026-01-15T07:10:00Z",
+            "endTime": "2026-01-15T08:00:00Z"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "716296be194a24f8ff23c7d53540e1b6db5577a4fd436fb6ed582b385504c2e8"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0002"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "103210-1",
+                "display": "Awakening duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 10,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-14T23:00:00-08:00",
+            "end": "2026-01-14T23:10:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "1f7c866b7737cdaf454f6a0543e70259f4182126a62d566a765dda56ceb454be"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-sleep-0002"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "activity",
+                  "display": "Activity"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "93830-8",
+                "display": "Light sleep duration"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 50,
+            "unit": "min",
+            "system": "http://unitsofmeasure.org",
+            "code": "min"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-14T23:10:00-08:00",
+            "end": "2026-01-15T00:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-hydration-record",
+      "note": "A hydration record is dietaryWater in mL, identified by its record id.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HydrationRecord",
+        "id": "rec-hyd-0001",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T19:00:00Z",
+        "endTime": "2026-01-15T19:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "volume": 250.0
+      },
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "3e9f53389689d2bfba99bdde58824c6b0166a493059d32b3797470a49f6bd63f"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "rec-hyd-0001"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "8984-7",
+                "display": "Fluid intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 250,
+            "unit": "mL",
+            "system": "http://unitsofmeasure.org",
+            "code": "mL"
+          },
+          "effectiveDateTime": "2026-01-15T11:00:00-08:00",
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-nutrition-full-record-with-meal",
+      "note": "One record, seven mapped nutrients, one Observation each, all sharing one group value; the meal is a separate category entry; unmapped nutrients change nothing; the window is a period (A47).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-0001",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 2,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1",
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9052-2",
+                "display": "Calorie intake total"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 450,
+            "unit": "kcal",
+            "system": "http://unitsofmeasure.org",
+            "code": "kcal"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9079-5",
+                "display": "Protein intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 31.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9059-7",
+                "display": "Carbohydrate intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 62,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9066-2",
+                "display": "Fat intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 14.2,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "fiber"
+              }
+            ],
+            "text": "Dietary fiber"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 7.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sugar"
+              }
+            ],
+            "text": "Dietary sugar"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 22,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sodium"
+              }
+            ],
+            "text": "Dietary sodium"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 620,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-nutrition-no-meal",
+      "note": "Meal type 0 (unknown): no meal entry, never an invented one.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-0002",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 0,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1",
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "35681cdd6f942e10ac8475eb738ef89c36b4e53b41f735a4b61b28d8ba62994b"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9052-2",
+                "display": "Calorie intake total"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 450,
+            "unit": "kcal",
+            "system": "http://unitsofmeasure.org",
+            "code": "kcal"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "03fff0561bcdce405470d2025c7209fa60c15f05a06e521f31da52682b9efc89"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9079-5",
+                "display": "Protein intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 31.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "e65994d5bd585232a6ffd0252447f56ba79d87932b241615d15a2936b28aa416"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9059-7",
+                "display": "Carbohydrate intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 62,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "32dd13de4e07f75f75e50a45b6cde5ccb20dd38b5bb7bf5b28d8870fa44bc9d3"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9066-2",
+                "display": "Fat intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 14.2,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "2c3eeb84619f21105c5525b0be102925dd1facc22b8d2efd8631acc1d1890962"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "fiber"
+              }
+            ],
+            "text": "Dietary fiber"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 7.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "88372ff148697f97efaf9190facf80fba08a0e9a289617ab30ba07c64ece7e99"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sugar"
+              }
+            ],
+            "text": "Dietary sugar"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 22,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "373a99a705bd2550c924c9e364dc755bba5251d6b99d7e553715aaf2cd20e7ad"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "430f305cb358db8f858dd1ae0316b0480d3b0a33337f1262ef913ab20b27c9ea#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sodium"
+              }
+            ],
+            "text": "Dietary sodium"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 620,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-nutrition-unlisted-meal-code-is-other",
+      "note": "A meal code the contract does not know is other.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-0003",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 9,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1",
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "604763acc478914babddd785cb6f8b50edccb8c0aa5ea1ba1785bda7cc46fa0b"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9052-2",
+                "display": "Calorie intake total"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 450,
+            "unit": "kcal",
+            "system": "http://unitsofmeasure.org",
+            "code": "kcal"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "7dcbe315be228ce89e9d15e40c4889cfbb150a29d66a38bbe0af4bb86a6524aa"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9079-5",
+                "display": "Protein intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 31.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "aa572a4d2827574f4673dad29f4bc33cea85ad12b365d0a3e4aaad282b9b25c4"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9059-7",
+                "display": "Carbohydrate intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 62,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "7b459574be6252e7fdc13ca6d8fe7738629e45c00736ecae45b5e22375dd6ea3"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9066-2",
+                "display": "Fat intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 14.2,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "69b4c75d186630a31a74c449846cd11da4fc515bfec565ae9416148b9d5975a0"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "fiber"
+              }
+            ],
+            "text": "Dietary fiber"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 7.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "7967e73e817cee893f08b5a0045f685c42ef8b3f301fcfc15763f2c955501b78"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sugar"
+              }
+            ],
+            "text": "Dietary sugar"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 22,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "08b66905cf48be1c777ead512d551f3d4b6e9da4d2595c8a9a19846121292f56"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "38c43a5d832c3c9c48d02975e2de166ee5f0f091b128211f1ee25b98c8c43084#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "other"
+                }
+              ],
+              "text": "Other"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sodium"
+              }
+            ],
+            "text": "Dietary sodium"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 620,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-nutrition-missing-nutrient-is-absent-not-zero",
+      "note": "A nutrient the record does not carry gets no Observation (a missing nutrient is not zero).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-0004",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 2,
+        "nutrients": {
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1",
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "8d2e6f503f920ec1338948e1164d2aa6b3b65eb5050e3ed041524ad3ca8f3685"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9079-5",
+                "display": "Protein intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 31.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "38644642b79cd75b0fd0dec60902500e2a28372a0680424250051adc64075370"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9059-7",
+                "display": "Carbohydrate intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 62,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "520dd7f9596523cb7daf43657dd7fc5ea277d82517e727ef833dec7c9db05a96"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9066-2",
+                "display": "Fat intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 14.2,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "e34fbfebac8d8d8282c1d5476bc878681d15e5264fa38c54d0fe23f1a6c8febe"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "fiber"
+              }
+            ],
+            "text": "Dietary fiber"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 7.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "a7f3eba5ef9c2c42f850e9196098e98704a5a57aa5c8317094488b35090ba245"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sugar"
+              }
+            ],
+            "text": "Dietary sugar"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 22,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "49cbf01bc676b6930d4afaeeb3ae050eca3395370ce37abdbfccef1ccd6a907a"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "e05d0fc2c19717e9ef685eed7245dc960a9702ea4e6f7b7fad16dd4ad3f9cb9b#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sodium"
+              }
+            ],
+            "text": "Dietary sodium"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 620,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-nutrition-zero-sodium-is-stored",
+      "note": "Zero is a valid intake: stored, and part of the content key.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-0005",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 2,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 0.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1",
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "b377419ea9c4dd7a0674d29740d0b9e40d8bdc0a97160cad0eba8fd40cb7ed6e"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9052-2",
+                "display": "Calorie intake total"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 450,
+            "unit": "kcal",
+            "system": "http://unitsofmeasure.org",
+            "code": "kcal"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "b1270fa09dc7910c0213dffe90a5a18891307c89e3c712467217ae094060a88e"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9079-5",
+                "display": "Protein intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 31.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "9cf0b9dbf032f5a791c86c556a0c0250a77489b29e4a2167516db378eeb79993"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9059-7",
+                "display": "Carbohydrate intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 62,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "b65126f990cca463a329e98e9c61778302e058d466da82d2bce2a9748ea14bb5"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9066-2",
+                "display": "Fat intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 14.2,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "cd32a5b9f276caaed759970489386f8482eb024b1decb408be8c674aa60f4232"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "fiber"
+              }
+            ],
+            "text": "Dietary fiber"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 7.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "d4c8098a67cc23ed9d1d0ca5a3dc6ee4de4fd1e7f9a822a4f9c7122270ab5a2a"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sugar"
+              }
+            ],
+            "text": "Dietary sugar"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 22,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect",
+            "tag": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/data-quality-flag",
+                "code": "user-entered"
+              }
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "06a460ff0db0c44dbe1d8992fa3f9737ae360f0d653179dab088f58ba9018416"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "5831fb4f1d369b91857b32eada4857578bda5d0684100dd0674cfd7b356108a1#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sodium"
+              }
+            ],
+            "text": "Dietary sodium"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 0,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hc-nutrition-from-a-wearable-is-not-user-entered",
+      "note": "An automatically recorded nutrition record carries no user-entered tag.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-0006",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 2,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1",
+      "expected": [
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9052-2",
+                "display": "Calorie intake total"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 450,
+            "unit": "kcal",
+            "system": "http://unitsofmeasure.org",
+            "code": "kcal"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9079-5",
+                "display": "Protein intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 31.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9059-7",
+                "display": "Carbohydrate intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 62,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://loinc.org",
+                "code": "9066-2",
+                "display": "Fat intake Estimated"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 14.2,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "fiber"
+              }
+            ],
+            "text": "Dietary fiber"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 7.5,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sugar"
+              }
+            ],
+            "text": "Dietary sugar"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 22,
+            "unit": "g",
+            "system": "http://unitsofmeasure.org",
+            "code": "g"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        },
+        {
+          "resourceType": "Observation",
+          "meta": {
+            "source": "http://aboutobjects.com/fhir/capture-app/healthconnect"
+          },
+          "identifier": [
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
+              "value": "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+            },
+            {
+              "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
+              "value": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/observation-domain",
+                  "code": "nutrition",
+                  "display": "Nutrition"
+                }
+              ]
+            },
+            {
+              "coding": [
+                {
+                  "system": "http://aboutobjects.com/fhir/CodeSystem/meal-type",
+                  "code": "lunch"
+                }
+              ],
+              "text": "Lunch"
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://aboutobjects.com/fhir/CodeSystem/nutrient",
+                "code": "sodium"
+              }
+            ],
+            "text": "Dietary sodium"
+          },
+          "subject": {
+            "reference": "Patient/example-patient"
+          },
+          "issued": "2026-01-15T08:31:00.000-08:00",
+          "valueQuantity": {
+            "value": 620,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          },
+          "effectivePeriod": {
+            "start": "2026-01-15T10:00:00-08:00",
+            "end": "2026-01-15T22:00:00-08:00"
+          },
+          "device": {
+            "reference": "Device/example-hc-device"
+          }
+        }
+      ]
+    }
+  ]
+}

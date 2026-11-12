@@ -1,0 +1,113 @@
+{
+  "contractVersion": "1.6.0",
+  "cases": [
+    {
+      "name": "hc-error-empty-record-id",
+      "note": "A record without an id cannot be identified: refused.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "  ",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 72
+          }
+        ]
+      },
+      "expectedError": "emptyRecordId"
+    },
+    {
+      "name": "hc-error-zero-heart-rate",
+      "note": "Zero is refused for a quantity (the control is any other case above).",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "HeartRateRecord",
+        "id": "rec-err-0002",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T16:30:00Z",
+        "endTime": "2026-01-15T16:32:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "samples": [
+          {
+            "time": "2026-01-15T16:30:05Z",
+            "beatsPerMinute": 0
+          }
+        ]
+      },
+      "expectedError": "nonPositiveValue"
+    },
+    {
+      "name": "hc-error-negative-nutrient",
+      "note": "A negative intake is always refused.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-err-0003",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 2,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": -1.0,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "nutritionGroup": "cdfd12657d186e5f5335586c3047537e2fbbabe521f01372d216f21e1bfee99d#1",
+      "expectedError": "negativeValue"
+    },
+    {
+      "name": "hc-error-sleep-stage-ends-before-it-starts",
+      "note": "A stage whose end is not after its start is refused.",
+      "patientId": "example-patient",
+      "phoneTimeZone": "America/Los_Angeles",
+      "issued": "2026-01-15T16:31:00Z",
+      "deviceReference": "Device/example-hc-device",
+      "record": {
+        "class": "SleepSessionRecord",
+        "id": "rec-err-0004",
+        "origin": "com.example.wearable",
+        "recordingMethod": 2,
+        "startTime": "2026-01-15T08:00:00Z",
+        "endTime": "2026-01-15T07:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "stages": [
+          {
+            "stageType": "STAGE_TYPE_LIGHT",
+            "startTime": "2026-01-15T08:00:00Z",
+            "endTime": "2026-01-15T07:00:00Z"
+          }
+        ]
+      },
+      "expectedError": "emptySleepInterval"
+    }
+  ]
+}

@@ -105,6 +105,8 @@ struct MetricRegistry: Sendable {
         let observationDomain: String
         let mealType: String
         let nutrient: String
+        /// The project's code system for a metric with no LOINC code (contract 1.6.0: `hrvRmssd`, which this app never emits).
+        let metric: String?
     }
     
     struct DeviceKey: Decodable, Equatable, Sendable {
@@ -235,6 +237,7 @@ struct MetricRegistry: Sendable {
         case "nutrient": systems.nutrient
         case "observationDomain": systems.observationDomain
         case "mealType": systems.mealType
+        case "metric": systems.metric
         default: nil
         }
     }

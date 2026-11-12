@@ -1,0 +1,683 @@
+{
+  "contractVersion": "1.6.0",
+  "properties": [
+    {
+      "name": "identity-growing-record-keeps-old-sample-identities",
+      "note": "Pattern (b): the same record id delivered again with one more sample: the old samples keep their identifiers, only the new one is new.",
+      "deliveryA": {
+        "record": {
+          "class": "HeartRateRecord",
+          "id": "rec-hr-1000",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T16:30:00Z",
+          "endTime": "2026-01-15T16:32:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "samples": [
+            {
+              "time": "2026-01-15T16:30:05Z",
+              "beatsPerMinute": 72
+            },
+            {
+              "time": "2026-01-15T16:30:35Z",
+              "beatsPerMinute": 74
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "deliveryB": {
+        "record": {
+          "class": "HeartRateRecord",
+          "id": "rec-hr-1000",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T16:30:00Z",
+          "endTime": "2026-01-15T16:32:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "samples": [
+            {
+              "time": "2026-01-15T16:30:05Z",
+              "beatsPerMinute": 72
+            },
+            {
+              "time": "2026-01-15T16:30:35Z",
+              "beatsPerMinute": 74
+            },
+            {
+              "time": "2026-01-15T16:31:05Z",
+              "beatsPerMinute": 71
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "identifiersA": [
+        "3a62ae9a65b49c8c51c58b9e5ad8fc90d3b0c64b6e7b49cabf2af68c3fe4b7c7",
+        "08f7c91ee254f20e0e590cb888d8e9bacea50bdb24a593c9df452fc3126da822"
+      ],
+      "identifiersB": [
+        "3a62ae9a65b49c8c51c58b9e5ad8fc90d3b0c64b6e7b49cabf2af68c3fe4b7c7",
+        "08f7c91ee254f20e0e590cb888d8e9bacea50bdb24a593c9df452fc3126da822",
+        "87bb4c759f562e6ec5f4c609a1494c3a2cff9a30f77147a180e6f053c10da016"
+      ],
+      "shared": [
+        "08f7c91ee254f20e0e590cb888d8e9bacea50bdb24a593c9df452fc3126da822",
+        "3a62ae9a65b49c8c51c58b9e5ad8fc90d3b0c64b6e7b49cabf2af68c3fe4b7c7"
+      ],
+      "onlyInA": [],
+      "onlyInB": [
+        "87bb4c759f562e6ec5f4c609a1494c3a2cff9a30f77147a180e6f053c10da016"
+      ]
+    },
+    {
+      "name": "identity-edited-sample-value-gets-a-new-identity",
+      "note": "The same record and time with another value: that sample's identifier changes (the old Observation is to be retracted), the others keep theirs.",
+      "deliveryA": {
+        "record": {
+          "class": "HeartRateRecord",
+          "id": "rec-hr-1001",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T16:30:00Z",
+          "endTime": "2026-01-15T16:32:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "samples": [
+            {
+              "time": "2026-01-15T16:30:05Z",
+              "beatsPerMinute": 72
+            },
+            {
+              "time": "2026-01-15T16:30:35Z",
+              "beatsPerMinute": 74
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "deliveryB": {
+        "record": {
+          "class": "HeartRateRecord",
+          "id": "rec-hr-1001",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T16:30:00Z",
+          "endTime": "2026-01-15T16:32:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "samples": [
+            {
+              "time": "2026-01-15T16:30:05Z",
+              "beatsPerMinute": 72
+            },
+            {
+              "time": "2026-01-15T16:30:35Z",
+              "beatsPerMinute": 75
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "identifiersA": [
+        "c5e1544b48aa6a91eb8bbd83b394325aff980eb60804d483bb97fa824ea7c125",
+        "3058dbe2e99c9611454a8759b408d8ee3f18cf4cb734ff6c97bd778784c96e66"
+      ],
+      "identifiersB": [
+        "c5e1544b48aa6a91eb8bbd83b394325aff980eb60804d483bb97fa824ea7c125",
+        "f65c25c964ffada0fac0e2c6f497e350919ed297d4744b42a59f2057c67eb1cf"
+      ],
+      "shared": [
+        "c5e1544b48aa6a91eb8bbd83b394325aff980eb60804d483bb97fa824ea7c125"
+      ],
+      "onlyInA": [
+        "3058dbe2e99c9611454a8759b408d8ee3f18cf4cb734ff6c97bd778784c96e66"
+      ],
+      "onlyInB": [
+        "f65c25c964ffada0fac0e2c6f497e350919ed297d4744b42a59f2057c67eb1cf"
+      ]
+    },
+    {
+      "name": "identity-another-record-id-is-another-sample",
+      "note": "Two records with the same time and value but different record ids are different samples (the record id is part of the identity).",
+      "deliveryA": {
+        "record": {
+          "class": "HeartRateRecord",
+          "id": "rec-hr-1002",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T16:30:00Z",
+          "endTime": "2026-01-15T16:32:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "samples": [
+            {
+              "time": "2026-01-15T16:30:05Z",
+              "beatsPerMinute": 72
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "deliveryB": {
+        "record": {
+          "class": "HeartRateRecord",
+          "id": "rec-hr-1003",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T16:30:00Z",
+          "endTime": "2026-01-15T16:32:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "samples": [
+            {
+              "time": "2026-01-15T16:30:05Z",
+              "beatsPerMinute": 72
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "identifiersA": [
+        "06debbb6a3117d4172f507765698381ff718a6f1b3421a9c4a238ce32e1a0491"
+      ],
+      "identifiersB": [
+        "dd0dc7f5caf75f20a1827a83fe1dcd761d04458fbd43cfe060a133637a00fe4a"
+      ],
+      "shared": [],
+      "onlyInA": [
+        "06debbb6a3117d4172f507765698381ff718a6f1b3421a9c4a238ce32e1a0491"
+      ],
+      "onlyInB": [
+        "dd0dc7f5caf75f20a1827a83fe1dcd761d04458fbd43cfe060a133637a00fe4a"
+      ]
+    },
+    {
+      "name": "identity-the-same-value-in-two-metrics-differs",
+      "note": "The metric id is part of the identity: a resting reading and an RMSSD reading with the same record id, time and value differ.",
+      "deliveryA": {
+        "record": {
+          "class": "RestingHeartRateRecord",
+          "id": "rec-x-1",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "time": "2026-01-15T16:30:05Z",
+          "zoneOffset": "-08:00",
+          "beatsPerMinute": 50
+        },
+        "nutritionGroup": null
+      },
+      "deliveryB": {
+        "record": {
+          "class": "HeartRateVariabilityRmssdRecord",
+          "id": "rec-x-1",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "time": "2026-01-15T16:30:05Z",
+          "zoneOffset": "-08:00",
+          "heartRateVariabilityMillis": 50.0
+        },
+        "nutritionGroup": null
+      },
+      "identifiersA": [
+        "44b7c6dc7a18f6eca6faf0cefb7c2d2f19132c89f84aad3a190c8fcc878dff07"
+      ],
+      "identifiersB": [
+        "752f5378cbad8e377b16946bc186bb58a7fa2b8d81e0bd2bba784b920b24b688"
+      ],
+      "shared": [],
+      "onlyInA": [
+        "44b7c6dc7a18f6eca6faf0cefb7c2d2f19132c89f84aad3a190c8fcc878dff07"
+      ],
+      "onlyInB": [
+        "752f5378cbad8e377b16946bc186bb58a7fa2b8d81e0bd2bba784b920b24b688"
+      ]
+    },
+    {
+      "name": "identity-nutrition-rewritten-with-a-new-record-id-is-the-same",
+      "note": "MyFitnessPal re-creates a record with a new id on every sync: the content key and so every identifier is unchanged.",
+      "deliveryA": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-1000",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+      },
+      "deliveryB": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-2000",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+      },
+      "identifiersA": [
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+      ],
+      "identifiersB": [
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+      ],
+      "shared": [
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e"
+      ],
+      "onlyInA": [],
+      "onlyInB": []
+    },
+    {
+      "name": "identity-nutrition-edited-nutrient-is-a-new-item",
+      "note": "An edit that changes a mapped nutrient is a different content key: every identifier of the item changes (old Observations retracted, new created).",
+      "deliveryA": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-2000",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+      },
+      "deliveryB": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-2000",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 40.0,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "53c3144b94e55958943b490dac278df88ad23cf691245cdbcc5d9f0f404cf48f#1"
+      },
+      "identifiersA": [
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+      ],
+      "identifiersB": [
+        "b6dbc490742e7065b934083fdcda46f35b97403653938492b2d32eaeb7e52f92",
+        "0683b04887a837117abedfb6172db53c0c1df150352745b29c0fb137cddd49fc",
+        "dc483faa3075bfaae10d26ab0b12f62f550c118d43eddd9c0e7567c0f58fe0b9",
+        "41c6d937f226bfa1786d120ff25b2dc876c3648ad18981bbc077f4b7bfb49f04",
+        "1cc2e698c426c544015c1cad7343b7273d58493d2036ba0dfb11ae8b6ae182f2",
+        "9d5c557f79f3ea10111e83400db0e7cb2d8e456dacac89a6125a003fdc64cdae",
+        "3145952684687d3929862f9b6353c79538381247e793d03b55634cc212264d16"
+      ],
+      "shared": [],
+      "onlyInA": [
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e"
+      ],
+      "onlyInB": [
+        "0683b04887a837117abedfb6172db53c0c1df150352745b29c0fb137cddd49fc",
+        "1cc2e698c426c544015c1cad7343b7273d58493d2036ba0dfb11ae8b6ae182f2",
+        "3145952684687d3929862f9b6353c79538381247e793d03b55634cc212264d16",
+        "41c6d937f226bfa1786d120ff25b2dc876c3648ad18981bbc077f4b7bfb49f04",
+        "9d5c557f79f3ea10111e83400db0e7cb2d8e456dacac89a6125a003fdc64cdae",
+        "b6dbc490742e7065b934083fdcda46f35b97403653938492b2d32eaeb7e52f92",
+        "dc483faa3075bfaae10d26ab0b12f62f550c118d43eddd9c0e7567c0f58fe0b9"
+      ]
+    },
+    {
+      "name": "identity-nutrition-unmapped-nutrient-changes-nothing",
+      "note": "A change to a nutrient the contract does not map leaves every identifier unchanged.",
+      "deliveryA": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-2000",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+      },
+      "deliveryB": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-2001",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 99.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+      },
+      "identifiersA": [
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+      ],
+      "identifiersB": [
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+      ],
+      "shared": [
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e"
+      ],
+      "onlyInA": [],
+      "onlyInB": []
+    },
+    {
+      "name": "identity-nutrition-twin-entries-are-told-apart-by-ordinal",
+      "note": "The same food logged twice in one meal has one content key: the two records get ordinals #1 and #2, and deleting one leaves #1.",
+      "deliveryA": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-3001",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+      },
+      "deliveryB": {
+        "record": {
+          "class": "NutritionRecord",
+          "id": "rec-nut-3002",
+          "origin": "com.example.nutritionapp",
+          "recordingMethod": 3,
+          "startTime": "2026-01-15T18:00:00Z",
+          "endTime": "2026-01-16T06:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "mealType": 2,
+          "nutrients": {
+            "energy": 450.0,
+            "protein": 31.5,
+            "totalCarbohydrate": 62.0,
+            "totalFat": 14.2,
+            "dietaryFiber": 7.5,
+            "sugar": 22.0,
+            "sodium": 620.0,
+            "vitaminC": 12.0,
+            "calcium": 120.0
+          }
+        },
+        "nutritionGroup": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#2"
+      },
+      "identifiersA": [
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb"
+      ],
+      "identifiersB": [
+        "31ba5e91fe341017cef5d85427e34fa6890dbcb613734085e078b4b469d4daeb",
+        "6419d26e0cb5f5426e3e3b7a4af28bfdb2d6155a57eaa7056428b6aafeef9582",
+        "c8d572b958afa2e31fa101655d9018dded848987c003760f23f4f155a3de8374",
+        "d28276338f54f4cc592488ef596fbd2e62e501456616835dc87c9850e8f260a8",
+        "f79a477b03d3446bd1cd26e5a905e9c5caa158fb6c0c94087d7dcd04a0b94ebf",
+        "29468f7ed15a0d61335be2f87658b45db2ca750a11d95a9895de7b41872cf025",
+        "80ff846c7d4106b0d68ede5d832ba3b849dc37cc480370c77eeca9cd86beee09"
+      ],
+      "shared": [],
+      "onlyInA": [
+        "178b28808104835f00c1628f88a1ee65feef68c386565c184a3a0741b6d9064b",
+        "266066471e99d6692adac38ce08b5e4aa45d13c0a2bf781862aaf5632c2693a1",
+        "3a270f71ad9f1c31137027c1e6534a919b553d1477a0ef19715de36ba92299e4",
+        "66d6502b63b26b8f665f710dbb3b020a68cab2de44ef18972ca1a266feda0ccb",
+        "728e654adf467d0b3fd432aca1e374821dc14b578051edf6235db9ab871a97e0",
+        "9b9355fd5aac0617af3c9511e39c52fcb78f544408c6fb34bf6f0a54edf24e4f",
+        "b0b0337b666818bb0b01dbf5a73a490cc35cd6d151f6356ee211a3d8b346519e"
+      ],
+      "onlyInB": [
+        "29468f7ed15a0d61335be2f87658b45db2ca750a11d95a9895de7b41872cf025",
+        "31ba5e91fe341017cef5d85427e34fa6890dbcb613734085e078b4b469d4daeb",
+        "6419d26e0cb5f5426e3e3b7a4af28bfdb2d6155a57eaa7056428b6aafeef9582",
+        "80ff846c7d4106b0d68ede5d832ba3b849dc37cc480370c77eeca9cd86beee09",
+        "c8d572b958afa2e31fa101655d9018dded848987c003760f23f4f155a3de8374",
+        "d28276338f54f4cc592488ef596fbd2e62e501456616835dc87c9850e8f260a8",
+        "f79a477b03d3446bd1cd26e5a905e9c5caa158fb6c0c94087d7dcd04a0b94ebf"
+      ]
+    }
+  ],
+  "canonicalValues": [
+    {
+      "value": 72,
+      "canonical": "72"
+    },
+    {
+      "value": 72.0,
+      "canonical": "72"
+    },
+    {
+      "value": 72.5,
+      "canonical": "72.5"
+    },
+    {
+      "value": 0,
+      "canonical": "0"
+    },
+    {
+      "value": 0.1,
+      "canonical": "0.1"
+    },
+    {
+      "value": 0.30000000000000004,
+      "canonical": "0.30000000000000004"
+    },
+    {
+      "value": 48.3,
+      "canonical": "48.3"
+    },
+    {
+      "value": 1e+21,
+      "canonical": "1000000000000000000000"
+    },
+    {
+      "value": 1e-07,
+      "canonical": "0.0000001"
+    },
+    {
+      "value": 123456789.125,
+      "canonical": "123456789.125"
+    },
+    {
+      "value": 31.5,
+      "canonical": "31.5"
+    },
+    {
+      "value": 450,
+      "canonical": "450"
+    },
+    {
+      "value": 0.5,
+      "canonical": "0.5"
+    }
+  ],
+  "retractionLookups": [
+    {
+      "name": "retraction-lookup-record-id",
+      "note": "To find what a deleted or changed record produced, search Observation by this token (the client percent-encodes it).",
+      "groupValue": "rec-hr-1000",
+      "searchToken": "http://aboutobjects.com/fhir/identifier/healthconnect-group|rec-hr-1000"
+    },
+    {
+      "name": "retraction-lookup-nutrition-group",
+      "note": "To find what a deleted or changed record produced, search Observation by this token (the client percent-encodes it).",
+      "groupValue": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1",
+      "searchToken": "http://aboutobjects.com/fhir/identifier/healthconnect-group|a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+    }
+  ],
+  "contentKeys": [
+    {
+      "record": {
+        "class": "NutritionRecord",
+        "id": "rec-nut-1000",
+        "origin": "com.example.nutritionapp",
+        "recordingMethod": 3,
+        "startTime": "2026-01-15T18:00:00Z",
+        "endTime": "2026-01-16T06:00:00Z",
+        "startZoneOffset": "-08:00",
+        "endZoneOffset": "-08:00",
+        "mealType": 2,
+        "nutrients": {
+          "energy": 450.0,
+          "protein": 31.5,
+          "totalCarbohydrate": 62.0,
+          "totalFat": 14.2,
+          "dietaryFiber": 7.5,
+          "sugar": 22.0,
+          "sodium": 620.0,
+          "vitaminC": 12.0,
+          "calcium": 120.0
+        }
+      },
+      "contentKey": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e",
+      "groupValue": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"
+    }
+  ]
+}

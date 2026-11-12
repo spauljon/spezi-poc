@@ -75,7 +75,7 @@ def main():
     failures = 0
     # 1. a real Device first, so Observation.device resolves
     device_id = None
-    for case in load("devices.json"):
+    for case in load("devices.json") + load("healthconnect-devices.json"):
         if "expected" not in case:
             continue
         device = json.loads(json.dumps(case["expected"]))
@@ -96,27 +96,30 @@ def main():
 
     # 2. every Observation shape
     count = 0
-    for name in ("observations-quantity.json", "observations-sleep.json"):
+    for name in ("observations-quantity.json", "observations-sleep.json", "healthconnect-observations.json"):
         for case in load(name):
             if "expected" not in case:
                 continue
-            obs = json.loads(json.dumps(case["expected"]))
-            obs["identifier"][0]["value"] = "golden-" + case["name"]
-            obs["subject"] = {"reference": patient_ref}
-            if "device" in obs:
-                obs["device"] = {"reference": "Device/" + device_id}
-            st, msgs = conditional_create(token, obs)
-            errors = [m for m in msgs if m[0] in ("error", "fatal")]
-            warns = [m for m in msgs if m[0] == "warning"]
-            note = ""
-            if errors:
-                note = "ERRORS: %s" % errors
-            elif warns:
-                note = "(%d warning: %s)" % (len(warns), warns[0][1][:70])
-            print("%-52s HTTP %s %s" % (case["name"], st, note))
-            count += 1
-            if st not in (200, 201) or errors:
-                failures += 1
+            # a HealthKit-shaped case has one Observation; a Health Connect case has a list (one per sample or nutrient)
+            expected = case["expected"] if isinstance(case["expected"], list) else [case["expected"]]
+            for index, resource in enumerate(expected):
+                obs = json.loads(json.dumps(resource))
+                obs["identifier"][0]["value"] = "golden-" + case["name"] + ("-%d" % index if len(expected) > 1 else "")
+                obs["subject"] = {"reference": patient_ref}
+                if "device" in obs:
+                    obs["device"] = {"reference": "Device/" + device_id}
+                st, msgs = conditional_create(token, obs)
+                errors = [m for m in msgs if m[0] in ("error", "fatal")]
+                warns = [m for m in msgs if m[0] == "warning"]
+                note = ""
+                if errors:
+                    note = "ERRORS: %s" % errors
+                elif warns:
+                    note = "(%d warning: %s)" % (len(warns), warns[0][1][:70])
+                print("%-52s HTTP %s %s" % ((case["name"] + ("[%d]" % index if len(expected) > 1 else ""))[:52], st, note))
+                count += 1
+                if st not in (200, 201) or errors:
+                    failures += 1
     # 3. the searches the nutrition design relies on (brief assumption: HAPI answers a search on one of several `category`
     #    entries, on a custom code, and on a Device's second identifier). Each has a positive control below it.
     contract = json.load(open(os.path.join(HERE, "metrics.json")))
@@ -128,7 +131,9 @@ def main():
     def total(query):
         # a literal "|" in a query string is rejected by the servlet container (HTTP 400): encode it, as a client must
         query = query.replace("|", "%7C")
-        status, text = auth.call("GET", auth.BASE + "/" + query + ("&" if "?" in query else "?") + "_summary=count", token)
+        # no-cache: HAPI reuses an identical search's result for a while, so a search that follows a create must not be served
+        # the answer from before it (the analytics client does the same)
+        status, text = auth.call("GET", auth.BASE + "/" + query + ("&" if "?" in query else "?") + "_summary=count", token, None, {"Cache-Control": "no-cache"})
         return json.loads(text).get("total", -1) if status == 200 else -1
 
     def expect(label, got, at_least=None, exactly=None):
@@ -152,6 +157,24 @@ def main():
     expect("control: an unknown bundle identifier finds nothing", total("Device?identifier=%s|com.example.nobody" % systems["identifier"]["appBundleId"]), exactly=0)
     # the domain system alone does not match a meal code: the two systems are not interchangeable
     expect("control: the meal code is not in the domain system", total("Observation?category=%s|lunch" % systems["observationDomain"]), exactly=0)
+
+    # 4. the Health Connect lookups (contract 1.6.0): a record's Observations by the GROUP identifier, one Observation by its
+    #    sample identity. A group value can hold '#', so values are percent-encoded as a client must.
+    hc = [c for c in load("healthconnect-observations.json") if c.get("expected")]
+    by_name = {c["name"]: c for c in hc}
+    q = lambda system, value: "%s|%s" % (system, urllib.parse.quote(value, safe=""))
+    group_sys, sample_sys = systems["identifier"]["healthConnectGroup"], systems["identifier"]["healthConnect"]
+    three = by_name["hc-heart-rate-record-three-samples"]
+    nutrition = by_name["hc-nutrition-zero-sodium-is-stored"]  # its content key is its own: no other case shares the group
+    expect("search: a heart-rate record's Observations by group", total("Observation?identifier=" + q(group_sys, "rec-hr-0001")), exactly=len(three["expected"]))
+    expect("search: a nutrition item's Observations by group (value has #)", total("Observation?identifier=" + q(group_sys, nutrition["nutritionGroup"])), exactly=len(nutrition["expected"]))
+    expect("search: one Observation by its golden sample identity", total("Observation?identifier=" + q(sample_sys, "golden-hc-nutrition-zero-sodium-is-stored-0")), exactly=1)
+    expect("control: an unknown group finds nothing", total("Observation?identifier=" + q(group_sys, "rec-no-such-record")), exactly=0)
+    expect("control: a group value is not a sample identity", total("Observation?identifier=" + q(sample_sys, "rec-hr-0001")), exactly=0)
+    expect("control: the systems are not interchangeable", total("Observation?identifier=" + q(group_sys, "golden-hc-nutrition-zero-sodium-is-stored-0")), exactly=0)
+    expect("search: the source app Device by its package name", total("Device?identifier=%s|com.example.nutritionapp" % systems["identifier"]["appPackageName"]), at_least=1)
+    expect("control: an unknown package name finds nothing", total("Device?identifier=%s|com.example.nobody" % systems["identifier"]["appPackageName"]), exactly=0)
+    expect("search: hrvRmssd by its own code", total("Observation?code=%s|hrv-rmssd" % systems["metric"]), at_least=1)
 
     print()
     print("HAPI ACCEPTED all %d Observations and the Devices; the searches answered" % count if not failures else "HAPI REFUSED or MISANSWERED %d thing(s)" % failures)

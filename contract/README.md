@@ -6,11 +6,11 @@ may hand-copy a LOINC code, UCUM unit or category: it reads `metrics.json` (or i
 
 | File | Role |
 |---|---|
-| `metrics.json` | The contract (`contractVersion` 1.5.0, see Versions below): metrics -> LOINC, UCUM unit, category, `effective[x]` rule, sleep-stage mapping, identifier and `meta.source` systems, device-key rule, and the terminology verification evidence |
+| `metrics.json` | The contract (`contractVersion` 1.6.0, see Versions below): metrics -> LOINC, UCUM unit, category, `effective[x]` rule, sleep-stage mapping, identifier and `meta.source` systems, device-key rule, and the terminology verification evidence |
 | `golden/generate.py` | An **independent** Python implementation of the rules (own time-zone database, decimals, SHA-256). Writes the fixtures; `--check` fails if they are stale |
 | `golden/*.json` | 130 fixtures: expected JSON for 34 observation cases (heart rate, resting, HRV and the eight dietary intakes, with their meal entries, zeros and flags), 12 sleep cases, 6 refusals, 12 devices (including source applications keyed by bundle identifier), 55 flag evaluations with both sides of every boundary and 11 meal-label normalizations, including DST and half-hour offsets |
-| `check.py` | Offline checks (`make test-contract`): structure, LOINC check digits, bundled copy identical, fixtures current |
-| `sync.sh` | Copies `metrics.json` into the iOS app's resources |
+| `check.py` | Offline checks (`make test-contract`): structure, LOINC check digits, both bundled copies identical, Health Connect rules and identity invariants (each with its control), HAPI retraction systems equal the contract's, fixtures current |
+| `sync.sh` | Copies `metrics.json` into the iOS app's resources and the Android app's assets |
 | `verify-hapi.py` | Posts the fixture shapes to the running HAPI (request validation on) and reports acceptance. Needs the stack; leaves synthetic resources behind (`golden-` identifiers) |
 
 ## Changing the contract
@@ -55,6 +55,8 @@ Added to the spec's A1-A13 (full text in `metrics.json` `assumptions`):
 transaction Bundle (M8), and any claim of `meta.profile`.
 
 ## Versions
+
+- **1.6.0** (additive): Health Connect (M25). `healthConnect` (the rules: canonical value, sample identity, group identifier, the nutrition content key and ordinal, effective times and recorded offsets, `user-entered` from MANUAL_ENTRY, meal and sleep-stage mapping, device and app-source keys, retraction by sample identity), a `healthConnect` entry per metric (record class, field, accessor, read from the library's own classes), the new metric `hrvRmssd` (no LOINC code; code `hrv-rmssd` in the new `systems.metric`), `systems.identifier.healthConnect`, `healthConnectGroup`, `appPackageName` and `systems.metaSource.healthConnect`, assumptions A42 to A50. Nutrition identity is content-based because MyFitnessPal re-creates its records with new ids on every sync (M24). Seven new fixture files (`golden/healthconnect-*.json`), written by the same independent generator. iOS reads the new system (it never emits `hrvRmssd`); analytics and web skip a quantity metric with no LOINC code until M29.
 
 - **1.5.0** (additive): dietary intake. Eight metrics of the new `kind: "intake"` (energy, protein, carbohydrates, fat, fiber, sugar, sodium, water) with LOINC where a code exists and a `customCode` in the project's `nutrient` system where not; `domains`, `mealTypes` and `mealTypeAliases`; `systems.observationDomain`, `mealType`, `nutrient` and `identifier.appBundleId`; per-metric `zeroAllowed` (zero is a valid intake, negative is never) and a per-entry `plausibleRange`; the rules `domain`, `mealType` and `intakeCode`; `deviceKey.appSource*` (a source application is a Device keyed by its bundle identifier, name type `other`); assumptions A34 to A41 and the terminology evidence. **Consumers that only know `quantity` and `sleepStage` ignore `intake` metrics** (the analytics worker and the web app do, until M22 and M23). The mapper's category for an intake is its domain, not an HL7 category.
 - **1.4.0** (additive): `metrics[].plausibleRange` (heart rate 30 to 220, resting 30 to 150, HRV 5 to 400: clinical judgments, A32), `qualityThresholds.lateArrivalHours` (24), the rules `artifactSuspected`, `lateArrival`, `duplicateResolved` and `tagOrder`, and assumptions A31 to A33; A17 and A30 revised. The capture app now writes all four data-quality flags at ingest (M19); the independent generator evaluates the same rules into `golden/flags.json` (boundary cases on both sides). Consumers must have the four flag codes and the threshold; the analytics worker and the web app read them from here.

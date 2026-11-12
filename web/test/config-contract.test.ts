@@ -12,12 +12,12 @@ const contractFile = resolve(process.cwd(), "../contract/metrics.json");
 const raw = JSON.parse(readFileSync(contractFile, "utf8")) as {
   contractVersion: string;
   systems: { loinc: string; identifier: { patient: string } };
-  metrics: { id: string; kind: string; loinc?: { code: string; display: string }; unit: { ucum: string }; stages?: Record<string, { code: string }> }[];
+  metrics: { id: string; kind: string; loinc?: { code: string; display: string }; customCode?: { system: string; code: string }; unit: { ucum: string }; stages?: Record<string, { code: string }> }[];
 };
 
 describe("contract", () => {
   it("the web app's metric list is exactly the contract's quantity metrics, with the contract's codes and units", () => {
-    const expected = raw.metrics.filter((m) => m.kind === "quantity").map((m) => ({
+    const expected = raw.metrics.filter((m) => m.kind === "quantity" && m.loinc).map((m) => ({
       id: m.id, loincCode: m.loinc!.code, display: m.loinc!.display, unit: m.unit.ucum,
     }));
     expect(contract.quantityMetrics).toEqual(expected);
@@ -25,6 +25,16 @@ describe("contract", () => {
     expect(contract.loincSystem).toBe(raw.systems.loinc);
     expect(contract.patientIdentifierSystem).toBe(raw.systems.identifier.patient);
     expect(contract.version).toBe(raw.contractVersion);
+  });
+
+  it("a quantity coded in the project's own system is not shown yet (M29), and a LOINC-coded one is", () => {
+    const own = raw.metrics.filter((m) => m.kind === "quantity" && m.customCode && !m.loinc);
+    expect(own.length, "control: the contract has a custom-coded quantity metric (hrvRmssd)").toBeGreaterThanOrEqual(1);
+    const ids = contract.quantityMetrics.map((m) => m.id);
+    for (const m of own) {
+      expect(ids).not.toContain(m.id);
+    }
+    expect(ids, "control: a LOINC-coded quantity is in the list").toContain("heartRate");
   });
 
   it("sleep stage codes are the contract's", () => {

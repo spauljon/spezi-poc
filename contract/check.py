@@ -19,6 +19,8 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CONTRACT = os.path.join(ROOT, "contract", "metrics.json")
 BUNDLED = os.path.join(ROOT, "ios", "HealthGate", "Resources", "metrics.json")
+BUNDLED_ANDROID = os.path.join(ROOT, "android", "app", "src", "main", "assets", "metrics.json")
+GOLDEN = os.path.join(ROOT, "contract", "golden")
 fails = []
 
 
@@ -73,6 +75,10 @@ def intake_problems(m, c):
     return out
 
 
+def nutrition_fields(c):
+    return [m["healthConnect"]["field"] for m in c["metrics"] if m.get("healthConnect", {}).get("record") == "NutritionRecord"]
+
+
 def main():
     c = json.load(open(CONTRACT))
 
@@ -116,7 +122,13 @@ def main():
         check(m["unit"]["ucum"] != "beats/min", "%s: not the invalid UCUM 'beats/min'" % m["id"], "%s uses 'beats/min', which UCUM rejects" % m["id"])
         check(m.get("claimsProfile") is None, "%s: makes no meta.profile claim (spec: Conformance)" % m["id"], "%s claims a profile" % m["id"])
         if m["kind"] == "quantity":
-            codes.append(m["loinc"]["code"])
+            check(bool(m.get("loinc")) != bool(m.get("customCode")), "%s: exactly one of loinc and customCode" % m["id"], "%s: needs exactly one of loinc and customCode" % m["id"])
+            if m.get("loinc"):
+                codes.append(m["loinc"]["code"])
+            else:
+                custom.append((m["customCode"]["system"], m["customCode"]["code"]))
+                check(m["customCode"]["system"] in c["systems"] and bool(m["customCode"].get("display")), "%s: custom code names a defined system and has a display" % m["id"],
+                      "%s: custom code needs a defined system and a display" % m["id"])
         elif m["kind"] == "intake":
             if m.get("loinc"):
                 codes.append(m["loinc"]["code"])
@@ -131,7 +143,7 @@ def main():
     for code in codes:
         check(loinc_valid(code), "LOINC %s has a valid check digit" % code, "LOINC %s fails its check digit (typo?)" % code)
     check(len(custom) == len(set(custom)), "no custom code is used twice", "a custom code is used by two metrics")
-    for system in ("observationDomain", "mealType", "nutrient"):
+    for system in ("observationDomain", "mealType", "nutrient", "metric"):
         check(c["systems"][system].startswith("http://aboutobjects.com/fhir/CodeSystem/"), "system %s is in the decided namespace" % system, "system %s is outside the namespace" % system)
     check(set(c["mealTypes"]) >= {"breakfast", "lunch", "dinner", "snack", "other"} and all(k == v["code"] for k, v in c["mealTypes"].items()),
           "meal types include breakfast, lunch, dinner, snack and other, each keyed by its code", "meal types are incomplete or mis-keyed")
@@ -140,16 +152,78 @@ def main():
     for url in c["systems"]["identifier"].values():
         check(url.startswith("http://aboutobjects.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % url.rsplit("/", 1)[-1], "identifier system outside the namespace: " + url)
 
+    # --- M25: Health Connect (contract 1.6.0)
+    hc = c.get("healthConnect", {})
+    for key in ("canonicalValue", "sampleIdentity", "groupIdentifier", "nutritionContentKey", "nutritionOrdinal", "nutritionSampleIdentity",
+                "effective", "userEntered", "mealType", "sleepStages", "device", "appSource", "retraction"):
+        check(isinstance(hc.get(key), str) and hc[key], "healthConnect rule %s is written" % key, "healthConnect rule %s is missing" % key)
+    for key in ("healthConnect", "healthConnectGroup", "appPackageName"):
+        check(c["systems"]["identifier"].get(key, "").startswith("http://aboutobjects.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % key,
+              "identifier system %s is missing or outside the namespace" % key)
+    check(c["systems"]["metaSource"].get("healthConnect", "").startswith("http://aboutobjects.com/fhir/capture-app/"), "meta.source system healthConnect is in the decided namespace",
+          "meta.source system healthConnect is missing or outside the namespace")
+    sources = []
+    for m in c["metrics"]:
+        h = m.get("healthConnect")
+        check(bool(m.get("healthKit")) or bool(h), "%s: has at least one platform source (healthKit or healthConnect)" % m["id"], "%s: has no platform source" % m["id"])
+        if h:
+            sources.append(m["id"])
+            check(isinstance(h.get("record"), str) and h["record"].endswith("Record") and bool(h.get("field")) and h.get("per") in ("sample", "record", "stage"),
+                  "%s: healthConnect names a record class, a field and a unit of work" % m["id"], "%s: healthConnect entry is malformed" % m["id"])
+            if h["record"] in ("NutritionRecord", "HydrationRecord"):
+                check(bool(h.get("accessor")), "%s: a unit accessor is named" % m["id"], "%s: healthConnect needs a unit accessor" % m["id"])
+    check({"heartRate", "restingHeartRate", "hrvRmssd", "sleepStage", "dietaryWater"} <= set(sources) and len(nutrition_fields(c)) == 7,
+          "the five record-id metrics and seven nutrition fields have a Health Connect source", "a Health Connect source is missing")
+    check(len(set(nutrition_fields(c))) == len(nutrition_fields(c)), "no two metrics read the same NutritionRecord field", "two metrics read the same NutritionRecord field")
+    stages = next(m for m in c["metrics"] if m["kind"] == "sleepStage")["healthConnect"]
+    mapped = [t for types in stages["stages"].values() for t in types]
+    check(set(stages["stages"]) == set(next(m for m in c["metrics"] if m["kind"] == "sleepStage")["stages"]) and len(mapped) == len(set(mapped))
+          and set(mapped).isdisjoint(stages["unmapped"]), "sleep: every contract stage has Health Connect stage types, none used twice or both mapped and unmapped",
+          "sleep: the Health Connect stage mapping is incomplete or ambiguous")
+
+    # the fixtures' own invariants, checked with the opposite as a control (the same file proves the checker sees both)
+    ident = json.load(open(os.path.join(GOLDEN, "healthconnect-identity.json")))
+    prop = {p["name"]: p for p in ident["properties"]}
+    growing = prop["identity-growing-record-keeps-old-sample-identities"]
+    check(len(growing["shared"]) >= 2 and growing["onlyInA"] == [] and len(growing["onlyInB"]) == 1,
+          "identity: a growing record keeps every old sample identity and adds only the new one", "identity: a growing record changed an old sample identity")
+    rewritten = prop["identity-nutrition-rewritten-with-a-new-record-id-is-the-same"]
+    edited = prop["identity-nutrition-edited-nutrient-is-a-new-item"]
+    check(len(rewritten["shared"]) == 7 and rewritten["onlyInA"] == [] and rewritten["onlyInB"] == [] and edited["shared"] == [] and len(edited["onlyInB"]) == 7,
+          "identity: a re-created nutrition record keeps all 7 identities, an edited one keeps none (the checker sees both)",
+          "identity: nutrition identities do not behave as the contract says")
+    twin = prop["identity-nutrition-twin-entries-are-told-apart-by-ordinal"]
+    groups = [x["value"] for x in (twin["deliveryA"]["nutritionGroup"], twin["deliveryB"]["nutritionGroup"]) for x in [{"value": x}]]
+    check(len(groups) == 2 and groups[0].split("#")[0] == groups[1].split("#")[0] and groups[0].endswith("#1") and groups[1].endswith("#2"),
+          "identity: two identical foods share a content key and get ordinals #1 and #2", "identity: twin foods are not told apart by ordinal")
+    ios_devices = {d["name"]: d for d in json.load(open(os.path.join(GOLDEN, "devices.json")))["cases"]}
+    hc_devices = {d["name"]: d for d in json.load(open(os.path.join(GOLDEN, "healthconnect-devices.json")))["cases"]}
+    ios_app, hc_app = ios_devices["device-app-source-full"], hc_devices["hc-no-device-is-the-app-source"]
+    check(ios_app["descriptor"]["bundleIdentifier"] == hc_app["origin"] and ios_app["expectedKey"] != hc_app["expectedKey"],
+          "device: an iOS bundle identifier and an Android package name that are the same string get different Device keys",
+          "device: an iOS bundle identifier and an Android package name with the same text collide on one Device key")
+    check(hc_devices["hc-no-device-is-the-app-source"]["expectedKey"] == hc_devices["hc-app-source-trimmed-package"]["expectedKey"]
+          and hc_devices["hc-no-device-is-the-app-source"]["expectedKey"] != hc_devices["hc-device-full"]["expectedKey"],
+          "device: one package has one key (trimmed), and it differs from a hardware device's", "device: the Health Connect app-source key is unstable or collides")
+    hexes = [v for p in ident["properties"] for v in p["identifiersA"] + p["identifiersB"]]
+    check(bool(hexes) and all(re.fullmatch(r"[0-9a-f]{64}", v) for v in hexes) and not re.fullmatch(r"[0-9a-f]{64}", "ABC"), "identity: every sample identifier is 64 lowercase hex (and the pattern refuses a bad one)",
+          "identity: a sample identifier is not 64 lowercase hex")
+    obs = json.load(open(os.path.join(GOLDEN, "healthconnect-observations.json")))
+    check(all(len({i["value"] for o in case["expected"] for i in o["identifier"] if i["system"] == c["systems"]["identifier"]["healthConnect"]}) == len(case["expected"])
+              for case in obs["cases"] if case.get("expected")), "observations: within a case, every Observation has its own sample identity", "observations: two Observations of one case share a sample identity")
+    check(all(o["meta"]["source"] == c["systems"]["metaSource"]["healthConnect"] and len(o["identifier"]) == 2 for case in obs["cases"] for o in case.get("expected", [])),
+          "observations: each carries the healthConnect meta.source and exactly two identifiers (sample, group)", "observations: a Health Connect Observation has the wrong meta.source or identifier count")
+
     # --- M21: the HAPI retraction rule names the app's own sample-identifier systems; they must equal the contract's
     def retraction_systems(text):
         m = re.search(r"^\s*retraction-identifier-systems:\s*(\S+)\s*$", text, re.M)
         return set(m.group(1).split(",")) if m else None
-    sample = {c["systems"]["identifier"]["synthetic"], c["systems"]["identifier"]["healthKit"]}
+    sample = {c["systems"]["identifier"]["synthetic"], c["systems"]["identifier"]["healthKit"], c["systems"]["identifier"]["healthConnect"]}
     check(retraction_systems("a:\n  retraction-identifier-systems: x,y\n") == {"x", "y"} and retraction_systems("nothing here") is None,
           "retraction control: the application.yaml parser reads a list and notices a missing key", "the retraction-systems parser is broken")
     yaml_path = os.path.join(ROOT, "hapi", "application.yaml")
     configured = retraction_systems(open(yaml_path).read())
-    check(configured == sample, "hapi/application.yaml retraction-identifier-systems equals the contract's synthetic and healthKit sample systems",
+    check(configured == sample, "hapi/application.yaml retraction-identifier-systems equals the contract's synthetic, healthKit and healthConnect sample systems",
           "hapi/application.yaml retraction-identifier-systems (%s) differs from the contract sample systems (%s)" % (configured, sample))
     check(retraction_systems(open(yaml_path).read().replace("healthkit-sample", "healthkit-samples")) != sample,
           "retraction control: a misspelt system in application.yaml would be caught", "the retraction-systems comparison cannot see a misspelt system")
@@ -160,6 +234,11 @@ def main():
               "the iOS bundled copy DIFFERS from contract/metrics.json (run contract/sync.sh)")
     else:
         bad("the iOS bundled copy is missing (run contract/sync.sh)")
+    if os.path.exists(BUNDLED_ANDROID):
+        check(open(BUNDLED_ANDROID, "rb").read() == open(CONTRACT, "rb").read(), "the Android bundled copy is byte-identical to contract/metrics.json",
+              "the Android bundled copy DIFFERS from contract/metrics.json (run contract/sync.sh)")
+    else:
+        bad("the Android bundled copy is missing (run contract/sync.sh)")
 
     # --- golden fixtures
     r = subprocess.run([sys.executable, os.path.join(ROOT, "contract", "golden", "generate.py"), "--check"], capture_output=True, text=True)

@@ -8,12 +8,12 @@ const contractFile = fileURLToPath(new URL("../../contract/metrics.json", import
 const raw = JSON.parse(readFileSync(contractFile, "utf8")) as {
   contractVersion: string;
   systems: { loinc: string; ucum: string };
-  metrics: { id: string; kind: string; loinc?: { code: string; display: string }; unit: { ucum: string } }[];
+  metrics: { id: string; kind: string; loinc?: { code: string; display: string }; customCode?: { system: string; code: string }; unit: { ucum: string } }[];
 };
 
 test("the worker's metric list is exactly the contract's quantity metrics, with the contract's codes and units", () => {
   const c = loadContract();
-  const expected = raw.metrics.filter((m) => m.kind === "quantity").map((m) => ({
+  const expected = raw.metrics.filter((m) => m.kind === "quantity" && m.loinc).map((m) => ({
     id: m.id, loincCode: m.loinc!.code, ucum: m.unit.ucum, display: m.loinc!.display,
   }));
   assert.deepEqual([...c.quantityMetrics], expected);
@@ -21,6 +21,16 @@ test("the worker's metric list is exactly the contract's quantity metrics, with 
   assert.equal(c.ucumSystem, raw.systems.ucum);
   assert.equal(c.version, raw.contractVersion);
   assert.ok(expected.length >= 3);
+});
+
+test("a quantity coded in the project's own system is not rolled up yet (M29), and a LOINC-coded one still is", () => {
+  const ids = loadContract().quantityMetrics.map((m) => m.id);
+  const own = raw.metrics.filter((m) => m.kind === "quantity" && m.customCode && !m.loinc);
+  assert.ok(own.length >= 1, "control: the contract has a custom-coded quantity metric (hrvRmssd)");
+  for (const m of own) {
+    assert.ok(!ids.includes(m.id), `${m.id} is not in the rollup list`);
+  }
+  assert.ok(ids.includes("heartRate"), "control: a LOINC-coded quantity is in the list");
 });
 
 test("sleep-stage metrics are not in the rollup list", () => {

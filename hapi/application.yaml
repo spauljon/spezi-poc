@@ -87,9 +87,11 @@ poc:
     audience: hapi-fhir
     ca-file: /app/tls/ca.crt
     # M21: the identifier systems of the app's own sample identifiers (contract/metrics.json systems.identifier
-    # synthetic and healthKit; contract/check.py keeps them equal). The capture role may retract (PATCH status to
-    # entered-in-error) only an Observation found by one of these. Empty or absent: no retraction at all.
-    retraction-identifier-systems: http://aboutobjects.com/fhir/identifier/synthetic-sample,http://aboutobjects.com/fhir/identifier/healthkit-sample
+    # synthetic, healthKit and healthConnect; contract/check.py keeps them equal). The capture role may retract (PATCH
+    # status to entered-in-error) only an Observation found by one of these. The Health Connect GROUP identifier is not
+    # one of them: it names every Observation a record produced, so it is a lookup key, never a retraction key (M25).
+    # Empty or absent: no retraction at all.
+    retraction-identifier-systems: http://aboutobjects.com/fhir/identifier/synthetic-sample,http://aboutobjects.com/fhir/identifier/healthkit-sample,http://aboutobjects.com/fhir/identifier/healthconnect-sample
 
 # springdoc serves /v3/api-docs (a Spring MVC endpoint outside the FHIR servlet). Off: nothing uses it.
 springdoc:

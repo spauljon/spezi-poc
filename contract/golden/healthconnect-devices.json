@@ -1,0 +1,206 @@
+{
+  "contractVersion": "1.6.0",
+  "cases": [
+    {
+      "name": "hc-device-full",
+      "note": "A record with a device: keyed by manufacturer, model and the type name.",
+      "patientId": "example-patient",
+      "origin": "com.example.wearable",
+      "device": {
+        "manufacturer": "Example Corp",
+        "model": "Band 2",
+        "type": 6
+      },
+      "expectedKey": "e5fb007404734e90369ba77a41457f4a8f71376f1a95e987c628f2f06d1a0cdd",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "e5fb007404734e90369ba77a41457f4a8f71376f1a95e987c628f2f06d1a0cdd"
+          }
+        ],
+        "status": "active",
+        "manufacturer": "Example Corp",
+        "modelNumber": "Band 2",
+        "type": {
+          "text": "fitness_band"
+        },
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-device-trimmed",
+      "note": "Whitespace is trimmed: the same key as the untrimmed device.",
+      "patientId": "example-patient",
+      "origin": "com.example.wearable",
+      "device": {
+        "manufacturer": " Example Corp ",
+        "model": "Band 2 ",
+        "type": 6
+      },
+      "expectedKey": "e5fb007404734e90369ba77a41457f4a8f71376f1a95e987c628f2f06d1a0cdd",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "e5fb007404734e90369ba77a41457f4a8f71376f1a95e987c628f2f06d1a0cdd"
+          }
+        ],
+        "status": "active",
+        "manufacturer": "Example Corp",
+        "modelNumber": "Band 2",
+        "type": {
+          "text": "fitness_band"
+        },
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-device-model-only",
+      "note": "Manufacturer absent: an empty field in the key, no manufacturer in the resource.",
+      "patientId": "example-patient",
+      "origin": "com.example.wearable",
+      "device": {
+        "model": "Band 2",
+        "type": 6
+      },
+      "expectedKey": "31b44a2476ac039af1b036d6ec758e35604192169af73cdb679adb3425109521",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "31b44a2476ac039af1b036d6ec758e35604192169af73cdb679adb3425109521"
+          }
+        ],
+        "status": "active",
+        "modelNumber": "Band 2",
+        "type": {
+          "text": "fitness_band"
+        },
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-device-unknown-type",
+      "note": "Type 0 is the name unknown.",
+      "patientId": "example-patient",
+      "origin": "com.example.wearable",
+      "device": {
+        "manufacturer": "Example Corp",
+        "type": 0
+      },
+      "expectedKey": "203c43bed6beea421cb51fd608f5722436ff7968340d8ffcd53aa7e60cf6d940",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "203c43bed6beea421cb51fd608f5722436ff7968340d8ffcd53aa7e60cf6d940"
+          }
+        ],
+        "status": "active",
+        "manufacturer": "Example Corp",
+        "type": {
+          "text": "unknown"
+        },
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-device-without-names-is-the-app-source",
+      "note": "A device with neither manufacturer nor model is not usable: the record is attributed to its data origin.",
+      "patientId": "example-patient",
+      "origin": "com.example.nutritionapp",
+      "device": {
+        "type": 2
+      },
+      "expectedKey": "3461f8bc55560a1cd93a4975ff30913d39987c86680c90aee404ed7d8d616009",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "3461f8bc55560a1cd93a4975ff30913d39987c86680c90aee404ed7d8d616009"
+          },
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/app-package-name",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-no-device-is-the-app-source",
+      "note": "No device at all (MyFitnessPal's records, M24): the data origin's package name keys a Device.",
+      "patientId": "example-patient",
+      "origin": "com.example.nutritionapp",
+      "device": null,
+      "expectedKey": "3461f8bc55560a1cd93a4975ff30913d39987c86680c90aee404ed7d8d616009",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "3461f8bc55560a1cd93a4975ff30913d39987c86680c90aee404ed7d8d616009"
+          },
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/app-package-name",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-app-source-trimmed-package",
+      "note": "The package name is trimmed: the same key.",
+      "patientId": "example-patient",
+      "origin": "  com.example.nutritionapp ",
+      "device": null,
+      "expectedKey": "3461f8bc55560a1cd93a4975ff30913d39987c86680c90aee404ed7d8d616009",
+      "expected": {
+        "resourceType": "Device",
+        "identifier": [
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/device-key",
+            "value": "3461f8bc55560a1cd93a4975ff30913d39987c86680c90aee404ed7d8d616009"
+          },
+          {
+            "system": "http://aboutobjects.com/fhir/identifier/app-package-name",
+            "value": "com.example.nutritionapp"
+          }
+        ],
+        "status": "active",
+        "patient": {
+          "reference": "Patient/example-patient"
+        }
+      }
+    },
+    {
+      "name": "hc-app-source-blank-package-is-refused",
+      "note": "No device and no package name: refused.",
+      "patientId": "example-patient",
+      "origin": "   ",
+      "device": null,
+      "expectedError": "blankPackageName"
+    }
+  ]
+}

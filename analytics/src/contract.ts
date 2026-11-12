@@ -146,8 +146,9 @@ export function loadContract(path: string = defaultContractPath): Contract {
     throw new Error("contract has no data-quality flags (contract 1.4.0 or later is required)");
   }
   const metrics = raw.metrics ?? [];
-  // an unknown kind is not rolled up
-  const quantityMetrics = metrics.filter((m) => m.kind === "quantity").map(parseQuantity);
+  // an unknown kind is not rolled up. A quantity coded in the project's own system (contract 1.6.0: hrvRmssd) has no LOINC
+  // code and is not rolled up yet: the worker searches by LOINC code. M29 aligns the analytics with Health Connect.
+  const quantityMetrics = metrics.filter((m) => m.kind === "quantity" && !(m.customCode && !m.loinc)).map(parseQuantity);
   const sleepMetric = metrics.find((m) => m.kind === "sleepStage");
   if (quantityMetrics.length === 0) {
     throw new Error("contract has no quantity metrics");

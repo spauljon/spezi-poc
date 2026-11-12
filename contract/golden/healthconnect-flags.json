@@ -1,0 +1,64 @@
+{
+  "contractVersion": "1.6.0",
+  "cases": [
+    {
+      "name": "hrvRmssd-inside",
+      "note": "Inside the range: no flag.",
+      "input": {
+        "metric": "hrvRmssd",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 252.5
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "hrvRmssd-at-min-not-flagged",
+      "note": "On the lower bound: not flagged.",
+      "input": {
+        "metric": "hrvRmssd",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 5
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "hrvRmssd-just-below-min",
+      "note": "Just below: artifact-suspected.",
+      "input": {
+        "metric": "hrvRmssd",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 4.9
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    },
+    {
+      "name": "hrvRmssd-at-max-not-flagged",
+      "note": "On the upper bound: not flagged.",
+      "input": {
+        "metric": "hrvRmssd",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 500
+      },
+      "expectedFlags": []
+    },
+    {
+      "name": "hrvRmssd-just-above-max",
+      "note": "Just above: artifact-suspected.",
+      "input": {
+        "metric": "hrvRmssd",
+        "end": "2026-01-15T16:30:05Z",
+        "issued": "2026-01-15T16:31:00Z",
+        "value": 500.1
+      },
+      "expectedFlags": [
+        "artifact-suspected"
+      ]
+    }
+  ]
+}
