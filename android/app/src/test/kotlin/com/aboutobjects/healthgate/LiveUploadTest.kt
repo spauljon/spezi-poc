@@ -88,4 +88,56 @@ class LiveUploadTest {
         val patient = get("Patient?" + com.aboutobjects.healthgate.sync.FhirSearch.identifierQuery(registry.systems.identifier.getValue("patient"), "poc-android-01") + "&_summary=count")
         assertEquals(1, Json.parseToJsonElement(patient.body).jsonObject.getValue("total").jsonPrimitive.content.toInt())
     }
+
+    /**
+     * Live (decision A11): a Health Connect record through the real collector and engine: created, then grown and one sample changed
+     * (updated in place), then deleted (soft: gone from search, 410 by id). Synthetic, a unique record id per run, and it cleans up after
+     * itself by being deleted.
+     */
+    @Test fun aHealthConnectRecordIsCreatedUpdatedInPlaceAndDeletedOnTheRealServer() {
+        assumeTrue("set by scripts/android-live-test.sh", !token.isNullOrBlank())
+        val transport = OkHttpTransport("https://$host:8443/fhir", client())
+        val settings = SyncEngine.Settings(patientIdentifier = "poc-android-01", patientSystem = registry.systems.identifier.getValue("patient"), batchSize = 100)
+        val rig = com.aboutobjects.healthgate.healthconnect.FakeHealthConnect()
+        val queue = InMemorySampleQueue()
+        val state = com.aboutobjects.healthgate.healthconnect.InMemoryCollectorState()
+        val collector = com.aboutobjects.healthgate.ingest.healthconnect.HealthConnectCollector(rig, queue, state, registry)
+        val engine = SyncEngine(queue, transport, TokenProvider { token!! }, registry, settings)
+        val mapper = com.aboutobjects.healthgate.ingest.healthconnect.HealthConnectMapper(registry)
+
+        val run = java.util.UUID.randomUUID().toString().take(8)
+        val t0 = Instant.now().minus(Duration.ofHours(1)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+        fun record(vararg bpm: Double) = com.aboutobjects.healthgate.ingest.healthconnect.HcRecord.HeartRate(
+            "live-check-$run", "com.aboutobjects.healthgate.writer", 2, null, t0, t0.plusSeconds(30L * bpm.size), java.time.ZoneOffset.UTC, java.time.ZoneOffset.UTC,
+            bpm.mapIndexed { i, v -> com.aboutobjects.healthgate.ingest.healthconnect.HcRecord.HeartRateSample(t0.plusSeconds(30L * i), v) },
+        )
+        fun identity(r: com.aboutobjects.healthgate.ingest.healthconnect.HcRecord, i: Int) = mapper.items(r, t0, ZoneId.of("UTC"))[i].sample.id
+        val tokens = TokenProvider { token!! }
+        val system = registry.systems.identifier.getValue("healthConnect")
+        fun search(id: String): List<Double> {
+            val r = runBlocking { transport.send(FhirRequest("GET", "Observation?" + com.aboutobjects.healthgate.sync.FhirSearch.identifierQuery(system, id), mapOf("Cache-Control" to "no-cache")), tokens.accessToken()) }
+            assertEquals(200, r.status)
+            return Json.parseToJsonElement(r.body).jsonObject["entry"]?.let { e -> kotlinx.serialization.json.JsonArray(e as kotlinx.serialization.json.JsonArray) }
+                ?.map { it.jsonObject.getValue("resource").jsonObject.getValue("valueQuantity").jsonObject.getValue("value").jsonPrimitive.content.toDouble() } ?: emptyList()
+        }
+        fun sync() { runBlocking { collector.collect(); val st = engine.drain(); assertEquals(st.lastError ?: "no error", SyncPhase.Idle, st.phase) } }
+
+        val first = record(70.0, 71.0)
+        rig.put(first)
+        sync()
+        assertEquals(listOf(70.0), search(identity(first, 0)))
+        assertEquals(listOf(71.0), search(identity(first, 1)))
+
+        val grown = record(99.0, 71.0, 72.0) // the first sample changed, one more added
+        rig.put(grown)
+        sync()
+        assertEquals("the changed sample was replaced in place: one Observation with the new value", listOf(99.0), search(identity(grown, 0)))
+        assertEquals(listOf(71.0), search(identity(grown, 1)))
+        assertEquals("the added sample", listOf(72.0), search(identity(grown, 2)))
+
+        rig.remove("live-check-$run")
+        sync()
+        for (i in 0..2) assertEquals("a deleted sample is gone from search", emptyList<Double>(), search(identity(grown, i)))
+        // (the controls are the searches above: each found its sample with the value written before the record was deleted)
+    }
 }

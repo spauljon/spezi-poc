@@ -2,6 +2,7 @@ package com.aboutobjects.healthgate.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.health.connect.client.PermissionController
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aboutobjects.healthgate.auth.AuthState
+import com.aboutobjects.healthgate.ingest.healthconnect.CollectOutcome
 import com.aboutobjects.healthgate.sync.SyncBlocker
 import com.aboutobjects.healthgate.sync.SyncPhase
 import java.time.ZoneId
@@ -39,7 +41,11 @@ fun HomeScreen(model: HomeViewModel) {
     val sync by model.sync.collectAsStateWithLifecycle()
     val paused by model.paused.collectAsStateWithLifecycle()
     val captureMessage by model.captureMessage.collectAsStateWithLifecycle()
+    val hc by model.healthConnect.collectAsStateWithLifecycle()
+    val reading by model.reading.collectAsStateWithLifecycle()
+    val lastRead by model.lastRead.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val permissions = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { model.refreshHealthConnect() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result -> model.onSignInResult(result.data) }
 
     Column(
@@ -74,9 +80,27 @@ fun HomeScreen(model: HomeViewModel) {
             captureMessage?.let { Text(it) }
         }
 
+        Section("Health Connect") {
+            Text(
+                when (hc) {
+                    HomeViewModel.HealthConnectState.Unavailable -> "Health Connect is not available on this phone."
+                    HomeViewModel.HealthConnectState.UpdateRequired -> "Health Connect needs an update before it can be read."
+                    HomeViewModel.HealthConnectState.NeedsPermission -> "Not allowed yet: heart rate, resting heart rate, heart-rate variability, sleep, nutrition and hydration (read only)."
+                    HomeViewModel.HealthConnectState.Ready -> "Allowed to read heart rate, resting heart rate, heart-rate variability, sleep, nutrition and hydration."
+                },
+            )
+            if (hc == HomeViewModel.HealthConnectState.NeedsPermission) {
+                Button(onClick = { permissions.launch(model.healthConnectPermissions) }) { Text("Allow Health Connect access") }
+            }
+            if (hc == HomeViewModel.HealthConnectState.Ready) {
+                Button(enabled = !reading, onClick = model::readHealthConnect) { Text(if (reading) "Reading…" else "Read Health Connect now") }
+            }
+            lastRead?.let { r -> Text(readSummary(r)) }
+        }
+
         Section("Upload") {
             val c = sync.counts
-            Text("Waiting: ${c.pending}   Uploaded: ${c.sent}   Rejected: ${c.rejected}   Skipped: ${c.skipped}")
+            Text("Waiting: ${c.pending}   Uploaded: ${c.sent}   Rejected: ${c.rejected}   Skipped: ${c.skipped}   Deleted: ${c.deleted}")
             Text(
                 when (val p = sync.phase) {
                     SyncPhase.Idle -> "Idle." + (sync.lastSuccess?.let { " Last upload ${clock.format(it)}." } ?: "")
@@ -96,7 +120,7 @@ fun HomeScreen(model: HomeViewModel) {
                 Switch(checked = paused, onCheckedChange = model::setPaused)
                 Text(if (paused) "Paused" else "Running")
             }
-            Text("Server count: created ${sync.created}, already there ${sync.alreadyPresent}.")
+            Text("Server count: created ${sync.created}, already there ${sync.alreadyPresent}, updated ${sync.updated}, deleted ${sync.deleted}.")
         }
 
         Section("Attempts") {
@@ -104,6 +128,15 @@ fun HomeScreen(model: HomeViewModel) {
             for (a in sync.history) Text("${clock.format(a.at)}: ${a.summary}")
         }
     }
+}
+
+/** What one read did, in words and counts (never a value, a name or a time of the person's data). */
+private fun readSummary(r: CollectOutcome): String = when {
+    r.mode == CollectOutcome.Mode.BUSY -> "A read is already running."
+    r.failure != null -> "The read stopped (${r.failure}); nothing was lost and the next read continues from the same place."
+    else -> (if (r.mode == CollectOutcome.Mode.WINDOW) "Read the last 30 days: " else "Read the changes: ") +
+        "${r.recordsUpserted} records, ${r.samplesQueued} samples queued, ${r.recordsDeleted} records deleted" +
+        (if (r.recordsRefused > 0) ", ${r.recordsRefused} refused" else "") + "."
 }
 
 @Composable

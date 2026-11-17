@@ -39,6 +39,13 @@ object Golden {
         return Json.parseToJsonElement(f.readText()).jsonObject.getValue("cases").jsonArray.map { it.jsonObject }
     }
 
+    /** A fixture file that is one object rather than a `cases` list (the Health Connect identity file). */
+    fun document(file: String): JsonObject {
+        val f = File(goldenDir, file)
+        check(f.isFile) { "the golden fixture $file was not found at ${f.absolutePath}" }
+        return Json.parseToJsonElement(f.readText()).jsonObject
+    }
+
     fun string(o: JsonObject, key: String): String? = (o[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
 
     /** A `MetricSample` from a fixture's `sample` object (the iOS-shaped input the generator writes). */

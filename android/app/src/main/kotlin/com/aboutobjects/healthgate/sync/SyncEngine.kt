@@ -2,6 +2,7 @@ package com.aboutobjects.healthgate.sync
 
 import com.aboutobjects.healthgate.contract.MetricRegistry
 import com.aboutobjects.healthgate.queue.QueueCounts
+import com.aboutobjects.healthgate.queue.QueueOp
 import com.aboutobjects.healthgate.queue.QueuedItem
 import com.aboutobjects.healthgate.queue.SampleQueue
 import java.time.Instant
@@ -42,6 +43,9 @@ data class SyncStatus(
     val lastError: String? = null,
     val created: Int = 0,
     val alreadyPresent: Int = 0,
+    /** Health Connect: Observations replaced in place, and deleted (decision A11), since the engine was made. */
+    val updated: Int = 0,
+    val deleted: Int = 0,
     /** The last attempts, newest first (shown on the home screen; never contains a sample's content or a token). */
     val history: List<Attempt> = emptyList(),
 )
@@ -171,7 +175,7 @@ class SyncEngine(
     }
 
     private suspend fun upload(items: List<QueuedItem>, attempts: Int, patientId: String): Step {
-        val built = builder.build(items.map { it.key to it.item }, patientId)
+        val built = builder.build(items, patientId)
         for ((key, error) in built.invalid) io { queue.markRejected(key, "Not mappable: ${error.code}") }
         if (built.unmappedKeys.isNotEmpty()) io { queue.markSkipped(built.unmappedKeys) }
         if (built.observationKeys.isEmpty()) return Step.Done
@@ -193,12 +197,17 @@ class SyncEngine(
         }
         return when (response.status) {
             in 200..299 -> {
-                val tally = tally(response.body, skipping = built.deviceEntries.size)
-                if (tally == null || tally.total != built.entries.size) {
+                val tally = tally(response.body, built)
+                if (tally == null) {
                     return transient(built.observationKeys, "The server's response did not match the request.", attempts)
                 }
                 io { queue.markSent(built.observationKeys) }
-                publish { it.copy(created = it.created + tally.created, alreadyPresent = it.alreadyPresent + maxOf(0, built.observationKeys.size - tally.created), lastSuccess = now()) }
+                publish {
+                    it.copy(
+                        created = it.created + tally.created, alreadyPresent = it.alreadyPresent + tally.alreadyPresent,
+                        updated = it.updated + tally.updated, deleted = it.deleted + tally.deleted, lastSuccess = now(),
+                    )
+                }
                 refresh()
                 Step.Done
             }
@@ -298,15 +307,29 @@ class SyncEngine(
         }
     }
 
-    private data class Tally(val total: Int, val created: Int)
+    private data class Tally(val created: Int, val alreadyPresent: Int, val updated: Int, val deleted: Int)
 
-    /** The transaction response's entries: how many there are, and how many of the Observation entries were created (201). */
-    private fun tally(body: String, skipping: Int): Tally? = try {
-        val entries = json.parseToJsonElement(body).jsonObject["entry"]?.jsonArray ?: return null
-        val statuses = entries.map { it.jsonObject["response"]?.jsonObject?.get("status")?.jsonPrimitive?.content ?: "" }
-        Tally(statuses.size, statuses.drop(skipping).count { it.startsWith("201") })
+    /**
+     * The transaction response read against the request: one response entry per request entry, or null (the response does not match).
+     * A create is "created" on 201 and "already present" otherwise; an update and a delete count as such on any success.
+     */
+    private fun tally(body: String, built: BuildResult): Tally? = try {
+        parseTally(body, built)
     } catch (e: Exception) {
         null
+    }
+
+    private fun parseTally(body: String, built: BuildResult): Tally? {
+        val entries = json.parseToJsonElement(body).jsonObject["entry"]?.jsonArray ?: return null
+        val statuses = entries.map { it.jsonObject["response"]?.jsonObject?.get("status")?.jsonPrimitive?.content ?: "" }
+        if (statuses.size != built.entries.size) return null
+        val ops = built.observationEntries.map { it.op }
+        var created = 0
+        var present = 0
+        for ((op, status) in ops.zip(statuses.drop(built.deviceEntries.size))) {
+            if (op == QueueOp.CREATE) { if (status.startsWith("201")) created++ else present++ }
+        }
+        return Tally(created, present, ops.count { it == QueueOp.UPDATE }, ops.count { it == QueueOp.DELETE })
     }
 
     private fun patientIds(body: String): List<String> = try {

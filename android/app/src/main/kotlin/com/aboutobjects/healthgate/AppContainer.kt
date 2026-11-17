@@ -10,6 +10,10 @@ import com.aboutobjects.healthgate.ingest.IngestSource
 import com.aboutobjects.healthgate.ingest.SyntheticConfig
 import com.aboutobjects.healthgate.ingest.SyntheticGenerator
 import com.aboutobjects.healthgate.ingest.SyntheticSource
+import com.aboutobjects.healthgate.ingest.healthconnect.AndroidHealthConnectGateway
+import com.aboutobjects.healthgate.ingest.healthconnect.HealthConnectAccess
+import com.aboutobjects.healthgate.ingest.healthconnect.HealthConnectCollector
+import com.aboutobjects.healthgate.ingest.healthconnect.PrefsCollectorState
 import com.aboutobjects.healthgate.mapping.QualityFlagger
 import com.aboutobjects.healthgate.queue.SampleQueue
 import com.aboutobjects.healthgate.queue.SqliteSampleQueue
@@ -18,7 +22,7 @@ import com.aboutobjects.healthgate.sync.SyncEngine
 import java.time.ZoneId
 
 /** The app's parts, made once at launch (plain constructors, no dependency-injection library). */
-class AppContainer(context: Context) {
+class AppContainer(private val context: Context) {
     val configuration: ServerConfiguration = ServerConfiguration.forHost(BuildConfig.SERVER_HOST)
     val registry: MetricRegistry = context.assets.open("metrics.json").bufferedReader().use { MetricRegistry.parse(it.readText()) }
     val queue: SampleQueue = SqliteSampleQueue(context)
@@ -36,6 +40,18 @@ class AppContainer(context: Context) {
             patientSystem = registry.systems.identifier.getValue("patient"),
         ),
     )
+
+    /** Health Connect on this phone, or null when it is missing or needs an update (the screen then says why). */
+    val healthConnectStatus: HealthConnectAccess.Status get() = HealthConnectAccess.status(context)
+
+    val healthConnectClient: androidx.health.connect.client.HealthConnectClient? by lazy {
+        if (HealthConnectAccess.status(context) == HealthConnectAccess.Status.AVAILABLE) androidx.health.connect.client.HealthConnectClient.getOrCreate(context) else null
+    }
+
+    /** Reads Health Connect into the queue (null when Health Connect is not available). */
+    val collector: HealthConnectCollector? by lazy {
+        healthConnectClient?.let { HealthConnectCollector(AndroidHealthConnectGateway(it), queue, PrefsCollectorState(context), registry) }
+    }
 
     private companion object {
         const val SYNTHETIC_SEED = 20260301L

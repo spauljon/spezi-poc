@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.aboutobjects.healthgate.AppContainer
 import com.aboutobjects.healthgate.auth.OidcException
 import com.aboutobjects.healthgate.auth.SignInCancelled
+import com.aboutobjects.healthgate.ingest.healthconnect.CollectOutcome
+import com.aboutobjects.healthgate.ingest.healthconnect.HealthConnectAccess
 import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -26,8 +28,28 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     private val _captureMessage = MutableStateFlow<String?>(null)
     val captureMessage: StateFlow<String?> get() = _captureMessage
 
+    /** What Health Connect lets this app do right now. */
+    sealed interface HealthConnectState {
+        data object Unavailable : HealthConnectState
+        data object UpdateRequired : HealthConnectState
+        data object NeedsPermission : HealthConnectState
+        data object Ready : HealthConnectState
+    }
+
+    private val _healthConnect = MutableStateFlow<HealthConnectState>(HealthConnectState.Unavailable)
+    val healthConnect: StateFlow<HealthConnectState> get() = _healthConnect
+
+    private val _reading = MutableStateFlow(false)
+    val reading: StateFlow<Boolean> get() = _reading
+
+    private val _lastRead = MutableStateFlow<CollectOutcome?>(null)
+    val lastRead: StateFlow<CollectOutcome?> get() = _lastRead
+
+    val healthConnectPermissions: Set<String> get() = HealthConnectAccess.readPermissions
+
     init {
         container.auth.restore()
+        refreshHealthConnect()
         viewModelScope.launch { container.engine.refresh() }
     }
 
@@ -50,6 +72,36 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { container.queue.makeAllDue() }
             container.engine.drain()
+        }
+    }
+
+    /** Re-reads what Health Connect allows (after the user came back from its permission screen or its settings). */
+    fun refreshHealthConnect() {
+        viewModelScope.launch {
+            _healthConnect.value = when (container.healthConnectStatus) {
+                HealthConnectAccess.Status.UNAVAILABLE -> HealthConnectState.Unavailable
+                HealthConnectAccess.Status.UPDATE_REQUIRED -> HealthConnectState.UpdateRequired
+                HealthConnectAccess.Status.AVAILABLE -> {
+                    val granted = container.healthConnectClient?.permissionController?.getGrantedPermissions() ?: emptySet()
+                    if (granted.containsAll(HealthConnectAccess.readPermissions)) HealthConnectState.Ready else HealthConnectState.NeedsPermission
+                }
+            }
+        }
+    }
+
+    /** Reads Health Connect into the queue, then uploads (a changed record is an update, a deleted one a delete). Counts only are kept. */
+    fun readHealthConnect() {
+        val collector = container.collector ?: return
+        if (_reading.value) return
+        viewModelScope.launch {
+            _reading.value = true
+            try {
+                _lastRead.value = collector.collect()
+                container.engine.refresh()
+                if (!_paused.value) container.engine.drain()
+            } finally {
+                _reading.value = false
+            }
         }
     }
 

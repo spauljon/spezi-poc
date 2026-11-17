@@ -4,6 +4,9 @@ package com.aboutobjects.healthgate.mapping
 enum class MappingError(val code: String) {
     EMPTY_PATIENT_ID("emptyPatientID"),
     EMPTY_SAMPLE_ID("emptySampleID"),
+
+    /** A Health Connect record without an id cannot be identified (contract healthConnect.sampleIdentity). */
+    EMPTY_RECORD_ID("emptyRecordId"),
     NON_FINITE_VALUE("nonFiniteValue"),
     NON_POSITIVE_VALUE("nonPositiveValue"),
 
@@ -13,6 +16,9 @@ enum class MappingError(val code: String) {
     EMPTY_SLEEP_INTERVAL("emptySleepInterval"),
     OFFSET_NOT_WHOLE_MINUTES("offsetNotWholeMinutes"),
     EMPTY_DEVICE_DESCRIPTOR("emptyDeviceDescriptor"),
+
+    /** A Health Connect record whose writing app has no package name (contract healthConnect.appSource). */
+    BLANK_PACKAGE_NAME("blankPackageName"),
 
     /** The registry has no entry for something the mapper needs (a backstop: it would have failed to load). */
     CONTRACT_MISSING("contractMissing"),

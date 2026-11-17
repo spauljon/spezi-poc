@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.appauth)
     implementation(libs.okhttp)
+    implementation(libs.health.connect.client)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 

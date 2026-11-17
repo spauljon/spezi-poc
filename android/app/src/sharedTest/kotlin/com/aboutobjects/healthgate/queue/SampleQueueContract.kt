@@ -122,4 +122,153 @@ abstract class SampleQueueContract {
         val back = queue.nextBatch(10, t0).map { it.item }
         assertEquals(listOf(full, sleep, watch), back)
     }
+
+    // ---- Health Connect samples (decision A11): they can change and go away ----
+
+    protected fun hc(id: String, value: Double = 72.0, group: String = "rec-1", zone: String = "America/Los_Angeles", endZone: String? = null) = IngestItem(
+        MetricSample(
+            Measurement.Quantity("heartRate", value), t0, t0, t0, ZoneId.of(zone), SampleSource.HEALTH_CONNECT, id, group = group,
+            endTimeZone = endZone?.let { ZoneId.of(it) },
+        ),
+        DeviceDescriptor.OriginApp("com.example.writer"),
+    )
+
+    private val k = "healthConnect|"
+
+    @Test fun aHealthConnectSampleStoredComesBackExactly() {
+        val a = hc("a", group = "g-1", zone = "-08:00", endZone = "+09:00")
+        val device = hc("b").copy(device = DeviceDescriptor.HealthConnectDevice("Example Corp", "Band 2", "fitness_band"))
+        queue.enqueue(listOf(a, device))
+        assertEquals(listOf(a, device), queue.nextBatch(10, t0).map { it.item })
+    }
+
+    @Test fun anUnchangedRedeliveryIsKnownAndNeverFlaggedAsADuplicate() {
+        queue.enqueue(listOf(hc("a")))
+        assertEquals(Enqueued(0, 1), queue.enqueue(listOf(hc("a"))))
+        assertFalse("a Health Connect redelivery is normal, not two deliveries of one sample", queue.nextBatch(10, t0).single().item.sample.duplicateResolved)
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(0, 1), queue.enqueue(listOf(hc("a"))))
+        assertEquals(QueueCounts(sent = 1), queue.counts())
+        // when only the production time differs it is still the same content
+        assertEquals(Enqueued(0, 1), queue.enqueue(listOf(hc("a").let { it.copy(sample = it.sample.copy(issued = t0.plusSeconds(999), lateArrival = true)) })))
+    }
+
+    @Test fun aChangedValueAfterUploadWaitsAsAnUpdateAndIsDoneOnceSent() {
+        queue.enqueue(listOf(hc("a", 72.0)))
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(0, 0, updated = 1), queue.enqueue(listOf(hc("a", 75.0))))
+        val due = queue.nextBatch(10, t0).single()
+        assertEquals(QueueOp.UPDATE, due.op)
+        assertEquals(Measurement.Quantity("heartRate", 75.0), due.item.sample.measurement)
+        queue.markSent(listOf(k + "a"))
+        assertEquals(QueueCounts(sent = 1), queue.counts())
+        assertEquals("the same value again is known", Enqueued(0, 1), queue.enqueue(listOf(hc("a", 75.0))))
+    }
+
+    @Test fun anEditThatIsUndoneBeforeItIsSentCancelsTheUpdate() {
+        queue.enqueue(listOf(hc("a", 72.0)))
+        queue.markSent(listOf(k + "a"))
+        queue.enqueue(listOf(hc("a", 75.0)))
+        assertEquals(QueueOp.UPDATE, queue.nextBatch(10, t0).single().op)
+        queue.enqueue(listOf(hc("a", 72.0)))
+        assertEquals(QueueCounts(sent = 1), queue.counts())
+        assertTrue(queue.nextBatch(10, t0).isEmpty())
+    }
+
+    @Test fun aChangeToASampleStillWaitingReplacesItAndStaysACreate() {
+        queue.enqueue(listOf(hc("a", 72.0)))
+        queue.enqueue(listOf(hc("a", 80.0)))
+        val due = queue.nextBatch(10, t0).single()
+        assertEquals(QueueOp.CREATE, due.op)
+        assertEquals(Measurement.Quantity("heartRate", 80.0), due.item.sample.measurement)
+        assertEquals(1, queue.counts().total)
+    }
+
+    @Test fun aDeleteAfterUploadWaitsAndIsDoneOnceSentThenIsKnown() {
+        queue.enqueue(listOf(hc("a")))
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(0, 0, deleted = 1), queue.apply(ChangeSet(deleteKeys = listOf(k + "a"))))
+        assertEquals(QueueOp.DELETE, queue.nextBatch(10, t0).single().op)
+        queue.markSent(listOf(k + "a"))
+        assertEquals(QueueCounts(deleted = 1), queue.counts())
+        assertEquals("deleting what is deleted needs nothing", Enqueued(0, 1), queue.apply(ChangeSet(deleteKeys = listOf(k + "a"))))
+        assertTrue(queue.nextBatch(10, t0).isEmpty())
+    }
+
+    @Test fun aDeleteBeforeUploadSendsNothingAtAll() {
+        queue.enqueue(listOf(hc("a"), hc("b")))
+        assertEquals(Enqueued(0, 0, cancelled = 1), queue.apply(ChangeSet(deleteKeys = listOf(k + "a"))))
+        assertEquals("the sample is simply gone, no deletion is queued", listOf("b"), queue.nextBatch(10, t0).map { it.item.sample.id })
+        assertEquals(QueueCounts(pending = 1), queue.counts())
+        assertEquals("a delete for something never seen needs nothing", Enqueued(0, 1), queue.apply(ChangeSet(deleteKeys = listOf(k + "never"))))
+    }
+
+    @Test fun aDeletionIsHeldUntilItsGracePeriodEnds() {
+        queue.enqueue(listOf(hc("a")))
+        queue.markSent(listOf(k + "a"))
+        queue.apply(ChangeSet(deleteKeys = listOf(k + "a"), holdDeletesUntil = t0.plusSeconds(300)))
+        assertTrue(queue.nextBatch(10, t0).isEmpty())
+        assertEquals(t0.plusSeconds(300), queue.earliestDue())
+        assertEquals(QueueOp.DELETE, queue.nextBatch(10, t0.plusSeconds(300)).single().op)
+    }
+
+    @Test fun aDeletionAndTheSameSampleDeliveredAgainInOneChangeCancelOut() {
+        queue.enqueue(listOf(hc("a")))
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(0, 1, deleted = 1), queue.apply(ChangeSet(deleteKeys = listOf(k + "a"), upserts = listOf(hc("a")))))
+        assertEquals(QueueCounts(sent = 1), queue.counts())
+        assertTrue("nothing is sent", queue.nextBatch(10, t0).isEmpty())
+        // the control: a deletion followed by a DIFFERENT delivery is an update, not a cancellation
+        queue.apply(ChangeSet(deleteKeys = listOf(k + "a"), upserts = listOf(hc("a", 99.0))))
+        assertEquals(QueueOp.UPDATE, queue.nextBatch(10, t0).single().op)
+    }
+
+    @Test fun aDeletedSampleDeliveredAgainIsCreatedAgain() {
+        queue.enqueue(listOf(hc("a")))
+        queue.markSent(listOf(k + "a"))
+        queue.apply(ChangeSet(deleteKeys = listOf(k + "a")))
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(1, 0), queue.enqueue(listOf(hc("a"))))
+        assertEquals(QueueOp.CREATE, queue.nextBatch(10, t0).single().op)
+    }
+
+    @Test fun onlyAHealthConnectSampleCanBeDeletedOrUpdated() {
+        queue.enqueue(listOf(item("s")))
+        queue.markSent(listOf("synthetic|s"))
+        assertEquals(Enqueued(0, 1), queue.apply(ChangeSet(deleteKeys = listOf("synthetic|s"))))
+        assertEquals("a synthetic sample with another value is still just known", Enqueued(0, 1), queue.enqueue(listOf(item("s", 99.0))))
+        assertEquals(QueueCounts(sent = 1), queue.counts())
+        assertTrue(queue.nextBatch(10, t0).isEmpty())
+    }
+
+    @Test fun aGroupListsTheSamplesThatExistOrWillAndNoOthers() {
+        queue.enqueue(listOf(hc("a", group = "g"), hc("b", group = "g"), hc("c", group = "g"), hc("d", group = "g"), hc("e", group = "other")))
+        queue.markSent(listOf(k + "a", k + "b", k + "c"))
+        queue.apply(ChangeSet(deleteKeys = listOf(k + "b")))          // delete waiting
+        queue.apply(ChangeSet(deleteKeys = listOf(k + "c")))
+        queue.markSent(listOf(k + "c"))                               // deleted
+        assertEquals("a is sent, d waits to be created; b is going and c is gone", listOf(k + "a", k + "d"), queue.keysForGroup("g").sorted())
+        assertEquals(listOf(k + "e"), queue.keysForGroup("other"))
+        assertTrue(queue.keysForGroup("nothing").isEmpty())
+    }
+
+    @Test fun theLedgerKeepsTheOrderRecordsWereFirstSeenAndForgetsRemovedOnes() {
+        queue.apply(ChangeSet(ledgerPut = listOf(LedgerEntry("r1", "ck#1", "ck", 1000), LedgerEntry("r2", "ck#2", "ck", 2000), LedgerEntry("r3", "other#1", "other", 3000))))
+        assertEquals(listOf("r1", "r2"), queue.ledgerForContentKey("ck").map { it.recordId })
+        // r1 seen again with a new group keeps its place
+        queue.apply(ChangeSet(ledgerPut = listOf(LedgerEntry("r1", "ck#3", "ck", 1000))))
+        assertEquals(listOf("r1", "r2"), queue.ledgerForContentKey("ck").map { it.recordId })
+        assertEquals("ck#3", queue.ledgerEntry("r1")?.group)
+        assertEquals(listOf("r2", "r3"), queue.ledgerSince(2000).map { it.recordId })
+        queue.apply(ChangeSet(ledgerRemove = listOf("r1")))
+        assertNull(queue.ledgerEntry("r1"))
+        assertEquals(listOf("r2"), queue.ledgerForContentKey("ck").map { it.recordId })
+        assertNull(queue.ledgerEntry("never"))
+    }
+
+    @Test fun aChangeSetIsOneUnit() {
+        queue.apply(ChangeSet(upserts = listOf(hc("a"), hc("b")), ledgerPut = listOf(LedgerEntry("rec-1", "rec-1", null, 1))))
+        assertEquals(2, queue.counts().pending)
+        assertEquals("rec-1", queue.ledgerEntry("rec-1")?.group)
+    }
 }

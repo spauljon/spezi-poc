@@ -26,6 +26,18 @@ class DeviceMapper(private val registry: MetricRegistry) {
             if (fields.none { it.isNotEmpty() }) throw MappingException(MappingError.EMPTY_DEVICE_DESCRIPTOR)
             sha256(fields.joinToString(separator))
         }
+        is DeviceDescriptor.HealthConnectDevice -> {
+            val manufacturer = (descriptor.manufacturer ?: "").trim()
+            val model = (descriptor.model ?: "").trim()
+            if (manufacturer.isEmpty() && model.isEmpty()) throw MappingException(MappingError.EMPTY_DEVICE_DESCRIPTOR)
+            sha256(listOf(manufacturer, model, descriptor.type.trim()).joinToString(separator))
+        }
+        is DeviceDescriptor.OriginApp -> {
+            // contract healthConnect.appSource: its own prefix, because an iOS bundle identifier and an Android package name can be the same text
+            val pkg = descriptor.packageName.trim()
+            if (pkg.isEmpty()) throw MappingException(MappingError.BLANK_PACKAGE_NAME)
+            sha256("hc-app$separator$pkg")
+        }
         is DeviceDescriptor.SourceApp -> {
             // the bundle identifier is the identity, so one app is one Device under any display name
             val bundle = (descriptor.bundleIdentifier ?: "").trim()
@@ -74,6 +86,26 @@ class DeviceMapper(private val registry: MetricRegistry) {
                     }
                     put("patient", patient)
                 }
+            }
+
+            is DeviceDescriptor.HealthConnectDevice -> buildJsonObject {
+                put("resourceType", "Device")
+                put("identifier", buildJsonArray { add(deviceKeyIdentifier) })
+                put("status", "active")
+                (descriptor.manufacturer ?: "").trim().ifEmpty { null }?.let { put("manufacturer", it) }
+                (descriptor.model ?: "").trim().ifEmpty { null }?.let { put("modelNumber", it) }
+                put("type", buildJsonObject { put("text", descriptor.type.trim()) })
+                put("patient", patient)
+            }
+
+            is DeviceDescriptor.OriginApp -> buildJsonObject {
+                put("resourceType", "Device")
+                put("identifier", buildJsonArray {
+                    add(deviceKeyIdentifier)
+                    add(buildJsonObject { put("system", registry.systems.identifier.getValue("appPackageName")); put("value", descriptor.packageName.trim()) })
+                })
+                put("status", "active")
+                put("patient", patient)
             }
 
             is DeviceDescriptor.SourceApp -> {

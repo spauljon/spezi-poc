@@ -23,6 +23,7 @@ data class StoredItem(
     val endMs: Long,
     val issuedMs: Long,
     val zone: String,
+    val endZone: String? = null,
     val source: String,
     val id: String,
     val userEntered: Boolean = false,
@@ -31,6 +32,7 @@ data class StoredItem(
     val duplicateResolved: Boolean = false,
     val mealCode: String? = null,
     val mealLabel: String? = null,
+    val group: String? = null,
     val deviceKind: String,
     val deviceName: String? = null,
     val deviceManufacturer: String? = null,
@@ -38,18 +40,21 @@ data class StoredItem(
     val deviceHardware: String? = null,
     val deviceSoftware: String? = null,
     val deviceBundle: String? = null,
+    val deviceType: String? = null,
 ) {
     fun toItem(): IngestItem {
         val s = MetricSample(
             measurement = if (stage != null) Measurement.Sleep(stage) else Measurement.Quantity(metricId!!, value!!),
             start = Instant.ofEpochMilli(startMs), end = Instant.ofEpochMilli(endMs), issued = Instant.ofEpochMilli(issuedMs),
-            timeZone = ZoneId.of(zone), source = source, id = id,
+            timeZone = ZoneId.of(zone), endTimeZone = endZone?.let { ZoneId.of(it) }, source = source, id = id, group = group,
             userEntered = userEntered, artifactSuspected = artifactSuspected, lateArrival = lateArrival, duplicateResolved = duplicateResolved,
             meal = if (mealCode != null && mealLabel != null) Meal(mealCode, mealLabel) else null,
         )
         val device = when (deviceKind) {
             "synthetic" -> DeviceDescriptor.Synthetic
             "healthKit" -> DeviceDescriptor.HealthKit(deviceName, deviceManufacturer, deviceModel, deviceHardware, deviceSoftware)
+            "hcDevice" -> DeviceDescriptor.HealthConnectDevice(deviceManufacturer, deviceModel, deviceType ?: "unknown")
+            "originApp" -> DeviceDescriptor.OriginApp(deviceBundle ?: "")
             else -> DeviceDescriptor.SourceApp(deviceName, deviceBundle)
         }
         return IngestItem(s, device)
@@ -70,16 +75,20 @@ data class StoredItem(
             return StoredItem(
                 metricId = q?.metricId, value = q?.value, stage = sl?.stage,
                 startMs = s.start.toEpochMilli(), endMs = s.end.toEpochMilli(), issuedMs = s.issued.toEpochMilli(),
-                zone = s.timeZone.id, source = s.source, id = s.id,
+                zone = s.timeZone.id, endZone = s.endTimeZone?.id, source = s.source, id = s.id, group = s.group,
                 userEntered = s.userEntered, artifactSuspected = s.artifactSuspected, lateArrival = s.lateArrival, duplicateResolved = s.duplicateResolved,
                 mealCode = s.meal?.code, mealLabel = s.meal?.label,
-                deviceKind = when (d) { DeviceDescriptor.Synthetic -> "synthetic"; is DeviceDescriptor.HealthKit -> "healthKit"; is DeviceDescriptor.SourceApp -> "sourceApp" },
+                deviceKind = when (d) {
+                    DeviceDescriptor.Synthetic -> "synthetic"; is DeviceDescriptor.HealthKit -> "healthKit"; is DeviceDescriptor.SourceApp -> "sourceApp"
+                    is DeviceDescriptor.HealthConnectDevice -> "hcDevice"; is DeviceDescriptor.OriginApp -> "originApp"
+                },
                 deviceName = when (d) { is DeviceDescriptor.HealthKit -> d.name; is DeviceDescriptor.SourceApp -> d.name; else -> null },
-                deviceManufacturer = (d as? DeviceDescriptor.HealthKit)?.manufacturer,
-                deviceModel = (d as? DeviceDescriptor.HealthKit)?.model,
+                deviceManufacturer = (d as? DeviceDescriptor.HealthKit)?.manufacturer ?: (d as? DeviceDescriptor.HealthConnectDevice)?.manufacturer,
+                deviceModel = (d as? DeviceDescriptor.HealthKit)?.model ?: (d as? DeviceDescriptor.HealthConnectDevice)?.model,
+                deviceType = (d as? DeviceDescriptor.HealthConnectDevice)?.type,
                 deviceHardware = (d as? DeviceDescriptor.HealthKit)?.hardwareVersion,
                 deviceSoftware = (d as? DeviceDescriptor.HealthKit)?.softwareVersion,
-                deviceBundle = (d as? DeviceDescriptor.SourceApp)?.bundleIdentifier,
+                deviceBundle = (d as? DeviceDescriptor.SourceApp)?.bundleIdentifier ?: (d as? DeviceDescriptor.OriginApp)?.packageName,
             )
         }
     }

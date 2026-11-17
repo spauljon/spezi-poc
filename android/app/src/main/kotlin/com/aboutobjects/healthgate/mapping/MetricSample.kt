@@ -8,6 +8,9 @@ import java.time.ZoneId
 object SampleSource {
     const val SYNTHETIC = "synthetic"
 
+    /** Health Connect records (M27): the sample identity is `id`, the record (or nutrition item) is `group`. */
+    const val HEALTH_CONNECT = "healthConnect"
+
     /** Used by the shared golden fixtures (the iOS source); this app does not produce it. */
     const val HEALTH_KIT = "healthKit"
 }
@@ -42,6 +45,10 @@ data class MetricSample(
     val duplicateResolved: Boolean = false,
     /** The meal an intake belongs to, when the source said. `null` is "no meal", never a guess. */
     val meal: Meal? = null,
+    /** The thing that produced this sample (Health Connect: the record id, or a nutrition item's `<content key>#<n>`); the second identifier. */
+    val group: String? = null,
+    /** The zone of [end] when it differs from [timeZone] (a Health Connect record has a start and an end offset of its own). */
+    val endTimeZone: ZoneId? = null,
 )
 
 /** What a device is, for the `Device` resource and its key (contract `deviceKey`). */
@@ -54,4 +61,10 @@ sealed interface DeviceDescriptor {
 
     /** A sample with no device: it came from an application, keyed by its bundle identifier when it has one. */
     data class SourceApp(val name: String?, val bundleIdentifier: String?) : DeviceDescriptor
+
+    /** Health Connect `metadata.device`: [type] is the contract's type name (`watch`, `fitness_band`, ...). */
+    data class HealthConnectDevice(val manufacturer: String?, val model: String?, val type: String) : DeviceDescriptor
+
+    /** A Health Connect record with no usable device: attributed to the app that wrote it, by package name. */
+    data class OriginApp(val packageName: String) : DeviceDescriptor
 }

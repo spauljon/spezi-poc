@@ -118,7 +118,7 @@ class ObservationMapper(private val registry: MetricRegistry) {
         val effective: Pair<String, JsonElement> = if (period) {
             "effectivePeriod" to buildJsonObject {
                 put("start", format(sample.start, sample))
-                put("end", format(sample.end, sample))
+                put("end", format(sample.end, sample, zone = sample.endTimeZone))
             }
         } else {
             "effectiveDateTime" to JsonPrimitive(format(sample.start, sample))
@@ -134,6 +134,11 @@ class ObservationMapper(private val registry: MetricRegistry) {
             })
             put("identifier", buildJsonArray {
                 add(buildJsonObject { put("system", identifierSystem); put("value", identifierValue) })
+                // Health Connect: the second identifier names the record (or nutrition item) that produced the sample
+                sample.group?.let { group ->
+                    val groupSystem = registry.systems.identifier["${sample.source}Group"] ?: throw MappingException(MappingError.CONTRACT_MISSING, "identifier ${sample.source}Group")
+                    add(buildJsonObject { put("system", groupSystem); put("value", group) })
+                }
             })
             put("status", "final")
             put("category", categories(metric, sample))
@@ -158,8 +163,8 @@ class ObservationMapper(private val registry: MetricRegistry) {
         }
     }
 
-    private fun format(instant: Instant, sample: MetricSample, alwaysMillis: Boolean = false): String = try {
-        FhirDateTime.string(instant, sample.timeZone, alwaysMillis)
+    private fun format(instant: Instant, sample: MetricSample, alwaysMillis: Boolean = false, zone: java.time.ZoneId? = null): String = try {
+        FhirDateTime.string(instant, zone ?: sample.timeZone, alwaysMillis)
     } catch (e: FhirDateTime.OffsetNotWholeMinutes) {
         throw MappingException(MappingError.OFFSET_NOT_WHOLE_MINUTES)
     }

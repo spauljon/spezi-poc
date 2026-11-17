@@ -10,6 +10,8 @@ import com.aboutobjects.healthgate.mapping.MappingError
 import com.aboutobjects.healthgate.mapping.MappingException
 import com.aboutobjects.healthgate.mapping.MappingOutcome
 import com.aboutobjects.healthgate.mapping.ObservationMapper
+import com.aboutobjects.healthgate.queue.QueueOp
+import com.aboutobjects.healthgate.queue.QueuedItem
 import java.security.MessageDigest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.JsonArray
@@ -21,16 +23,34 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/** One entry of a transaction Bundle: its resource, and whether it is a Device or an Observation. */
-data class BundleEntry(val fullUrl: String, val resource: JsonObject, val isObservation: Boolean, val key: String? = null) {
-    fun toJson(registryIdentifier: JsonObject): JsonObject = buildJsonObject {
-        put("fullUrl", fullUrl)
-        put("resource", resource)
-        put("request", buildJsonObject {
-            put("method", "POST")
-            put("url", if (isObservation) "Observation" else "Device")
-            put("ifNoneExist", FhirSearch.identifierQuery(registryIdentifier.getValue("system").jsonPrimitive.content, registryIdentifier.getValue("value").jsonPrimitive.content))
-        })
+/**
+ * One entry of a transaction Bundle: its resource, and whether it is a Device or an Observation. An Observation entry is a conditional
+ * create (POST with `ifNoneExist`), a conditional update (PUT by sample identifier) or a conditional delete (DELETE by sample identifier,
+ * where [resource] is only a stub that carries the identifier and is never sent).
+ */
+data class BundleEntry(val fullUrl: String, val resource: JsonObject, val isObservation: Boolean, val key: String? = null, val op: QueueOp = QueueOp.CREATE) {
+    fun toJson(registryIdentifier: JsonObject): JsonObject {
+        val system = registryIdentifier.getValue("system").jsonPrimitive.content
+        val value = registryIdentifier.getValue("value").jsonPrimitive.content
+        return when (op) {
+            QueueOp.CREATE -> buildJsonObject {
+                put("fullUrl", fullUrl)
+                put("resource", resource)
+                put("request", buildJsonObject {
+                    put("method", "POST")
+                    put("url", if (isObservation) "Observation" else "Device")
+                    put("ifNoneExist", FhirSearch.identifierQuery(system, value))
+                })
+            }
+            QueueOp.UPDATE -> buildJsonObject {
+                put("fullUrl", fullUrl)
+                put("resource", resource)
+                put("request", buildJsonObject { put("method", "PUT"); put("url", "Observation?" + FhirSearch.identifierQuery(system, value)) })
+            }
+            QueueOp.DELETE -> buildJsonObject {
+                put("request", buildJsonObject { put("method", "DELETE"); put("url", "Observation?" + FhirSearch.identifierQuery(system, value)) })
+            }
+        }
     }
 }
 
@@ -55,7 +75,7 @@ class BundleBuilder(private val registry: MetricRegistry) {
     private val observations = ObservationMapper(registry)
     private val devices = DeviceMapper(registry)
 
-    fun build(items: List<Pair<String, IngestItem>>, patientId: String): BuildResult {
+    fun build(queued: List<QueuedItem>, patientId: String): BuildResult {
         val deviceEntries = ArrayList<BundleEntry>()
         val deviceUrls = HashMap<DeviceDescriptor, String>()
         val observationEntries = ArrayList<BundleEntry>()
@@ -63,7 +83,21 @@ class BundleBuilder(private val registry: MetricRegistry) {
         val unmapped = ArrayList<String>()
         val invalid = ArrayList<Pair<String, MappingError>>()
 
-        for ((key, item) in items) {
+        for (q in queued) {
+            val key = q.key
+            val item = q.item
+            if (q.op == QueueOp.DELETE) {
+                // a deletion needs only the sample's identity: no Device, no mapping that could refuse it
+                val system = registry.systems.identifier[item.sample.source]
+                if (system == null) { invalid.add(key to MappingError.CONTRACT_MISSING); continue }
+                val stub = buildJsonObject {
+                    put("resourceType", "Observation")
+                    put("identifier", buildJsonArray { add(buildJsonObject { put("system", system); put("value", item.sample.id) }) })
+                }
+                observationEntries.add(BundleEntry(fullUrl(system, item.sample.id), stub, true, key, QueueOp.DELETE))
+                keys.add(key)
+                continue
+            }
             val deviceUrl = deviceUrls[item.device] ?: try {
                 val device = devices.map(item.device, patientId)
                 val identifier = device.getValue("identifier").jsonArray.first().jsonObject
@@ -81,7 +115,7 @@ class BundleBuilder(private val registry: MetricRegistry) {
                     is MappingOutcome.Observation -> {
                         val identifier = outcome.resource.getValue("identifier").jsonArray.first().jsonObject
                         val url = fullUrl(identifier.getValue("system").jsonPrimitive.content, identifier.getValue("value").jsonPrimitive.content)
-                        observationEntries.add(BundleEntry(url, outcome.resource, true, key))
+                        observationEntries.add(BundleEntry(url, outcome.resource, true, key, q.op))
                         keys.add(key)
                     }
                 }

@@ -16,6 +16,20 @@ data class PlausibleRange(val min: Double, val max: Double)
 @Serializable
 data class CustomCode(val system: String, val code: String, val display: String)
 
+/** How a Health Connect record yields this metric (contract `metrics[].healthConnect`). */
+@Serializable
+data class HcMetric(
+    val record: String,
+    /** `sample`, `record` or `stage`: the unit of work inside a record. */
+    val per: String,
+    val field: String,
+    /** The accessor that reads the contract's unit (for example `kilocalories`); only the Health Connect adapter uses it. */
+    val accessor: String? = null,
+    /** A sleep metric: contract stage id to the Health Connect stage type names that map to it. */
+    val stages: Map<String, List<String>>? = null,
+    val unmapped: List<String>? = null,
+)
+
 @Serializable
 data class Metric(
     val id: String,
@@ -31,6 +45,7 @@ data class Metric(
     val unmapped: List<String>? = null,
     val plausibleRange: PlausibleRange? = null,
     val zeroAllowed: Boolean? = null,
+    val healthConnect: HcMetric? = null,
 )
 
 @Serializable
@@ -91,6 +106,7 @@ class MetricRegistry private constructor(private val file: ContractFile) {
     val qualityThresholds: QualityThresholds get() = file.qualityThresholds
     val categories: Map<String, Named> get() = file.categories
     val domains: Map<String, Named> get() = file.domains
+    val mealTypes: Map<String, Named> get() = file.mealTypes
     val dataQualityFlags: Map<String, String> get() = file.dataQualityFlags
     val metrics: List<Metric> get() = file.metrics
 
