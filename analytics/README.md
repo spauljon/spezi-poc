@@ -207,7 +207,7 @@ Node's built-in runner. node-oracledb's types are declared locally (`src/oracled
   `Cache-Control: no-cache`, otherwise a recompute right after a write could read stale data (seen in M8).
 - **A35 Units are enforced here, not by HAPI.** An Observation whose `valueQuantity` is not the contract's UCUM
   system and code is excluded and counted (`wrongUnit`).
-- **A36 No deletes.** No role can delete Observations. Since M21 the capture app retracts a deleted sample by setting
+- **A36 Deletes.** (Since M27 the capture role can delete a Health Connect Observation, conditional and soft; a deleted Android sample stays counted here until the worker reads `Observation/_history` for deletions, planned for M29. `Observation/_history` answers 200 for the worker role, observed 2026-11-17.) Before that: no role can delete Observations. Since M21 the capture app retracts a deleted sample by setting
   `status` to `entered-in-error`; only `final` Observations are counted, so a rollup does get smaller, and a window
   with nothing left deletes its row (tested with a fake and, for intake totals, live).
 - **A37 Session gap** is 2 hours and **A38 minimum awakening** is 5 minutes: constants in `src/sleep.ts`, a clinical
