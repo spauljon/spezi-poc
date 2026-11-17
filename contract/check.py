@@ -152,10 +152,10 @@ def main():
     for url in c["systems"]["identifier"].values():
         check(url.startswith("http://aboutobjects.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % url.rsplit("/", 1)[-1], "identifier system outside the namespace: " + url)
 
-    # --- M25: Health Connect (contract 1.6.0)
+    # --- M25/M27: Health Connect (contract 1.7.0)
     hc = c.get("healthConnect", {})
     for key in ("canonicalValue", "sampleIdentity", "groupIdentifier", "nutritionContentKey", "nutritionOrdinal", "nutritionSampleIdentity",
-                "effective", "userEntered", "mealType", "sleepStages", "device", "appSource", "retraction"):
+                "effective", "userEntered", "mealType", "sleepStages", "device", "appSource", "update", "delete"):
         check(isinstance(hc.get(key), str) and hc[key], "healthConnect rule %s is written" % key, "healthConnect rule %s is missing" % key)
     for key in ("healthConnect", "healthConnectGroup", "appPackageName"):
         check(c["systems"]["identifier"].get(key, "").startswith("http://aboutobjects.com/fhir/identifier/"), "identifier system %s is in the decided namespace" % key,
@@ -187,6 +187,11 @@ def main():
     growing = prop["identity-growing-record-keeps-old-sample-identities"]
     check(len(growing["shared"]) >= 2 and growing["onlyInA"] == [] and len(growing["onlyInB"]) == 1,
           "identity: a growing record keeps every old sample identity and adds only the new one", "identity: a growing record changed an old sample identity")
+    edit, moved, other = prop["identity-edited-sample-value-keeps-its-identity"], prop["identity-sleep-stage-whose-end-moves-keeps-its-identity"], prop["identity-another-record-id-is-another-sample"]
+    check(len(edit["shared"]) == 2 and edit["onlyInA"] == [] and edit["onlyInB"] == [] and len(moved["shared"]) == 1 and moved["onlyInA"] == [] and moved["onlyInB"] == []
+          and other["shared"] == [] and len(other["onlyInA"]) == 1 and len(other["onlyInB"]) == 1,
+          "identity: a changed value or a moved stage end keeps its identity (updated in place); another record id does not (the checker sees both)",
+          "identity: a sample identity depends on its value or end, or does not depend on the record id")
     rewritten = prop["identity-nutrition-rewritten-with-a-new-record-id-is-the-same"]
     edited = prop["identity-nutrition-edited-nutrient-is-a-new-item"]
     check(len(rewritten["shared"]) == 7 and rewritten["onlyInA"] == [] and rewritten["onlyInB"] == [] and edited["shared"] == [] and len(edited["onlyInB"]) == 7,
@@ -227,6 +232,17 @@ def main():
           "hapi/application.yaml retraction-identifier-systems (%s) differs from the contract sample systems (%s)" % (configured, sample))
     check(retraction_systems(open(yaml_path).read().replace("healthkit-sample", "healthkit-samples")) != sample,
           "retraction control: a misspelt system in application.yaml would be caught", "the retraction-systems comparison cannot see a misspelt system")
+    def change_systems(text):
+        m = re.search(r"^\s*change-identifier-systems:\s*(\S+)\s*$", text, re.M)
+        return set(m.group(1).split(",")) if m else None
+    hc_sample = {c["systems"]["identifier"]["healthConnect"]}
+    check(change_systems("a:\n  change-identifier-systems: x,y\n") == {"x", "y"} and change_systems("nothing here") is None,
+          "change control: the application.yaml parser reads a list and notices a missing key", "the change-systems parser is broken")
+    check(change_systems(open(yaml_path).read()) == hc_sample,
+          "hapi/application.yaml change-identifier-systems is exactly the Health Connect sample system (iOS and synthetic samples are never updated or deleted)",
+          "hapi/application.yaml change-identifier-systems (%s) differs from the contract's Health Connect sample system" % change_systems(open(yaml_path).read()))
+    check(change_systems(open(yaml_path).read().replace("healthconnect-sample", "healthconnect-samples")) != hc_sample,
+          "change control: a misspelt system in application.yaml would be caught", "the change-systems comparison cannot see a misspelt system")
 
     # --- the iOS bundled copy
     if os.path.exists(BUNDLED):

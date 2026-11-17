@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.6.0",
+  "contractVersion": "1.7.0",
   "properties": [
     {
       "name": "identity-growing-record-keeps-old-sample-identities",
@@ -55,26 +55,26 @@
         "nutritionGroup": null
       },
       "identifiersA": [
-        "3a62ae9a65b49c8c51c58b9e5ad8fc90d3b0c64b6e7b49cabf2af68c3fe4b7c7",
-        "08f7c91ee254f20e0e590cb888d8e9bacea50bdb24a593c9df452fc3126da822"
+        "945172e5df7195bdb399142e259a2e5fd9d3d0a475d64f928dcb4b78a84d98e8",
+        "878cbd8ca51e481d780c08dcdbd020b102a551f1fc3bb57d10782b20291e8f80"
       ],
       "identifiersB": [
-        "3a62ae9a65b49c8c51c58b9e5ad8fc90d3b0c64b6e7b49cabf2af68c3fe4b7c7",
-        "08f7c91ee254f20e0e590cb888d8e9bacea50bdb24a593c9df452fc3126da822",
-        "87bb4c759f562e6ec5f4c609a1494c3a2cff9a30f77147a180e6f053c10da016"
+        "945172e5df7195bdb399142e259a2e5fd9d3d0a475d64f928dcb4b78a84d98e8",
+        "878cbd8ca51e481d780c08dcdbd020b102a551f1fc3bb57d10782b20291e8f80",
+        "97c7fef50a70df426544b12b586f7e54d3a3ee4ba11630b8a32d54d996971e3a"
       ],
       "shared": [
-        "08f7c91ee254f20e0e590cb888d8e9bacea50bdb24a593c9df452fc3126da822",
-        "3a62ae9a65b49c8c51c58b9e5ad8fc90d3b0c64b6e7b49cabf2af68c3fe4b7c7"
+        "878cbd8ca51e481d780c08dcdbd020b102a551f1fc3bb57d10782b20291e8f80",
+        "945172e5df7195bdb399142e259a2e5fd9d3d0a475d64f928dcb4b78a84d98e8"
       ],
       "onlyInA": [],
       "onlyInB": [
-        "87bb4c759f562e6ec5f4c609a1494c3a2cff9a30f77147a180e6f053c10da016"
+        "97c7fef50a70df426544b12b586f7e54d3a3ee4ba11630b8a32d54d996971e3a"
       ]
     },
     {
-      "name": "identity-edited-sample-value-gets-a-new-identity",
-      "note": "The same record and time with another value: that sample's identifier changes (the old Observation is to be retracted), the others keep theirs.",
+      "name": "identity-edited-sample-value-keeps-its-identity",
+      "note": "The same record and time with another value: every identifier is unchanged (the Observation is updated in place, decision A11).",
       "deliveryA": {
         "record": {
           "class": "HeartRateRecord",
@@ -122,22 +122,74 @@
         "nutritionGroup": null
       },
       "identifiersA": [
-        "c5e1544b48aa6a91eb8bbd83b394325aff980eb60804d483bb97fa824ea7c125",
-        "3058dbe2e99c9611454a8759b408d8ee3f18cf4cb734ff6c97bd778784c96e66"
+        "4fd2a42224bda888a4adca6dfe3bdbc4060eacbcf38888a0eae8cb838f628453",
+        "69226c4f23a46251da7b3d1808ed57541825d70bf62514dac5533d91eb724e23"
       ],
       "identifiersB": [
-        "c5e1544b48aa6a91eb8bbd83b394325aff980eb60804d483bb97fa824ea7c125",
-        "f65c25c964ffada0fac0e2c6f497e350919ed297d4744b42a59f2057c67eb1cf"
+        "4fd2a42224bda888a4adca6dfe3bdbc4060eacbcf38888a0eae8cb838f628453",
+        "69226c4f23a46251da7b3d1808ed57541825d70bf62514dac5533d91eb724e23"
       ],
       "shared": [
-        "c5e1544b48aa6a91eb8bbd83b394325aff980eb60804d483bb97fa824ea7c125"
+        "4fd2a42224bda888a4adca6dfe3bdbc4060eacbcf38888a0eae8cb838f628453",
+        "69226c4f23a46251da7b3d1808ed57541825d70bf62514dac5533d91eb724e23"
       ],
-      "onlyInA": [
-        "3058dbe2e99c9611454a8759b408d8ee3f18cf4cb734ff6c97bd778784c96e66"
+      "onlyInA": [],
+      "onlyInB": []
+    },
+    {
+      "name": "identity-sleep-stage-whose-end-moves-keeps-its-identity",
+      "note": "A sleep session that is re-delivered with a stage ending later: the stage keeps its identifier (its start is the identity), so it is updated in place.",
+      "deliveryA": {
+        "record": {
+          "class": "SleepSessionRecord",
+          "id": "rec-sl-1000",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T06:00:00Z",
+          "endTime": "2026-01-15T14:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "stages": [
+            {
+              "stageType": "STAGE_TYPE_DEEP",
+              "startTime": "2026-01-15T06:00:00Z",
+              "endTime": "2026-01-15T07:00:00Z"
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "deliveryB": {
+        "record": {
+          "class": "SleepSessionRecord",
+          "id": "rec-sl-1000",
+          "origin": "com.example.wearable",
+          "recordingMethod": 2,
+          "startTime": "2026-01-15T06:00:00Z",
+          "endTime": "2026-01-15T14:00:00Z",
+          "startZoneOffset": "-08:00",
+          "endZoneOffset": "-08:00",
+          "stages": [
+            {
+              "stageType": "STAGE_TYPE_DEEP",
+              "startTime": "2026-01-15T06:00:00Z",
+              "endTime": "2026-01-15T07:30:00Z"
+            }
+          ]
+        },
+        "nutritionGroup": null
+      },
+      "identifiersA": [
+        "1169bd974361416e8a1d639aaf9dfcd8bba003fb39025d38529c88670acd91d2"
       ],
-      "onlyInB": [
-        "f65c25c964ffada0fac0e2c6f497e350919ed297d4744b42a59f2057c67eb1cf"
-      ]
+      "identifiersB": [
+        "1169bd974361416e8a1d639aaf9dfcd8bba003fb39025d38529c88670acd91d2"
+      ],
+      "shared": [
+        "1169bd974361416e8a1d639aaf9dfcd8bba003fb39025d38529c88670acd91d2"
+      ],
+      "onlyInA": [],
+      "onlyInB": []
     },
     {
       "name": "identity-another-record-id-is-another-sample",
@@ -181,17 +233,17 @@
         "nutritionGroup": null
       },
       "identifiersA": [
-        "06debbb6a3117d4172f507765698381ff718a6f1b3421a9c4a238ce32e1a0491"
+        "bc1d6faea9d2384074789bb292f71893918c17d306e2c959540ed72655e9197a"
       ],
       "identifiersB": [
-        "dd0dc7f5caf75f20a1827a83fe1dcd761d04458fbd43cfe060a133637a00fe4a"
+        "341be4b2d695ad1a8bcade1e382918087b2f4f38b1858049322e9814fb2253d2"
       ],
       "shared": [],
       "onlyInA": [
-        "06debbb6a3117d4172f507765698381ff718a6f1b3421a9c4a238ce32e1a0491"
+        "bc1d6faea9d2384074789bb292f71893918c17d306e2c959540ed72655e9197a"
       ],
       "onlyInB": [
-        "dd0dc7f5caf75f20a1827a83fe1dcd761d04458fbd43cfe060a133637a00fe4a"
+        "341be4b2d695ad1a8bcade1e382918087b2f4f38b1858049322e9814fb2253d2"
       ]
     },
     {
@@ -222,17 +274,17 @@
         "nutritionGroup": null
       },
       "identifiersA": [
-        "44b7c6dc7a18f6eca6faf0cefb7c2d2f19132c89f84aad3a190c8fcc878dff07"
+        "1cacbb7aa48b8259d070a114d35f485c9f573461540cc5245a12d4fb106ce58f"
       ],
       "identifiersB": [
-        "752f5378cbad8e377b16946bc186bb58a7fa2b8d81e0bd2bba784b920b24b688"
+        "03d8667ad2700323202ac4ee4e37d0771130ac960476669001faad698fd16f86"
       ],
       "shared": [],
       "onlyInA": [
-        "44b7c6dc7a18f6eca6faf0cefb7c2d2f19132c89f84aad3a190c8fcc878dff07"
+        "1cacbb7aa48b8259d070a114d35f485c9f573461540cc5245a12d4fb106ce58f"
       ],
       "onlyInB": [
-        "752f5378cbad8e377b16946bc186bb58a7fa2b8d81e0bd2bba784b920b24b688"
+        "03d8667ad2700323202ac4ee4e37d0771130ac960476669001faad698fd16f86"
       ]
     },
     {
@@ -638,15 +690,15 @@
       "canonical": "0.5"
     }
   ],
-  "retractionLookups": [
+  "groupLookups": [
     {
-      "name": "retraction-lookup-record-id",
+      "name": "group-lookup-record-id",
       "note": "To find what a deleted or changed record produced, search Observation by this token (the client percent-encodes it).",
       "groupValue": "rec-hr-1000",
       "searchToken": "http://aboutobjects.com/fhir/identifier/healthconnect-group|rec-hr-1000"
     },
     {
-      "name": "retraction-lookup-nutrition-group",
+      "name": "group-lookup-nutrition-group",
       "note": "To find what a deleted or changed record produced, search Observation by this token (the client percent-encodes it).",
       "groupValue": "a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1",
       "searchToken": "http://aboutobjects.com/fhir/identifier/healthconnect-group|a53ba29aac92688d6f1fdfc8ed3e2e691b3523f84c3e50b33c77f45d15c78c0e#1"

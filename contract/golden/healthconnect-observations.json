@@ -1,5 +1,5 @@
 {
-  "contractVersion": "1.6.0",
+  "contractVersion": "1.7.0",
   "cases": [
     {
       "name": "hc-heart-rate-record-three-samples",
@@ -41,7 +41,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "0e183fc3eabe8ea06a44fa3fc4df52135bd51f71b954a72b4fb247419194d976"
+              "value": "d2d1a4aa068472fe5ce7e59b2c6cd11a24f040cdf6f98d9cd9f11a4eaf0142aa"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -92,7 +92,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "08477b82cbd927ebfa2fe55fe080adcccbf8388fa484053b72a2da8f2f3670fc"
+              "value": "96c544c8f92c2527b332163199c9e998dbf304d1a3817ae97e4901553d9f1b12"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -143,7 +143,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "d190a008ebf9838b81b4108f5ca34de79e14636cbbac5a3564eac12b5e2b955e"
+              "value": "ee6bc3ea5bec946d4983e7e122b7257b2d7144588db2bd3db2585b9375be3f79"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -220,7 +220,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "d5b425cc3d9e8dd984c90fff806a8d7a799800a52f4708708b3a4ff612dec9c1"
+              "value": "67105b0666c76327f12d48be5737bf4462b7856abfef43663bb7239af6512efd"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -297,7 +297,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "ab88eb268d637a5b172d93405b55205a2591b7af7072416647f8198f50d98c0b"
+              "value": "010ee0eb5bbdec70976218fa86a876d1cb269f305c234c2649602b61a8ce5714"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -374,7 +374,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "597d9bab195b531f4172528408920cc372347346e05f10a24313345a67e2954c"
+              "value": "f64fcfd2125b078bf5e0faef41680497e5034d96b3dd9d772ea32b700556e34f"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -451,7 +451,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "10e1794885144e84e934aba62d9a9552f996b596afbd7ace2ce71f03466f6091"
+              "value": "54023492e19603acc176301d0bfb883356d4c720e6a415aff0ebd6f6c7127750"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -534,7 +534,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "93a215b35cae559835f80e28827ce0da19bf7b85903dcdef231961c056603c62"
+              "value": "5c5d023b8f638519e805aa50108921a051faa067338ab31a77d1debc747435f7"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -621,7 +621,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "8beb58370d6f12af8b90276f9685081f26c94b290953ab89d3413200eb47f7cf"
+              "value": "134114b0c71b2db2c44ef693ad005a04b09062307c7e91e127cf4f63e789d912"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -698,7 +698,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "1f8a0bcdd66f05d2c4a3a3a7da0d861309d9b8912503c7050f64a9a73b7449ff"
+              "value": "bac9479a64b0c930a18062d0c543d9d2bd5e0235176035ed94ba03dc251b120b"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -765,7 +765,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "1890b708789e8eb8553dc56f129a2f6c780d3885e197ea097fad6fbde5c4a588"
+              "value": "1924b01b40ca63fc6821e6b188903805da93b69810c67d70b7179b835977e0a3"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -835,7 +835,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "9ae55f6c3cdba606aa44ce6864af799fa46c916d3419f08007696cfd03f2f27a"
+              "value": "523c5fc965f5b068fc5d6db9c023216cb1fdb8c11ad9ea3ddcfcc7a5800925a2"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -948,7 +948,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "ab8bcee1cf91dfd62f8516ea7810610a454fdb4d67eb5ba7ac2b28708c6854e8"
+              "value": "f3d70f2a07a69aed7e813e2f129432eb6696d3e03a5e7b154527855f7da3630d"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1002,7 +1002,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "214c6832bd9a4f3fe6bdfd0af96f13ea28be14a6da8eccec8d39e2a29bb0b5de"
+              "value": "25322fb744b196f7e7fbbfe8cfd8ec94d0e511b59fb29f23efc3f1cf50b3abb8"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1056,7 +1056,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "38a10d893ff1f14d5933caeacbbda8afbeac043befbdc29da6513cc7640e4471"
+              "value": "10bee85a50e74556fc5c7cb2d67e233c2e39e7be595d4fd4bce28421b1bd825a"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1110,7 +1110,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "5744ff74e2e191ba9b62bb96078fe4e4cb529c4acca33f598d7fcb606a657aab"
+              "value": "f413f8c7bb6545ec572ab5e27cbd4f08e8ba804c6e0ff37a689d30df6634877f"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1164,7 +1164,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "7aa43367a1d611611f8ad82a320e8c8e2ddcc65d8c4dc196759a2f15faf32cf0"
+              "value": "cd0c61b9c76b0398f44c14d881be7d46ad6ba07cca6a59844044987e8aa4fca8"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1218,7 +1218,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "2a486b115e51942493455f30fa3756c7d5080f8ff077c27f866f86fd91ad8a26"
+              "value": "05dd68e9268070a48f34282377ceb18bec9b62cf8f6f8f540785f11eb7bd3edf"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1304,7 +1304,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "716296be194a24f8ff23c7d53540e1b6db5577a4fd436fb6ed582b385504c2e8"
+              "value": "a66c9989a145306e6a3630df80d6c4a04b2aafeb7fc4c885b3c6bbeace60966e"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1358,7 +1358,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "1f7c866b7737cdaf454f6a0543e70259f4182126a62d566a765dda56ceb454be"
+              "value": "ec340247a682b219bca16688314ed5197aacff2cd902f9f45fcf53bc25fcc283"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",
@@ -1433,7 +1433,7 @@
           "identifier": [
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-sample",
-              "value": "3e9f53389689d2bfba99bdde58824c6b0166a493059d32b3797470a49f6bd63f"
+              "value": "386dbcea0db17d2bcb20f039a91ef8ce7f7b523e2295e870a0c5d9328c4b2a92"
             },
             {
               "system": "http://aboutobjects.com/fhir/identifier/healthconnect-group",

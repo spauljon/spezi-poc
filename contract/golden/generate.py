@@ -345,7 +345,7 @@ def flag_cases():
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Health Connect (contract 1.6.0, section healthConnect). Records are synthetic and shaped like Health Connect's (a record
+# Health Connect (contract 1.7.0, section healthConnect). Records are synthetic and shaped like Health Connect's (a record
 # class, an id, a data origin, a recording method, times with recorded zone offsets). A nutrition record's nutrient values
 # are the numbers the accessor named in the metric's healthConnect entry returns (energy.kilocalories, mass.grams, ...).
 # ---------------------------------------------------------------------------------------------------------------------
@@ -422,8 +422,9 @@ def hc_observation(m, sample_id, group_id, effective_start, effective_end, offse
     return o
 
 
-def sample_identity(record_id, time_ms, metric_id, canon):
-    return sha("hc-sample", record_id, time_ms, metric_id, canon)
+def sample_identity(record_id, time_ms, metric_id):
+    """contract healthConnect.sampleIdentity (1.7.0): no value, so a changed value is an update of the same Observation."""
+    return sha("hc-sample", record_id, time_ms, metric_id)
 
 
 def nutrition_metrics():
@@ -473,7 +474,7 @@ def hc_observations(case):
                 return {"error": "nonPositiveValue"}
             t = utc(smp["time"])
             flags = hc_flags(r, "heartRate", v, smp["time"], issued)
-            out.append(hc_observation(m, sample_identity(r["id"], millis(t), "heartRate", canonical(v)), r["id"], smp["time"], smp["time"],
+            out.append(hc_observation(m, sample_identity(r["id"], millis(t), "heartRate"), r["id"], smp["time"], smp["time"],
                                       (r["startZoneOffset"], r["startZoneOffset"]), phone_tz, issued, v, code_concept(m), None, flags, device_ref))
     elif cls in ("RestingHeartRateRecord", "HeartRateVariabilityRmssdRecord"):
         mid, field = ("restingHeartRate", "beatsPerMinute") if cls == "RestingHeartRateRecord" else ("hrvRmssd", "heartRateVariabilityMillis")
@@ -481,7 +482,7 @@ def hc_observations(case):
         if v <= 0:
             return {"error": "nonPositiveValue"}
         flags = hc_flags(r, mid, v, r["time"], issued)
-        out.append(hc_observation(m, sample_identity(r["id"], millis(utc(r["time"])), mid, canonical(v)), r["id"], r["time"], r["time"],
+        out.append(hc_observation(m, sample_identity(r["id"], millis(utc(r["time"])), mid), r["id"], r["time"], r["time"],
                                   (r["zoneOffset"], r["zoneOffset"]), phone_tz, issued, v, code_concept(m), None, flags, device_ref))
     elif cls == "SleepSessionRecord":
         m = metric("sleepStage")
@@ -493,9 +494,8 @@ def hc_observations(case):
             if end <= start:
                 return {"error": "emptySleepInterval"}
             minutes = (Decimal(str((end - start).total_seconds())) / Decimal(60)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            canon = "%s:%s" % (stage, millis(end))
             flags = hc_flags(r, "sleepStage", None, st["endTime"], issued)
-            out.append(hc_observation(m, sample_identity(r["id"], millis(start), "sleepStage", canon), r["id"], st["startTime"], st["endTime"],
+            out.append(hc_observation(m, sample_identity(r["id"], millis(start), "sleepStage"), r["id"], st["startTime"], st["endTime"],
                                       (r["startZoneOffset"], r["endZoneOffset"]), phone_tz, issued, minutes, code_concept(m, m["stages"][stage]),
                                       None, flags, device_ref))
     elif cls == "HydrationRecord":
@@ -503,7 +503,7 @@ def hc_observations(case):
         if v < 0:
             return {"error": "negativeValue"}
         flags = hc_flags(r, "dietaryWater", v, r["endTime"], issued)
-        out.append(hc_observation(m, sample_identity(r["id"], millis(utc(r["startTime"])), "dietaryWater", canonical(v)), r["id"], r["startTime"],
+        out.append(hc_observation(m, sample_identity(r["id"], millis(utc(r["startTime"])), "dietaryWater"), r["id"], r["startTime"],
                                   r["endTime"], (r["startZoneOffset"], r["endZoneOffset"]), phone_tz, issued, v, code_concept(m), None, flags, device_ref))
     elif cls == "NutritionRecord":
         group = case["nutritionGroup"]
@@ -644,8 +644,13 @@ def identity_cases():
     props = [
         prop("identity-growing-record-keeps-old-sample-identities", "Pattern (b): the same record id delivered again with one more sample: the old samples keep their identifiers, only the new one is new.",
              hr_record("rec-hr-1000", [(t1, 72), (t2, 74)]), hr_record("rec-hr-1000", [(t1, 72), (t2, 74), (t3, 71)])),
-        prop("identity-edited-sample-value-gets-a-new-identity", "The same record and time with another value: that sample's identifier changes (the old Observation is to be retracted), the others keep theirs.",
+        prop("identity-edited-sample-value-keeps-its-identity", "The same record and time with another value: every identifier is unchanged (the Observation is updated in place, decision A11).",
              hr_record("rec-hr-1001", [(t1, 72), (t2, 74)]), hr_record("rec-hr-1001", [(t1, 72), (t2, 75)])),
+        prop("identity-sleep-stage-whose-end-moves-keeps-its-identity", "A sleep session that is re-delivered with a stage ending later: the stage keeps its identifier (its start is the identity), so it is updated in place.",
+             rec("SleepSessionRecord", "rec-sl-1000", startTime="2026-01-15T06:00:00Z", endTime="2026-01-15T14:00:00Z", startZoneOffset="-08:00", endZoneOffset="-08:00",
+                 stages=[{"stageType": "STAGE_TYPE_DEEP", "startTime": "2026-01-15T06:00:00Z", "endTime": "2026-01-15T07:00:00Z"}]),
+             rec("SleepSessionRecord", "rec-sl-1000", startTime="2026-01-15T06:00:00Z", endTime="2026-01-15T14:00:00Z", startZoneOffset="-08:00", endZoneOffset="-08:00",
+                 stages=[{"stageType": "STAGE_TYPE_DEEP", "startTime": "2026-01-15T06:00:00Z", "endTime": "2026-01-15T07:30:00Z"}])),
         prop("identity-another-record-id-is-another-sample", "Two records with the same time and value but different record ids are different samples (the record id is part of the identity).",
              hr_record("rec-hr-1002", [(t1, 72)]), hr_record("rec-hr-1003", [(t1, 72)])),
         prop("identity-the-same-value-in-two-metrics-differs", "The metric id is part of the identity: a resting reading and an RMSSD reading with the same record id, time and value differ.",
@@ -664,9 +669,9 @@ def identity_cases():
              [72, 72.0, 72.5, 0, 0.1, 0.30000000000000004, 48.3, 1e21, 1e-7, 123456789.125, 31.5, 450, 0.5]]
     lookups = []
     for name, value in [("record-id", "rec-hr-1000"), ("nutrition-group", twin_groups[0])]:
-        lookups.append({"name": "retraction-lookup-" + name, "note": "To find what a deleted or changed record produced, search Observation by this token (the client percent-encodes it).",
+        lookups.append({"name": "group-lookup-" + name, "note": "To find what a deleted or changed record produced, search Observation by this token (the client percent-encodes it).",
                         "groupValue": value, "searchToken": "%s|%s" % (SYS["identifier"]["healthConnectGroup"], value)})
-    return {"properties": props, "canonicalValues": canon, "retractionLookups": lookups,
+    return {"properties": props, "canonicalValues": canon, "groupLookups": lookups,
             "contentKeys": [{"record": f1, "contentKey": content_key(f1), "groupValue": g1}]}
 
 
