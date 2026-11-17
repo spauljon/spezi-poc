@@ -30,6 +30,14 @@ public class AuthConfig {
 		return new RetractionPolicy(systems);
 	}
 
+	/** The guard for a capture-role update or delete inside a transaction (M27, A11; see {@link ChangePolicy}). None configured: none allowed. */
+	@Bean
+	public ChangePolicy changePolicy(@Value("${poc.auth.change-identifier-systems:}") String theSystems) {
+		var systems = Arrays.stream(theSystems.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+		ourLog.info("Update and delete (conditional, in a transaction) allowed for identifier systems: {}", systems);
+		return new ChangePolicy(systems);
+	}
+
 	/**
 	 * Fails startup (closed) if the CA file or the URL is unusable. The identity provider itself need not be up
 	 * yet: keys are fetched on first use.

@@ -92,6 +92,10 @@ poc:
     # one of them: it names every Observation a record produced, so it is a lookup key, never a retraction key (M25).
     # Empty or absent: no retraction at all.
     retraction-identifier-systems: http://aboutobjects.com/fhir/identifier/synthetic-sample,http://aboutobjects.com/fhir/identifier/healthkit-sample,http://aboutobjects.com/fhir/identifier/healthconnect-sample
+    # M27 (decision A11): the identifier systems whose Observations the capture role may UPDATE (conditional PUT) or DELETE
+    # (conditional DELETE) inside a transaction: Health Connect sample identities only. contract/check.py keeps this equal
+    # to the contract's healthConnect sample system. Empty or absent: no update or delete at all.
+    change-identifier-systems: http://aboutobjects.com/fhir/identifier/healthconnect-sample
 
 # springdoc serves /v3/api-docs (a Spring MVC endpoint outside the FHIR servlet). Off: nothing uses it.
 springdoc:

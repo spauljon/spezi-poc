@@ -13,7 +13,7 @@ this realm on demand (every client gets the right audience; lifetime is 600 s). 
 tests that run in the image build (hapi/ext JwtVerifierTest, each with a positive control). Here, forged tokens
 (tampered, role-swapped, alg=none, attacker-signed with a copied kid and claims) prove the signature check end to end.
 """
-import base64, importlib.util, json, os, subprocess, sys, tempfile, urllib.parse
+import base64, importlib.util, json, os, subprocess, sys, tempfile, urllib.parse, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("oidc", os.path.join(HERE, "..", "idp", "oidc.py"))
@@ -231,6 +231,96 @@ def retraction_checks_healthconnect(pid, cap):
     expect("the second Observation can be retracted too (leaves the stack in the retracted state)", st, 200)
 
 
+def change_checks_healthconnect(pid, cap, cli):
+    """M27 (decision A11): the capture role may update (conditional PUT) or delete (conditional DELETE) a Health Connect
+    Observation found by its SAMPLE identity, inside a transaction, and nothing else. Each refusal sits beside the accepted
+    request that proves the probe can see success. Cleans up after itself (the deletes are the cleanup)."""
+    ident = json.load(open(os.path.join(HERE, "..", "contract", "metrics.json")))["systems"]["identifier"]
+    sample_sys, group_sys, hk_sys = ident["healthConnect"], ident["healthConnectGroup"], ident["healthKit"]
+    print("== capture-writer: update and delete a Health Connect Observation by its sample identity (in a transaction), nothing else")
+    run = "%x" % int.from_bytes(os.urandom(4), "big")
+    a, b = "auth-check-hc-chg-a-" + run, "auth-check-hc-chg-b-" + run
+    token_of = lambda system, value: urllib.parse.quote("%s|%s" % (system, value), safe="")
+    txn = lambda *entries: {"resourceType": "Bundle", "type": "transaction", "entry": list(entries)}
+
+    def obs(value, bpm=60, system=None):
+        o = observation(pid)
+        o["identifier"] = [{"system": system or sample_sys, "value": value}, {"system": group_sys, "value": "auth-check-chg-group-" + run}]
+        o["valueQuantity"]["value"] = bpm
+        return o
+
+    def create(value, bpm=60):
+        return {"fullUrl": "urn:uuid:" + str(uuid.uuid4()), "request": {"method": "POST", "url": "Observation", "ifNoneExist": "identifier=%s|%s" % (sample_sys, value)},
+                "resource": obs(value, bpm)}
+
+    def put(value, bpm, url_value=None, system=None):
+        return {"fullUrl": "urn:uuid:" + str(uuid.uuid4()), "request": {"method": "PUT", "url": "Observation?identifier=" + token_of(system or sample_sys, url_value or value)},
+                "resource": obs(value, bpm, system)}
+
+    def delete(value, system=None):
+        return {"request": {"method": "DELETE", "url": "Observation?identifier=" + token_of(system or sample_sys, value)}}
+
+    def found(value, tok=cap):
+        st, text = call("GET", BASE + "/Observation?" + urllib.parse.urlencode({"identifier": "%s|%s" % (sample_sys, value)}), tok, None, {"Cache-Control": "no-cache"})
+        if st != 200:
+            return None
+        return [(e["resource"]["id"], e["resource"]["valueQuantity"]["value"]) for e in json.loads(text).get("entry", [])]
+
+    st, _ = call("POST", BASE, cap, txn(create(a, 60), create(b, 70)))
+    expect("create two synthetic Health Connect Observations (the controls for what follows)", st, [200, 201])
+    first = found(a)
+    expect("the first exists once with value 60", [v for _, v in first or []], [[60]])
+
+    # refusals, each with nothing applied
+    for label, bundle in (
+        ("an update by id", txn({"request": {"method": "PUT", "url": "Observation/" + (first[0][0] if first else "x")}, "resource": dict(obs(a, 99), id=first[0][0] if first else "x")})),
+        ("an update whose body changes the identifier", txn(put(a, 99, url_value=b))),
+        ("an update found by the HealthKit sample system", txn(put(a, 99, system=hk_sys))),
+        ("a delete found by the GROUP identifier", txn(delete("auth-check-chg-group-" + run, system=group_sys))),
+        ("a delete found by the HealthKit sample system", txn(delete(a, system=hk_sys))),
+        ("a delete by id", txn({"request": {"method": "DELETE", "url": "Observation/" + (first[0][0] if first else "x")}})),
+        ("a delete of a Patient", txn({"request": {"method": "DELETE", "url": "Patient?identifier=%s|%s" % (PATIENT_SYSTEM, PATIENT_VALUE)}})),
+        ("a delete with a second search parameter", txn({"request": {"method": "DELETE", "url": "Observation?identifier=%s&status=final" % token_of(sample_sys, a)}})),
+        ("one good update beside one bad delete (the whole Bundle)", txn(put(a, 99), delete(a, system=hk_sys))),
+    ):
+        st, _ = call("POST", BASE, cap, bundle)
+        expect("refused: " + label, st, 403)
+    expect("the refusals changed nothing (both still there, the first still 60)", (found(a), found(b)), [(first, found(b))])
+    for who, method, path, body in (("a direct PUT by id", "PUT", "/Observation/" + (first[0][0] if first else "x"), dict(obs(a, 99), id=first[0][0] if first else "x")),
+                                    ("a direct conditional PUT", "PUT", "/Observation?identifier=" + token_of(sample_sys, a), obs(a, 99)),
+                                    ("a direct conditional DELETE", "DELETE", "/Observation?identifier=" + token_of(sample_sys, a), None)):
+        st, _ = call(method, BASE + path, cap, body)
+        expect("refused: " + who + " (only a transaction may change)", st, 403)
+    st, _ = call("POST", BASE, cli, txn(delete(a)))
+    expect("refused: the clinician role deleting through the same accepted shape", st, 403)
+
+    st, _ = call("POST", BASE, cap, txn(put(a, 61)))
+    expect("CONTROL: the exact conditional update is accepted", st, 200)
+    after = found(a)
+    expect("the update replaced the value in place (one Observation, same id, value 61)", after, [[(first[0][0], 61)] if first else None])
+    st, _ = call("POST", BASE, cap, txn(put(a, 61)))
+    expect("an identical update is accepted (the app decides what is a change; the server stays idempotent)", st, 200)
+
+    st, _ = call("POST", BASE, cap, txn(delete(a)))
+    expect("CONTROL: the exact conditional delete is accepted", st, 200)
+    expect("the deleted Observation is gone from search and the other is untouched", (found(a), [v for _, v in found(b) or []]), [([], [70])])
+    st, _ = call("GET", BASE + "/Observation/" + (first[0][0] if first else "x"), cap)
+    expect("reading the deleted Observation by id answers 410 (a soft delete: it has a deleted version)", st, 410)
+    st, text = call("GET", BASE + "/Observation/%s/_history" % (first[0][0] if first else "x"), cli)
+    methods = [e.get("request", {}).get("method") for e in json.loads(text).get("entry", [])] if st == 200 else None
+    expect("its history shows create, update and delete (the signal analytics can read)", methods, [["DELETE", "PUT", "POST"], ["DELETE", "PUT", "PUT", "POST"]])
+    st, _ = call("POST", BASE, cap, txn(delete(a)))
+    expect("deleting what is already gone is accepted (a retry converges)", st, 200)
+
+    st, _ = call("POST", BASE, cap, txn(put(a, 62)))
+    expect("an update of a deleted sample creates a new Observation (a conditional PUT matches nothing)", st, [200, 201])
+    again = found(a)
+    expect("it is a new resource with a new id (a conditional update does not resurrect the deleted one)", (len(again or []), again and again[0][0] != first[0][0]), [(1, True)])
+    st, _ = call("POST", BASE, cap, txn(delete(a), delete(b)))
+    expect("cleanup: both synthetic Observations deleted", st, 200)
+    expect("cleanup left nothing behind", (found(a), found(b)), [([], [])])
+
+
 def expect(label, got, want):
     want = want if isinstance(want, (list, tuple, set)) else [want]
     if got in want:
@@ -364,6 +454,7 @@ def cmd_check():
 
     retraction_checks(pid, cap, cli, wrk)
     retraction_checks_healthconnect(pid, cap)
+    change_checks_healthconnect(pid, cap, cli)
 
     for who, tok in (("clinician-reader", cli), ("worker-reader", wrk)):
         print("== %s: read-only" % who)

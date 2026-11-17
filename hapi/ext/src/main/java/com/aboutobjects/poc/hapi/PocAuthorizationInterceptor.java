@@ -22,6 +22,7 @@ import ca.uhn.fhir.rest.server.method.ResourceParameter;
 import jakarta.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
+import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Observation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,11 +60,13 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 
 	private final JwtVerifier myVerifier;
 	private final RetractionPolicy myRetractionPolicy;
+	private final ChangePolicy myChangePolicy;
 
-	public PocAuthorizationInterceptor(JwtVerifier theVerifier, RetractionPolicy theRetractionPolicy) {
+	public PocAuthorizationInterceptor(JwtVerifier theVerifier, RetractionPolicy theRetractionPolicy, ChangePolicy theChangePolicy) {
 		super(PolicyEnum.DENY);
 		myVerifier = theVerifier;
 		myRetractionPolicy = theRetractionPolicy;
+		myChangePolicy = theChangePolicy;
 	}
 
 	private static final String RULES_KEY = PocAuthorizationInterceptor.class.getName() + ".rules";
@@ -92,6 +95,9 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 		if ((operation == RestOperationTypeEnum.TRANSACTION || operation == RestOperationTypeEnum.BATCH)
 				&& theRequest.getResource() == null) {
 			parseBody(theRequest);
+		}
+		if (operation == RestOperationTypeEnum.TRANSACTION && theRequest.getResource() instanceof Bundle bundle) {
+			guardChanges(theRequest, bundle);
 		}
 		super.incomingRequestPreHandled(theRequest, Pointcut.SERVER_INCOMING_REQUEST_POST_PROCESSED);
 		return true;
@@ -123,6 +129,26 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 		// Only THIS request, already shown to be the retraction, gets the rule that allows the PATCH and the update it
 		// produces; a PUT or a conditional update by the same caller is built from the normal rules and stays refused.
 		theRequest.getUserData().put(RULES_KEY, rulesFor(verifiedRoles, true));
+	}
+
+	/**
+	 * M27 (A11): a transaction by the capture role may carry PUT and DELETE entries only in the shape {@link ChangePolicy}
+	 * permits; one other entry makes the whole Bundle a 403 before HAPI runs it. Only a Bundle whose changes were all
+	 * accepted gets the rule that lets HAPI's per-entry checks pass them (see {@link ChangeRule}).
+	 */
+	private void guardChanges(RequestDetails theRequest, Bundle theBundle) {
+		Object roles = theRequest.getUserData().get(ROLES_KEY);
+		if (!(roles instanceof List<?> list) || !list.contains(ROLE_CAPTURE) || !ChangePolicy.hasChange(theBundle)) {
+			return;
+		}
+		String refusal = myChangePolicy.bundleRefusal(theBundle);
+		if (refusal != null) {
+			ourLog.warn("403 transaction refused: {}", refusal);
+			throw new ForbiddenOperationException("Not permitted");
+		}
+		@SuppressWarnings("unchecked")
+		List<String> verifiedRoles = (List<String>) roles;
+		theRequest.getUserData().put(RULES_KEY, rulesFor(verifiedRoles, false, true));
 	}
 
 	private static void parseBody(RequestDetails theRequest) {
@@ -192,6 +218,11 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 
 	/** @param theRetraction true only for a request already shown to be the permitted retraction (see guardPatch) */
 	static List<IAuthRule> rulesFor(List<String> theRoles, boolean theRetraction) {
+		return rulesFor(theRoles, theRetraction, false);
+	}
+
+	/** @param theChanges true only for a transaction whose every PUT and DELETE entry ChangePolicy accepted (see guardChanges) */
+	static List<IAuthRule> rulesFor(List<String> theRoles, boolean theRetraction, boolean theChanges) {
 		RuleBuilder b = new RuleBuilder();
 		boolean any = false;
 
@@ -222,6 +253,9 @@ public class PocAuthorizationInterceptor extends AuthorizationInterceptor {
 			// M21 (D2): only for a request RetractionPolicy has accepted (guardPatch). HAPI's patch rule cannot match a
 			// conditional PATCH, so a rule of our own sits in front of the final deny; see RetractionRule.
 			rules.add(rules.size() - 1, new RetractionRule());
+		}
+		if (theChanges && theRoles.contains(ROLE_CAPTURE)) {
+			rules.add(rules.size() - 1, new ChangeRule());
 		}
 		return rules;
 	}
