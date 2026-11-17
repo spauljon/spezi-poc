@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Android tests.
-#   scripts/android-test.sh            unit tests of the app and the probe on the JVM (no device)
+#   scripts/android-test.sh            unit tests of the app, the probe and the writer on the JVM (no device)
 #   scripts/android-test.sh --device   the on-device tests (SQLite queue, Keystore) on a connected phone or a running emulator
 # Both fail if no test ran, so a build that compiled nothing cannot pass. Needs JDK 17 or 21 (set JAVA_HOME, or on macOS it is found)
 # and the Android SDK (ANDROID_HOME).
@@ -37,8 +37,8 @@ cd "$root/android"
 case "$mode" in
   unit)
     # clear the previous results with Gradle itself, so a stale report can never be counted
-    ./gradlew :app:cleanTestDebugUnitTest :probe:cleanTestDebugUnitTest :app:testDebugUnitTest :probe:testDebugUnitTest -q
-    total="$(count_tests app/build/test-results/testDebugUnitTest/*.xml probe/build/test-results/testDebugUnitTest/*.xml)"
+    ./gradlew :app:cleanTestDebugUnitTest :probe:cleanTestDebugUnitTest :writer:cleanTestDebugUnitTest :app:testDebugUnitTest :probe:testDebugUnitTest :writer:testDebugUnitTest -q
+    total="$(count_tests app/build/test-results/testDebugUnitTest/*.xml probe/build/test-results/testDebugUnitTest/*.xml writer/build/test-results/testDebugUnitTest/*.xml)"
     [ "$total" -gt 0 ] || { echo "android: no tests ran" >&2; exit 1; }
     echo "android: $total unit tests passed"
     ;;
