@@ -5,6 +5,7 @@ Learning project: spec-first, agent-driven app development with Stanford Spezi (
 ## Data
 - Real health data is allowed only as the developer's own HealthKit data and, since 2026-10-29 (decision A2 in `docs/planning/android-brief.md`), the developer's own Android Health Connect data. It must never appear in the repo, fixtures, logs, screenshots, commit messages, or conversation, and must not go to analytics or any third party.
 - Real data may be sent only to the developer's own HAPI FHIR service (R4, `https://macpro16.local:8443/fhir`), and only once that connection uses TLS and authentication. Token verification passed in M4: every `/fhir` request needs a verified Keycloak bearer token (only `GET /fhir/metadata` is anonymous), so real HealthKit and Health Connect data may go to that endpoint and only that one. There is no plain-HTTP FHIR endpoint.
+- The developer's own Health Connect data goes only to its own patient, `poc-real-android` (M30), never to `poc-android-01`, which holds synthetic and test-tool records only. The Android app routes each record by its data origin and, with no real patient configured, holds real samples in its queue instead of sending them anywhere (`PatientRoute`, tests with planted-bug mutations).
 - Everything else is synthetic or sandbox only: tests, fixtures, docs, and example data. Never real patient identifiers or anyone else's data.
 - Keep a synthetic data source behind the same ingest interface as HealthKit (and Health Connect) for development, tests, and the simulator or emulator.
 

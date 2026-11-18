@@ -11,6 +11,15 @@ Install, sign in, read what the app is doing, and recover from the usual problem
 5. **Health Connect card, Allow Health Connect access**: heart rate, resting heart rate, heart-rate variability, sleep, nutrition and hydration (read only) and, where the phone supports it, **reading while the app is closed**. Without the last one the scheduled sync cannot read Health Connect while the app is closed; the attempt history then says so.
 6. **Battery.** Open the app's **Background** card. If it says "optimised", use **Open battery settings** and set the app to **Unrestricted** (on Samsung: Battery, Background usage limits, make sure the app is not in "Sleeping apps" or "Deep sleeping apps"). Samsung's battery management may otherwise stop the sync when the app is closed.
 
+## Where the data goes (real and test data are never mixed)
+
+| Records | Patient | Why |
+|---|---|---|
+| written by the `:writer` test tool, and the synthetic generator | `poc-android-01` (the test patient) | synthetic |
+| written by any other app on the phone (MyFitnessPal, Samsung Health, ...) | `poc-real-android` (the real patient) | your own data, to your own HAPI only |
+
+The app decides by the record's **data origin** (which app wrote it), never by what it contains. If the real patient is not configured (`-Phealthgate.realPatient=` empty when building), real samples are **held**: they stay in the app's queue, the Upload card says how many, and nothing is sent anywhere (never to the test patient). When the app first ran under this rule it moved the foods already filed under the test patient: a delete from `poc-android-01` and a create under `poc-real-android`, with the Attempts line "moved to the right patient". Check any patient, counts only: `python3 scripts/android-hc-counts.py --patient poc-real-android` and `python3 analytics/verify-intake.py poc-real-android`. The web has a data set for each: "Real data (Health Connect)" and "Android test records (synthetic writer)".
+
 ## Daily use
 
 - **Read Health Connect now** reads and uploads at once. The first read takes the last **30 days**. After that a read continues from where the last one stopped (a saved position, the changes token), so it picks up only what changed, including deletions. If the phone was not read for more than about 30 days the position expires and the next read takes the 30 days again and notices what was deleted meanwhile.
@@ -63,6 +72,15 @@ The debug build has named **failpoints** (`collector.afterCommit`, `collector.be
 | Read says "stopped (…)" | nothing was lost: the saved position did not move, and the next read repeats from the same place |
 | `adb devices` shows `unauthorized` | accept the prompt on the phone; **Revoke USB debugging authorizations** and replug if it never appears |
 | The app was uninstalled | its queue and sign-in are gone: sign in again; the first read takes the last 30 days and the server, which keeps its own Observations, absorbs what was already sent |
+
+## Accessibility
+
+Automatic (needs the phone unlocked, the app signed in or not): `ANDROID_SERIAL=<device> scripts/android-a11y-check.sh` reads the home screen's accessibility tree, scrolling through it, and fails if a control has no name or a touch target under 48 x 48 dp. It prints counts and names only. A person still needs to check, once, with **TalkBack** on (Settings, Accessibility, TalkBack):
+1. Swipe right through the whole screen: every line is read in a sensible order, and each card's title is announced as a heading (use the headings rotor).
+2. The pause switch is read as one control: "Pause syncing, switch, on/off".
+3. States are in words, never colour alone (Idle, Waiting, Blocked, Paused, Allowed / Not allowed).
+4. With the largest font (Settings, Display, Font size) and in dark and light mode, nothing is cut off and text stays readable (contrast).
+Record the result in the plan's M30 status.
 
 ## What to expect from background sync
 
