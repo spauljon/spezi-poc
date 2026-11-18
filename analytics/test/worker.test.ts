@@ -138,7 +138,7 @@ test("only the contract's metric codes are asked for", async () => {
   await worker.runOnce();
   const scan = decodeURIComponent(fhir.requests[0]!);
   for (const m of contract.quantityMetrics) {
-    assert.ok(scan.includes(`${contract.loincSystem}|${m.loincCode}`), `${m.id} missing from the scan`);
+    assert.ok(scan.includes(`${m.codeSystem}|${m.code}`), `${m.id} missing from the scan`);
   }
   const requested = (scan.match(/code=([^&]*)/)![1]!).split(",");
   assert.equal(requested.length, contract.quantityMetrics.length + contract.sleep!.stageByCode.size + contract.intakeMetrics.length);

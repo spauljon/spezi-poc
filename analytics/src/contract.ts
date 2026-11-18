@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 /** One quantity metric the worker rolls up, exactly as `contract/metrics.json` states it. */
 export interface QuantityMetric {
   readonly id: string;
-  readonly loincCode: string;
+  /** The code's system: LOINC for most metrics, the contract's own `metric` system for one with no LOINC code (hrvRmssd, contract 1.6.0). */
+  readonly codeSystem: string;
+  readonly code: string;
   readonly ucum: string;
-  /** LOINC display text, for UIs. */
+  /** The code's display text, for UIs. */
   readonly display: string;
 }
 
@@ -92,14 +94,18 @@ function parseSleep(metric: RawMetric): SleepMetric {
   return { id: text(metric.id), stageByCode, unmapped };
 }
 
-function parseQuantity(metric: RawMetric): QuantityMetric {
+function parseQuantity(metric: RawMetric, systems: Record<string, unknown>, loincSystem: string): QuantityMetric {
   const id = text(metric.id);
-  const loincCode = text(metric.loinc?.code);
   const ucum = text(metric.unit?.ucum);
-  if (!id || !loincCode || !ucum) {
-    throw new Error(`contract metric ${id || "(no id)"} lacks a code or unit`);
+  // exactly one way to code a quantity: a LOINC code, or a code in one of the contract's own systems (as an intake)
+  const custom = metric.customCode;
+  const codeSystem = custom ? text(systems[text(custom.system)]) : loincSystem;
+  const code = text(custom ? custom.code : metric.loinc?.code);
+  const display = text(custom ? custom.display : metric.loinc?.display) || id;
+  if (!id || !ucum || !code || !codeSystem) {
+    throw new Error(`contract metric ${id || "(no id)"} lacks a code, a code system or a unit`);
   }
-  return { id, loincCode, ucum, display: text(metric.loinc?.display) || id };
+  return { id, codeSystem, code, ucum, display };
 }
 
 function parseIntake(metric: RawMetric, systems: Record<string, unknown>, loincSystem: string): IntakeMetric {
@@ -146,9 +152,8 @@ export function loadContract(path: string = defaultContractPath): Contract {
     throw new Error("contract has no data-quality flags (contract 1.4.0 or later is required)");
   }
   const metrics = raw.metrics ?? [];
-  // an unknown kind is not rolled up. A quantity coded in the project's own system (contract 1.6.0: hrvRmssd) has no LOINC
-  // code and is not rolled up yet: the worker searches by LOINC code. M29 aligns the analytics with Health Connect.
-  const quantityMetrics = metrics.filter((m) => m.kind === "quantity" && !(m.customCode && !m.loinc)).map(parseQuantity);
+  // an unknown kind is not rolled up. A quantity may be coded in the project's own system (contract 1.6.0: hrvRmssd has no LOINC code).
+  const quantityMetrics = metrics.filter((m) => m.kind === "quantity").map((m) => parseQuantity(m, raw.systems ?? {}, loincSystem));
   const sleepMetric = metrics.find((m) => m.kind === "sleepStage");
   if (quantityMetrics.length === 0) {
     throw new Error("contract has no quantity metrics");

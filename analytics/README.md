@@ -135,7 +135,18 @@ python3 analytics/verify-intake.py poc-real   # your own data
 
 It reads the Observations from HAPI itself (no shared code), sums them by the date written in each timestamp, and compares every day and nutrient with the API, including that the meals add up to the day.
 
-**Backfill after a contract change.** The worker scans only what changed since its watermark, so Observations written *before* it knew a metric's code are never found. When a contract change adds a metric, run `make analytics-rescan` once: it forgets the watermark and the running worker re-reads everything on its next cycle (every step is idempotent). Found in M22, when 21 real nutrition Observations uploaded before the worker knew the codes were not summed until a rescan.
+**Backfill after a contract change, or after deletions the worker did not see.** The worker scans only what changed since its watermark, so Observations written *before* it knew a metric's code are never found. When a contract change adds a metric, run `make analytics-rescan` once: it forgets the watermark (the running worker re-reads every Observation on its next cycle) **and marks every window the store already holds for recompute (M29)**, because a window whose samples were all deleted has no Observation left to find, and would otherwise keep its old row for ever (every step is idempotent). Found in M22, when 21 real nutrition Observations uploaded before the worker knew the codes were not summed until a rescan.
+
+## Health Connect: HRV RMSSD and deletions (M29)
+
+**HRV RMSSD.** The contract's `hrvRmssd` (contract 1.6.0) has no LOINC code: it is coded in the project's own `metric` system. A quantity metric therefore carries its own code **system** as well as its code (`QuantityMetric.codeSystem`), the worker searches and re-checks it by `system|code`, and the same code text under another system is not that metric (tests with the control, including against a server that ignores the code filter). RMSSD gets its own daily band row and API metric, apart from SDNN: they are different measures and are never combined.
+
+**Deletions.** Health Connect edits arrive as updates of the same Observation (a new `lastUpdated`, which the change scan sees) but a deletion is a **soft delete** in HAPI (decision A11): the resource keeps a deleted version, a search no longer returns it, and nothing matches `_lastUpdated`. The worker therefore also reads `Observation/_history?_since=...` for `DELETE` entries (it has its own watermark, `<worker>:history`), reads each deleted resource's last live version (`Observation/<id>/_history/<version - 1>`) to learn which window it belonged to, and touches that window; the recompute, which reads what the server holds now, drops it. A last sample deleted removes the day's row (never a stored zero).
+- **A DELETE entry has no time of its own** (only `status` and `etag`), so the watermark is the server's own time when it answered (`Bundle.meta.lastUpdated`), not an entry's; the last minute is read again each cycle (the overlap), harmlessly.
+- **The first run starts from now.** Deletions before the deletion scan existed are not read; `make analytics-rescan` recomputes every stored window from current data, which fixes them (found in M29: 3,107 deleted heart-rate samples were still counted until the rescan marked the stored windows).
+- **A deletion whose last version cannot be read** (purged history) is counted (`deletionsUnreadable`) and cannot name its window; a rescan covers it.
+- **The cost:** a deleted 5,000-sample record is 5,000 reads of one small version each (the type-level history carries no resource for a DELETE). Fine for a POC; a larger system would read history by patient or keep a ledger.
+- The nutrition group identifier (`healthconnect-group`, content key and ordinal) is a lookup key on the server and is **not used here**: each nutrient Observation is already one food, so entry counts and totals are right without it (decided 2026-11-18).
 
 ## Deployment and schedule (M13a)
 
@@ -207,7 +218,7 @@ Node's built-in runner. node-oracledb's types are declared locally (`src/oracled
   `Cache-Control: no-cache`, otherwise a recompute right after a write could read stale data (seen in M8).
 - **A35 Units are enforced here, not by HAPI.** An Observation whose `valueQuantity` is not the contract's UCUM
   system and code is excluded and counted (`wrongUnit`).
-- **A36 Deletes.** (Since M27 the capture role can delete a Health Connect Observation, conditional and soft; a deleted Android sample stays counted here until the worker reads `Observation/_history` for deletions, planned for M29. `Observation/_history` answers 200 for the worker role, observed 2026-11-17.) Before that: no role can delete Observations. Since M21 the capture app retracts a deleted sample by setting
+- **A36 Deletes.** Since M27 the capture role can delete a Health Connect Observation (conditional, and soft: see "Health Connect: HRV RMSSD and deletions (M29)" below, which the worker now handles). Before M27 no role could delete Observations. Since M21 the capture app retracts a deleted sample by setting
   `status` to `entered-in-error`; only `final` Observations are counted, so a rollup does get smaller, and a window
   with nothing left deletes its row (tested with a fake and, for intake totals, live).
 - **A37 Session gap** is 2 hours and **A38 minimum awakening** is 5 minutes: constants in `src/sleep.ts`, a clinical

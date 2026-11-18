@@ -1,4 +1,5 @@
 import { writeFileSync } from "node:fs";
+import { requestRescan } from "./rescan.ts";
 import { homedir } from "node:os";
 import { AnalyticApi } from "./api.ts";
 import { ClientCredentials } from "./auth.ts";
@@ -17,7 +18,7 @@ import { RollupWorker } from "./worker.ts";
  *   loop    cycles forever, `POC_WORKER_INTERVAL_SECONDS` apart (30); a failed cycle is logged and retried with
  *           backoff, never fatal. This is what the compose service runs.
  *   status  counts only (watermark, rows, pending windows)
- *   rescan  forget the watermark so the next cycle re-reads everything (after the contract gains a metric: data written
+ *   rescan  forget the watermark so the next cycle re-reads everything, and mark every stored window for recompute (after the contract gains a metric, or after deletions the worker did not see: data written
  *           before the worker knew its code is older than the watermark); the running loop does the work within a cycle
  *   api     the analytic API (loopback-bound by default; see below)
  *
@@ -154,8 +155,8 @@ async function main(): Promise<number> {
         return 0;
       }
       case "rescan":
-        await store.resetWatermark(name);
-        log({ worker: name, watermark: null, rescan: "requested: the next cycle re-reads every Observation" });
+        const marked = await requestRescan(store, contract, name);
+        log({ worker: name, watermark: null, markedWindows: marked, rescan: "requested: the next cycle re-reads every Observation and recomputes every stored window" });
         return 0;
       default:
         log({ ...(await makeWorker(store, contract, name).runOnce()) });

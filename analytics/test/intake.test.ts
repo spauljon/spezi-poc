@@ -168,7 +168,7 @@ test("an evening entry belongs to its own day, not the UTC day (a heart rate at 
 });
 function quantityAtSameInstant() {
   return { id: "hr-1", status: "final", subject: { reference: "Patient/p1" },
-    code: { coding: [{ system: contract.loincSystem, code: heartRate.loincCode }] }, effectiveDateTime: `${D19}T23:30:00-07:00`,
+    code: { coding: [{ system: heartRate.codeSystem, code: heartRate.code }] }, effectiveDateTime: `${D19}T23:30:00-07:00`,
     valueQuantity: { value: 60, system: contract.ucumSystem, code: heartRate.ucum } };
 }
 

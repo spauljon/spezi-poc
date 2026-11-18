@@ -19,6 +19,8 @@ export interface WorkerOptions {
    */
   readonly overlapMs?: number;
   readonly pageSize?: number;
+  /** The clock, in epoch ms (a test sets it); only the first deletion scan uses it. */
+  readonly now?: () => number;
 }
 
 export interface CycleReport {
@@ -32,6 +34,10 @@ export interface CycleReport {
   recomputed: number;
   /** Recomputed windows whose stored rollup actually changed. */
   changed: number;
+  /** Deletions read from `Observation/_history` (M29): HAPI deletes softly, so a search no longer shows them. */
+  deletions: number;
+  /** Deletions whose last live version could not be read (purged): nothing to recompute from them. */
+  deletionsUnreadable: number;
   /** Observations skipped while recomputing because their unit was not the contract's. */
   wrongUnit: number;
   /** Dietary entries skipped while recomputing because the amount was negative or not a number. */
@@ -81,22 +87,23 @@ const isoMs = (ms: number): string => new Date(ms).toISOString();
 export class RollupWorker {
   private readonly overlapMs: number;
   private readonly pageSize: number;
-  private readonly byCode: Map<string, QuantityMetric>;
+  private readonly byToken: Map<string, QuantityMetric>;
   private readonly intakeByToken: Map<string, IntakeMetric>;
 
   constructor(private readonly o: WorkerOptions) {
     this.overlapMs = o.overlapMs ?? DEFAULT_OVERLAP_MS;
     this.pageSize = o.pageSize ?? DEFAULT_PAGE;
-    this.byCode = new Map(o.contract.quantityMetrics.map((m) => [m.loincCode, m]));
+    this.byToken = new Map(o.contract.quantityMetrics.map((m) => [`${m.codeSystem}|${m.code}`, m]));
     this.intakeByToken = new Map(o.contract.intakeMetrics.map((m) => [`${m.codeSystem}|${m.code}`, m]));
   }
 
   /** One full cycle: find what changed, then bring every touched window up to date. */
   async runOnce(): Promise<CycleReport> {
     const report: CycleReport = {
-      scanned: 0, ignored: 0, touched: 0, recomputed: 0, changed: 0, wrongUnit: 0, invalidValue: 0, watermarkMs: null,
+      scanned: 0, ignored: 0, touched: 0, recomputed: 0, changed: 0, deletions: 0, deletionsUnreadable: 0, wrongUnit: 0, invalidValue: 0, watermarkMs: null,
     };
     await this.scan(report);
+    await this.scanDeletions(report);
     await this.recomputePending(report);
     report.watermarkMs = await this.o.store.getWatermark(this.o.name);
     return report;
@@ -108,7 +115,7 @@ export class RollupWorker {
     const watermark = await store.getWatermark(name);
     const since = Math.max(0, (watermark ?? 0) - this.overlapMs);
     const tokens = [
-      ...contract.quantityMetrics.map((m) => `${contract.loincSystem}|${m.loincCode}`),
+      ...this.byToken.keys(),
       ...(contract.sleep ? [...contract.sleep.stageByCode.keys()].map((c) => `${contract.loincSystem}|${c}`) : []),
       ...this.intakeByToken.keys(),
     ];
@@ -138,6 +145,46 @@ export class RollupWorker {
     await store.recordTouched(name, [...touched.values()], newest);
   }
 
+  /**
+   * 1b. deletions (M29, decision A11). HAPI deletes softly: the resource keeps a deleted version, a search no longer
+   * returns it, and its `lastUpdated` never matches the change scan. So the history is read for DELETE entries, the
+   * last live version of each is read to learn which window it belonged to, and that window is touched; the recompute
+   * (which reads what the server holds now) then drops it. It has its own watermark (`<worker>:history`), advanced
+   * to the server's own time when it answered (a DELETE entry has no time of its own), in the same transaction as the
+   * touched windows; the overlap re-reads the last minute. The first run starts from now (the worker's clock):
+   * deletions before it are handled by `make analytics-rescan`, which recomputes every window from current data.
+   */
+  private async scanDeletions(report: CycleReport): Promise<void> {
+    const { fhir, store, name } = this.o;
+    const key = `${name}:history`;
+    const now = (this.o.now ?? Date.now)();
+    const watermark = await store.getWatermark(key);
+    const since = watermark === null ? now - this.overlapMs : Math.max(0, watermark - this.overlapMs);
+    const touched = new Map<string, Window>();
+    let asOf: number | null = null;
+    const seen = new Set<string>();
+    for await (const entry of fhir.history(`Observation/_history?_since=${encodeURIComponent(isoMs(since))}&_count=${this.pageSize}`)) {
+      // the earliest answer time of the pages read: everything up to it was seen
+      asOf = asOf === null ? entry.asOfMs : Math.min(asOf, entry.asOfMs);
+      const m = entry.method === "DELETE" ? /^Observation\/([A-Za-z0-9\-.]{1,64})\/_history\/(\d+)$/.exec(entry.url) : null;
+      if (!m || seen.has(entry.url)) {
+        continue;
+      }
+      seen.add(entry.url);
+      report.deletions++;
+      const version = Number(m[2]);
+      const last = version > 1 ? await fhir.read(`Observation/${m[1]}/_history/${version - 1}`) : null;
+      if (!last) {
+        report.deletionsUnreadable++;
+        continue;
+      }
+      for (const window of this.windowsOf(last)) {
+        touched.set(windowKey(window), window);
+      }
+    }
+    await store.recordTouched(key, [...touched.values()], asOf ?? (watermark === null ? now : null));
+  }
+
   /** The windows one Observation affects: one day for a quantity, several nights for a sleep stage. */
   private windowsOf(obs: ObservationLite): Window[] {
     const patientId = patientIdOf(obs.subject?.reference);
@@ -163,9 +210,18 @@ export class RollupWorker {
     }
     const instant = effectiveInstant(obs);
     const day = instant ? utcDay(instant) : null;
-    const loinc = obs.code?.coding?.find((c) => c.system === this.o.contract.loincSystem && c.code && this.byCode.has(c.code));
-    const metric = loinc?.code ? this.byCode.get(loinc.code) : undefined;
+    const metric = this.quantityOf(obs);
     return day && metric ? [{ patientId, metricId: metric.id, day }] : [];
+  }
+
+  private quantityOf(obs: ObservationLite): QuantityMetric | undefined {
+    for (const c of obs.code?.coding ?? []) {
+      const metric = c.system && c.code ? this.byToken.get(`${c.system}|${c.code}`) : undefined;
+      if (metric) {
+        return metric;
+      }
+    }
+    return undefined;
   }
 
   private intakeOf(obs: ObservationLite): IntakeMetric | null {
@@ -310,7 +366,7 @@ export class RollupWorker {
     }
     const path =
       `Observation?${subjectParam(window.patientId)}` +
-      `&${codeParam(contract.loincSystem, [metric.loincCode])}` +
+      `&${tokenParam([`${metric.codeSystem}|${metric.code}`])}` +
       `&date=ge${window.day}T00:00:00Z&date=lt${nextDay(window.day)}T00:00:00Z` +
       `&_count=${this.pageSize}&_elements=status,meta,subject,code,effectiveDateTime,effectivePeriod,valueQuantity`;
 
@@ -330,7 +386,8 @@ export class RollupWorker {
         continue; // retracted (entered-in-error) or anything else not final: not part of the day
       }
       const instant = effectiveInstant(obs);
-      if (!instant || utcDay(instant) !== window.day || patientIdOf(obs.subject?.reference) !== window.patientId) {
+      if (!instant || utcDay(instant) !== window.day || patientIdOf(obs.subject?.reference) !== window.patientId ||
+          this.quantityOf(obs)?.id !== metric.id) {
         continue;
       }
       const q = obs.valueQuantity;

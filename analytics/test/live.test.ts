@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { AnalyticApi } from "../src/api.ts";
 import { JwtVerifier } from "../src/jwt.ts";
 import { createApiServer, listen } from "../src/server.ts";
-import { contract, heartRate } from "./support.ts";
+import { contract, heartRate, rmssd } from "./support.ts";
 
 const sleepMetric = contract.sleep!;
 const codeOf = (stage: string) => [...sleepMetric.stageByCode].find(([, s]) => s === stage)![0];
@@ -101,7 +101,7 @@ async function upload(token: string, patient: string, tag: string, samples: { ke
         identifier: [{ system: sampleSystem, value: identifier }],
         status: "final",
         category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "vital-signs" }] }],
-        code: { coding: [{ system: contract.loincSystem, code: heartRate.loincCode }] },
+        code: { coding: [{ system: heartRate.codeSystem, code: heartRate.code }] },
         subject: { reference: `Patient/${patient}` },
         effectiveDateTime: s.at,
         issued: new Date().toISOString(),
@@ -566,4 +566,77 @@ test("live: daily intake totals equal an independent sum of the Observations in 
   await worker.runOnce();
   assert.equal((await overall()).has(`dietaryEnergy|${d1}`), false);
   assert.equal((await overall()).has(`dietaryEnergy|${d2}`), true, "control: the zero day is still a day with entries");
+});
+
+const hcSampleSystem = "http://aboutobjects.com/fhir/identifier/healthconnect-sample";
+
+/**
+ * M29 (decision A11), against the real HAPI: Health Connect samples (a heart rate and an RMSSD, which has no LOINC code) are
+ * created, one is DELETED with the conditional DELETE the capture role is allowed (HAPI deletes softly), and the worker must
+ * notice it through `Observation/_history`, which no search or `_lastUpdated` scan can show.
+ */
+test("live: a deleted Health Connect sample leaves its rollup, and an RMSSD sample is rolled up under its own code", { skip: !live && "set POC_ANALYTICS_LIVE=1" }, async (t) => {
+  const capture = await captureToken();
+  const patient = await patientId(capture);
+  const tag = randomBytes(4).toString("hex");
+  const day = await freeDay(capture);
+  const windows: Window[] = [
+    { patientId: patient, metricId: "heartRate", day }, { patientId: patient, metricId: "hrvRmssd", day },
+  ];
+  const store = await OracleStore.connect({
+    user: required("ANALYTICS_DB_USER"), password: required("ANALYTICS_DB_PASSWORD"),
+    connectString: process.env["POC_ANALYTICS_CONNECT"] ?? "127.0.0.1:1522/ANALYTICSPDB",
+  });
+  const name = `live-test-hc-${tag}`;
+  t.after(async () => {
+    await store.purge(name, windows);
+    await store.purge(`${name}:history`, []);
+    await store.close();
+  });
+  await store.recordTouched(name, [], Date.now() - 5 * 60_000);
+  await store.recordTouched(`${name}:history`, [], Date.now() - 5 * 60_000);
+  const credentials = new ClientCredentials(issuer, "analytics-worker", required("POC_WORKER_CLIENT_SECRET"));
+  const worker = new RollupWorker({ name, contract, store, fhir: new HapiClient(fhirBase, () => credentials.token()) });
+
+  const ids = (k: string) => `hc-live-${tag}-${k}`;
+  const observation = (k: string, metric: { codeSystem: string; code: string; ucum: string }, at: string, value: number) => ({
+    fullUrl: `urn:uuid:${crypto.randomUUID()}`,
+    resource: {
+      resourceType: "Observation",
+      identifier: [{ system: hcSampleSystem, value: ids(k) }],
+      status: "final",
+      category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "vital-signs" }] }],
+      code: { coding: [{ system: metric.codeSystem, code: metric.code }] },
+      subject: { reference: `Patient/${patient}` },
+      effectiveDateTime: at,
+      issued: new Date().toISOString(),
+      valueQuantity: { value, unit: metric.ucum, system: contract.ucumSystem, code: metric.ucum },
+    },
+    request: { method: "POST", url: "Observation", ifNoneExist: `identifier=${encodeURIComponent(`${hcSampleSystem}|${ids(k)}`)}` },
+  });
+  const transaction = async (entry: unknown[]) => {
+    const response = await fhir(capture, "", { method: "POST", body: JSON.stringify({ resourceType: "Bundle", type: "transaction", entry }) });
+    assert.equal(response.status, 200, `the transaction failed with HTTP ${response.status}`);
+  };
+  const remove = (k: string) => ({ request: { method: "DELETE", url: `Observation?identifier=${encodeURIComponent(`${hcSampleSystem}|${ids(k)}`)}` } });
+
+  await transaction([
+    observation("a", heartRate, `${day}T08:00:00+00:00`, 60), observation("b", heartRate, `${day}T09:00:00+00:00`, 80),
+    observation("c", heartRate, `${day}T10:00:00+00:00`, 100), observation("r", rmssd, `${day}T08:30:00+00:00`, 48.3),
+  ]);
+  await worker.runOnce();
+  const rows = async (metric: string) => (await store.rollups(patient)).find((r) => r.day === day && r.metricId === metric);
+  assert.deepEqual([(await rows("heartRate"))?.n, (await rows("heartRate"))?.max], [3, 100]);
+  assert.deepEqual([(await rows("hrvRmssd"))?.n, (await rows("hrvRmssd"))?.min], [1, 48.3], "RMSSD is rolled up under its own code system");
+
+  await transaction([remove("c")]);
+  const afterOne = await worker.runOnce();
+  assert.ok(afterOne.deletions >= 1, "the deletion was read from the history");
+  assert.deepEqual([(await rows("heartRate"))?.n, (await rows("heartRate"))?.max], [2, 80], "the deleted sample left the day");
+  assert.equal((await rows("hrvRmssd"))?.n, 1, "control: the other metric of the day is untouched");
+
+  await transaction([remove("a"), remove("b"), remove("r")]);
+  await worker.runOnce();
+  assert.equal(await rows("heartRate"), undefined, "the last deletion removes the day's row");
+  assert.equal(await rows("hrvRmssd"), undefined);
 });
