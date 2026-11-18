@@ -129,7 +129,7 @@ class SyncEngineTest {
         assertEquals(device.getValue("fullUrl"), obs.getValue("device").jsonObject.getValue("reference"))
         assertEquals("Patient/p1", obs.getValue("subject").jsonObject.getValue("reference").jsonPrimitive.content)
         assertEquals("ifNoneExist keys every Observation on its identifier", 1, first.count { it.getValue("request").jsonObject.getValue("url").jsonPrimitive.content == "Device" })
-        assertTrue(status.history.first().summary.startsWith("Uploaded"))
+        assertTrue(status.history.first().summary, status.history.first().summary.startsWith("Sent ${items.size} (${items.size} created, 0 updated, 0 deleted, 0 already there)"))
     }
 
     @Test fun anExistingPatientIsFoundAndNotCreatedAgain() {

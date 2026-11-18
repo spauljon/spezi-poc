@@ -33,6 +33,9 @@
             </intent-filter>
         </activity>
 
+        <!-- scripts drive the same scenarios as the buttons (see ControlReceiver) -->
+        <receiver android:name=".ControlReceiver" android:exported="true" />
+
         <activity-alias
             android:name="ViewPermissionUsageActivity"
             android:exported="true"

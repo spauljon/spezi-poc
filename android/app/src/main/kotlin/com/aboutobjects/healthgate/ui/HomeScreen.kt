@@ -45,6 +45,10 @@ fun HomeScreen(model: HomeViewModel) {
     val reading by model.reading.collectAsStateWithLifecycle()
     val lastRead by model.lastRead.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bgSupported by model.backgroundSupported.collectAsStateWithLifecycle()
+    val bgAllowed by model.backgroundAllowed.collectAsStateWithLifecycle()
+    val battery by model.batteryUnrestricted.collectAsStateWithLifecycle()
     val permissions = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { model.refreshHealthConnect() }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result -> model.onSignInResult(result.data) }
 
@@ -89,6 +93,16 @@ fun HomeScreen(model: HomeViewModel) {
                     HomeViewModel.HealthConnectState.Ready -> "Allowed to read heart rate, resting heart rate, heart-rate variability, sleep, nutrition and hydration."
                 },
             )
+            if (hc == HomeViewModel.HealthConnectState.Ready) {
+                Text(
+                    when {
+                        !bgSupported -> "Reading while the app is closed is not supported by this phone's Health Connect: data is read when the app is open."
+                        bgAllowed -> "Allowed to read while the app is closed."
+                        else -> "Not allowed to read while the app is closed: the background sync will stop with a note in the attempts."
+                    },
+                )
+                if (bgSupported && !bgAllowed) Button(onClick = { permissions.launch(model.healthConnectPermissions) }) { Text("Allow reading while closed") }
+            }
             if (hc == HomeViewModel.HealthConnectState.NeedsPermission) {
                 Button(onClick = { permissions.launch(model.healthConnectPermissions) }) { Text("Allow Health Connect access") }
             }
@@ -117,10 +131,22 @@ fun HomeScreen(model: HomeViewModel) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(enabled = !paused && sync.phase != SyncPhase.Syncing, onClick = model::syncNow) { Text("Sync now") }
                 Text("Pause")
-                Switch(checked = paused, onCheckedChange = model::setPaused)
+                Switch(checked = paused, onCheckedChange = { model.setPaused(it, context) })
                 Text(if (paused) "Paused" else "Running")
             }
             Text("Server count: created ${sync.created}, already there ${sync.alreadyPresent}, updated ${sync.updated}, deleted ${sync.deleted}.")
+        }
+
+        Section("Background") {
+            Text(if (paused) "Paused: nothing is read or sent, and the schedule is off." else "On: every 15 minutes when there is a network (Android decides the exact time).")
+            Text(
+                if (battery) "Battery: unrestricted for this app."
+                else "Battery: optimised. Some phones (Samsung) may stop the sync when the app is closed; set this app to Unrestricted in the phone's battery settings.",
+            )
+            if (!battery) OutlinedButton(onClick = {
+                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }) { Text("Open battery settings") }
+            OutlinedButton(onClick = model::refreshHealthConnect) { Text("Refresh these statuses") }
         }
 
         Section("Attempts") {

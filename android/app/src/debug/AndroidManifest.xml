@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/network_security_config" />
+    <application android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- debug only: installs the failpoint hook at process start, and the adb control receiver (see DebugControl.kt) -->
+        <provider
+            android:name="com.aboutobjects.healthgate.debug.DebugInstaller"
+            android:authorities="${applicationId}.debuginstaller"
+            android:exported="false"
+            android:initOrder="100" />
+        <receiver
+            android:name="com.aboutobjects.healthgate.debug.DebugControlReceiver"
+            android:exported="true" />
+    </application>
 </manifest>

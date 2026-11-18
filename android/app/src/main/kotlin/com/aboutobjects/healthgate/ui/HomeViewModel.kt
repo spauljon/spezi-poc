@@ -22,7 +22,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     val sync = container.engine.status
     val serverHost: String get() = container.configuration.host
 
-    private val _paused = MutableStateFlow(false)
+    private val _paused = MutableStateFlow(container.pauseStore.paused)
     val paused: StateFlow<Boolean> get() = _paused
 
     private val _captureMessage = MutableStateFlow<String?>(null)
@@ -45,7 +45,18 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     private val _lastRead = MutableStateFlow<CollectOutcome?>(null)
     val lastRead: StateFlow<CollectOutcome?> get() = _lastRead
 
-    val healthConnectPermissions: Set<String> get() = HealthConnectAccess.readPermissions
+    /** The permissions to ask for: the six reads, and (when this phone's Health Connect supports it) reading while the app is closed. */
+    val healthConnectPermissions: Set<String>
+        get() = HealthConnectAccess.readPermissions + if (backgroundSupported.value) setOf(HealthConnectAccess.BACKGROUND_PERMISSION) else emptySet()
+
+    private val _backgroundSupported = MutableStateFlow(false)
+    val backgroundSupported: StateFlow<Boolean> get() = _backgroundSupported
+
+    private val _backgroundAllowed = MutableStateFlow(false)
+    val backgroundAllowed: StateFlow<Boolean> get() = _backgroundAllowed
+
+    private val _batteryUnrestricted = MutableStateFlow(container.batteryUnrestricted())
+    val batteryUnrestricted: StateFlow<Boolean> get() = _batteryUnrestricted
 
     init {
         container.auth.restore()
@@ -71,7 +82,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         if (_paused.value) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) { container.queue.makeAllDue() }
-            container.engine.drain()
+            container.runner.run("Manual")
         }
     }
 
@@ -83,6 +94,9 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
                 HealthConnectAccess.Status.UPDATE_REQUIRED -> HealthConnectState.UpdateRequired
                 HealthConnectAccess.Status.AVAILABLE -> {
                     val granted = container.healthConnectClient?.permissionController?.getGrantedPermissions() ?: emptySet()
+                    _backgroundSupported.value = container.healthConnectClient?.let { HealthConnectAccess.backgroundReadSupported(it) } ?: false
+                    _backgroundAllowed.value = HealthConnectAccess.BACKGROUND_PERMISSION in granted
+                    _batteryUnrestricted.value = container.batteryUnrestricted()
                     if (granted.containsAll(HealthConnectAccess.readPermissions)) HealthConnectState.Ready else HealthConnectState.NeedsPermission
                 }
             }
@@ -91,21 +105,23 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
     /** Reads Health Connect into the queue, then uploads (a changed record is an update, a deleted one a delete). Counts only are kept. */
     fun readHealthConnect() {
-        val collector = container.collector ?: return
-        if (_reading.value) return
+        if (container.collector == null || _reading.value) return
         viewModelScope.launch {
             _reading.value = true
             try {
-                _lastRead.value = collector.collect()
-                container.engine.refresh()
-                if (!_paused.value) container.engine.drain()
+                _lastRead.value = container.runner.run("Manual").collected
             } finally {
                 _reading.value = false
             }
         }
     }
 
-    fun setPaused(paused: Boolean) { _paused.value = paused }
+    /** Pausing stops the scheduled work too, and is remembered across the app being killed. */
+    fun setPaused(paused: Boolean, context: android.content.Context) {
+        container.pauseStore.paused = paused
+        _paused.value = paused
+        if (paused) com.aboutobjects.healthgate.sync.SyncWorker.cancel(context) else com.aboutobjects.healthgate.sync.SyncWorker.schedule(context)
+    }
 
     /** The browser intent for signing in, or null if the sign-in server could not be reached (the state then says so). */
     suspend fun signInIntent(): Intent? {
@@ -123,6 +139,7 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 container.auth.signedIn(container.appAuth.complete(data, container.configuration))
+                container.runner.run("Sign-in") // samples held while signed out go up now
             } catch (e: SignInCancelled) {
                 container.auth.cancelled()
             } catch (e: OidcException) {

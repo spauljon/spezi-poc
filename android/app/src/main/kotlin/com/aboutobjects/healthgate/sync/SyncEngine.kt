@@ -1,6 +1,7 @@
 package com.aboutobjects.healthgate.sync
 
 import com.aboutobjects.healthgate.contract.MetricRegistry
+import com.aboutobjects.healthgate.debug.Failpoints
 import com.aboutobjects.healthgate.queue.QueueCounts
 import com.aboutobjects.healthgate.queue.QueueOp
 import com.aboutobjects.healthgate.queue.QueuedItem
@@ -35,6 +36,17 @@ sealed interface SyncPhase {
 }
 
 data class Attempt(val at: Instant, val summary: String)
+
+/** Where the attempt history is kept between runs of the app. */
+interface AttemptStore {
+    fun load(): List<Attempt>
+    fun save(history: List<Attempt>)
+
+    object None : AttemptStore {
+        override fun load(): List<Attempt> = emptyList()
+        override fun save(history: List<Attempt>) = Unit
+    }
+}
 
 data class SyncStatus(
     val phase: SyncPhase = SyncPhase.Idle,
@@ -72,6 +84,7 @@ class SyncEngine(
     private val settings: Settings,
     private val now: () -> Instant = { Instant.now() },
     private val random: () -> Double = { Math.random() },
+    private val attempts: AttemptStore = AttemptStore.None,
 ) {
     data class Settings(
         val patientIdentifier: String,
@@ -84,7 +97,7 @@ class SyncEngine(
     private val json = Json { ignoreUnknownKeys = true }
     private val gate = Mutex()
     private var patientId: String? = null
-    private var state = SyncStatus()
+    private var state = SyncStatus(history = attempts.load())
     private val _status = MutableStateFlow(state)
     val status: StateFlow<SyncStatus> get() = _status
 
@@ -114,7 +127,7 @@ class SyncEngine(
     suspend fun drain(): SyncStatus {
         if (!gate.tryLock()) return state
         try {
-            val uploadedBefore = state.created + state.alreadyPresent
+            val before = state
             publish { it.copy(phase = SyncPhase.Syncing, lastError = null) }
             try {
                 while (true) {
@@ -125,7 +138,7 @@ class SyncEngine(
                         is Resolved.Id -> r.id
                         is Resolved.Failed -> {
                             finish(r.stop, due.map { it.key }, attempts)
-                            return finishAttempt(uploadedBefore)
+                            return finishAttempt(before)
                         }
                     }
                     when (val step = upload(due, attempts, pid)) {
@@ -133,7 +146,7 @@ class SyncEngine(
                         is Step.Stop -> {
                             publish { it.copy(phase = step.phase) }
                             refresh()
-                            return finishAttempt(uploadedBefore)
+                            return finishAttempt(before)
                         }
                     }
                 }
@@ -142,21 +155,31 @@ class SyncEngine(
                 publish { it.copy(phase = SyncPhase.Blocked(SyncBlocker.Configuration("The local queue failed: ${e.javaClass.simpleName}")), lastError = "The local queue failed: ${e.javaClass.simpleName}") }
             }
             refresh()
-            return finishAttempt(uploadedBefore)
+            return finishAttempt(before)
         } finally {
             gate.unlock()
         }
     }
 
-    private fun finishAttempt(uploadedBefore: Int): SyncStatus {
-        val sent = state.created + state.alreadyPresent - uploadedBefore
-        val summary = when (val p = state.phase) {
+    private fun finishAttempt(before: SyncStatus): SyncStatus {
+        val created = state.created - before.created
+        val present = state.alreadyPresent - before.alreadyPresent
+        val updated = state.updated - before.updated
+        val deleted = state.deleted - before.deleted
+        val sent = created + present + updated + deleted
+        val summary = when (state.phase) {
             is SyncPhase.Blocked -> "Blocked: ${state.lastError ?: "see the status"}"
             is SyncPhase.Waiting -> "Will retry: ${state.lastError ?: "a temporary problem"}"
-            else -> if (sent > 0) "Uploaded $sent" else "Nothing to upload"
+            else -> if (sent > 0) "Sent $sent ($created created, $updated updated, $deleted deleted, $present already there)" else "Nothing to upload"
         }
-        publish { it.copy(history = (listOf(Attempt(now(), summary)) + it.history).take(HISTORY)) }
+        record(summary)
         return state
+    }
+
+    /** Adds one line to the attempt history (newest first, kept and saved). Words and counts only. */
+    fun record(summary: String) {
+        publish { it.copy(history = (listOf(Attempt(now(), summary)) + it.history).take(HISTORY)) }
+        runCatching { attempts.save(state.history) }
     }
 
     private fun retryAt(attempts: Int): Instant =
@@ -201,6 +224,7 @@ class SyncEngine(
                 if (tally == null) {
                     return transient(built.observationKeys, "The server's response did not match the request.", attempts)
                 }
+                Failpoints.hit("engine.afterSend") // the server has it, the queue does not know yet: a retry must converge
                 io { queue.markSent(built.observationKeys) }
                 publish {
                     it.copy(

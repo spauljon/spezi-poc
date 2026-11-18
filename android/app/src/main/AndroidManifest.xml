@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_NUTRITION" />
     <uses-permission android:name="android.permission.health.READ_HYDRATION" />
+    <!-- M28: lets the scheduled sync read Health Connect while the app is closed. Still read-only; the user grants it separately. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <!-- AppAuth must be able to find a browser that handles https (Android 11 and newer hide other apps unless asked) -->
     <queries>

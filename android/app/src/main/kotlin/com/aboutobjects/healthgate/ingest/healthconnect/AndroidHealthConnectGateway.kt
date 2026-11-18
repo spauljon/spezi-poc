@@ -56,6 +56,13 @@ object HealthConnectAccess {
 
     fun stageName(stage: Int): String = stageNames[stage] ?: "STAGE_TYPE_UNKNOWN"
 
+    /** The permission that lets the scheduled sync read while the app is closed (needs the phone's Health Connect to support it). */
+    const val BACKGROUND_PERMISSION: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
+
+    fun backgroundReadSupported(client: HealthConnectClient): Boolean =
+        client.features.getFeatureStatus(androidx.health.connect.client.HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND) ==
+            androidx.health.connect.client.HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+
     /** `Available`, or why Health Connect cannot be used on this phone. */
     fun status(context: Context): Status = when (HealthConnectClient.getSdkStatus(context)) {
         HealthConnectClient.SDK_AVAILABLE -> Status.AVAILABLE

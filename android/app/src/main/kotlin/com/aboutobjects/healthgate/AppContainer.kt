@@ -17,7 +17,11 @@ import com.aboutobjects.healthgate.ingest.healthconnect.PrefsCollectorState
 import com.aboutobjects.healthgate.mapping.QualityFlagger
 import com.aboutobjects.healthgate.queue.SampleQueue
 import com.aboutobjects.healthgate.queue.SqliteSampleQueue
+import com.aboutobjects.healthgate.settings.PauseStore
+import com.aboutobjects.healthgate.settings.PrefsAttemptStore
+import com.aboutobjects.healthgate.settings.PrefsPauseStore
 import com.aboutobjects.healthgate.sync.OkHttpTransport
+import com.aboutobjects.healthgate.sync.SyncRunner
 import com.aboutobjects.healthgate.sync.SyncEngine
 import java.time.ZoneId
 
@@ -30,6 +34,7 @@ class AppContainer(private val context: Context) {
     val auth = AuthService(appAuth, KeystoreTokenStore(context), configuration)
     val flagger = QualityFlagger(registry)
     val source: IngestSource = SyntheticSource(SyntheticGenerator(registry), SyntheticConfig(seed = SYNTHETIC_SEED, zone = ZoneId.systemDefault()))
+    val pauseStore: PauseStore = PrefsPauseStore(context)
     val engine = SyncEngine(
         queue = queue,
         transport = OkHttpTransport(configuration.fhirBase),
@@ -39,6 +44,7 @@ class AppContainer(private val context: Context) {
             patientIdentifier = configuration.patientIdentifier,
             patientSystem = registry.systems.identifier.getValue("patient"),
         ),
+        attempts = PrefsAttemptStore(context),
     )
 
     /** Health Connect on this phone, or null when it is missing or needs an update (the screen then says why). */
@@ -48,10 +54,20 @@ class AppContainer(private val context: Context) {
         if (HealthConnectAccess.status(context) == HealthConnectAccess.Status.AVAILABLE) androidx.health.connect.client.HealthConnectClient.getOrCreate(context) else null
     }
 
+    /** Where the Health Connect changes token is kept. */
+    val collectorState: PrefsCollectorState by lazy { PrefsCollectorState(context) }
+
     /** Reads Health Connect into the queue (null when Health Connect is not available). */
     val collector: HealthConnectCollector? by lazy {
-        healthConnectClient?.let { HealthConnectCollector(AndroidHealthConnectGateway(it), queue, PrefsCollectorState(context), registry) }
+        healthConnectClient?.let { HealthConnectCollector(AndroidHealthConnectGateway(it), queue, collectorState, registry) }
     }
+
+    /** One sync (read Health Connect, then upload): the buttons, a sign-in and the scheduled background worker all use this. */
+    val runner: SyncRunner by lazy { SyncRunner(collector?.let { c -> { c.collect() } }, engine, pauseStore) }
+
+    /** True when the system lets this app run in the background without battery restrictions (Samsung's "Unrestricted"). */
+    fun batteryUnrestricted(): Boolean =
+        (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(context.packageName)
 
     private companion object {
         const val SYNTHETIC_SEED = 20260301L

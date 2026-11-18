@@ -34,8 +34,10 @@ class HealthConnectSourceTest {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         val pattern = Regex("""<uses-permission android:name="android\.permission\.health\.([A-Z_]+)"""")
         val health = pattern.findAll(manifest).map { it.groupValues[1] }.toList()
-        assertEquals(6, health.size)
+        // the six record types, and reading while the app is closed (M28): all reads, never a write
+        assertEquals(7, health.size)
         assertTrue(health.all { it.startsWith("READ_") })
+        assertTrue("READ_HEALTH_DATA_IN_BACKGROUND" in health)
         assertTrue("control", pattern.findAll("""<uses-permission android:name="android.permission.health.WRITE_SLEEP" />""").any { !it.groupValues[1].startsWith("READ_") })
         val writes = Regex("""\b(insertRecords|updateRecords|deleteRecords)\b""")
         assertEquals(emptyList<String>(), files.filter { writes.containsMatchIn(it.readText()) }.map { it.name })

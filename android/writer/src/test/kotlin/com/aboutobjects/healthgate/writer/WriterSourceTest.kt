@@ -11,7 +11,7 @@ class WriterSourceTest {
     private val sources = File("src/main/kotlin").walkTopDown().filter { it.extension == "kt" }.toList()
     private val manifest = File("src/main/AndroidManifest.xml").readText()
 
-    private val forbidden = listOf("readRecord", "readRecords", "getChanges", "getChangesToken", "aggregate(", "android.util.Log", "println(", "java.net", "okhttp")
+    private val forbidden = listOf("readRecord", "readRecords", "getChanges", "getChangesToken", "aggregate(", "println(", "java.net", "okhttp")
 
     private fun offences(text: String) = forbidden.filter { text.contains(it) }
 

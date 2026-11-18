@@ -1,6 +1,7 @@
 package com.aboutobjects.healthgate.ingest.healthconnect
 
 import com.aboutobjects.healthgate.contract.MetricRegistry
+import com.aboutobjects.healthgate.debug.Failpoints
 import com.aboutobjects.healthgate.ingest.IngestItem
 import com.aboutobjects.healthgate.mapping.MappingException
 import com.aboutobjects.healthgate.mapping.QualityFlagger
@@ -109,7 +110,7 @@ class HealthConnectCollector(
             io { applyDeletes(deletes, t) }
             for (record in upserts) io { applyUpsert(record, t) }
             // only now, with everything of this page committed, may the token move on
-            io { state.token = page.nextToken }
+            io { Failpoints.hit("collector.beforeToken"); state.token = page.nextToken }
             token = page.nextToken
             if (!page.hasMore) return true
         }
@@ -134,7 +135,7 @@ class HealthConnectCollector(
         // records seen before in this window and not seen now were deleted while the token was lost
         val gone = io { queue.ledgerSince(from.toEpochMilli()).map { it.recordId }.filter { it !in seen } }
         io { applyDeletes(gone, t) }
-        io { state.token = newToken }
+        io { Failpoints.hit("collector.beforeToken"); state.token = newToken }
     }
 
     private fun applyDeletes(recordIds: List<String>, t: Tally) {
@@ -150,8 +151,9 @@ class HealthConnectCollector(
         if (removed.isEmpty()) return
         // a nutrition delete waits a grace period: its re-created twin may arrive in the next change page
         val hold = now().plus(settings.nutritionDeleteGrace)
-        if (held.isNotEmpty()) queue.apply(ChangeSet(deleteKeys = held, holdDeletesUntil = hold))
+        if (held.isNotEmpty()) { queue.apply(ChangeSet(deleteKeys = held, holdDeletesUntil = hold)); Failpoints.hit("collector.afterCommit") }
         queue.apply(ChangeSet(deleteKeys = plain, ledgerRemove = removed))
+        Failpoints.hit("collector.afterCommit")
     }
 
     private fun applyUpsert(record: HcRecord, t: Tally) {
@@ -180,10 +182,12 @@ class HealthConnectCollector(
         val chunks = flagged.chunked(settings.chunk)
         for (chunk in chunks.dropLast(1)) {
             queue.apply(ChangeSet(upserts = chunk))
+            Failpoints.hit("collector.afterCommit")
         }
         // the last chunk carries the deletions and the ledger: the record is "seen" only when all its samples are queued
         val last = chunks.lastOrNull() ?: emptyList()
         queue.apply(ChangeSet(upserts = last, deleteKeys = stale, ledgerPut = listOf(entry)))
+        Failpoints.hit("collector.afterCommit")
         t.upserted++
         t.queued += flagged.size
     }
