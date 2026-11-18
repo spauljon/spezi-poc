@@ -57,7 +57,7 @@ class BackgroundSyncTest {
             val collector = HealthConnectCollector(hc, queue, state, registry, HealthConnectCollector.Settings(chunk = chunk), { clock }, { ZoneId.of("UTC") })
             val engine = SyncEngine(
                 queue, hapi, TokenProvider { if (signedOut) throw AuthException(AuthException.Kind.SIGNED_OUT, "signed out") else "tok" }, registry,
-                SyncEngine.Settings(patientIdentifier = "poc-android-01", patientSystem = registry.systems.identifier.getValue("patient"), batchSize = 100),
+                SyncEngine.Settings(patientIdentifier = "poc-android-01", patientSystem = registry.systems.identifier.getValue("patient"), realPatientIdentifier = "poc-real-android", batchSize = 100),
                 now = { clock }, random = { 0.5 },
             )
             return SyncRunner({ collector.collect() }, engine, pause)

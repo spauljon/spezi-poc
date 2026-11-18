@@ -27,7 +27,7 @@ import java.time.ZoneId
 
 /** The app's parts, made once at launch (plain constructors, no dependency-injection library). */
 class AppContainer(private val context: Context) {
-    val configuration: ServerConfiguration = ServerConfiguration.forHost(BuildConfig.SERVER_HOST)
+    val configuration: ServerConfiguration = ServerConfiguration.forHost(BuildConfig.SERVER_HOST, BuildConfig.REAL_PATIENT)
     val registry: MetricRegistry = context.assets.open("metrics.json").bufferedReader().use { MetricRegistry.parse(it.readText()) }
     val queue: SampleQueue = SqliteSampleQueue(context)
     val appAuth = AppAuthClient(context)
@@ -42,6 +42,7 @@ class AppContainer(private val context: Context) {
         registry = registry,
         settings = SyncEngine.Settings(
             patientIdentifier = configuration.patientIdentifier,
+            realPatientIdentifier = configuration.realPatientIdentifier,
             patientSystem = registry.systems.identifier.getValue("patient"),
         ),
         attempts = PrefsAttemptStore(context),

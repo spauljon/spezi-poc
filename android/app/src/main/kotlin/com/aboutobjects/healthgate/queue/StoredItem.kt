@@ -41,6 +41,8 @@ data class StoredItem(
     val deviceSoftware: String? = null,
     val deviceBundle: String? = null,
     val deviceType: String? = null,
+    /** The patient route (`test` or `real`); an older row without one is a test row. */
+    val route: String = "test",
 ) {
     fun toItem(): IngestItem {
         val s = MetricSample(
@@ -57,7 +59,7 @@ data class StoredItem(
             "originApp" -> DeviceDescriptor.OriginApp(deviceBundle ?: "")
             else -> DeviceDescriptor.SourceApp(deviceName, deviceBundle)
         }
-        return IngestItem(s, device)
+        return IngestItem(s, device, com.aboutobjects.healthgate.ingest.PatientRoute.fromKey(route))
     }
 
     fun encode(): String = json.encodeToString(serializer(), this)
@@ -89,6 +91,7 @@ data class StoredItem(
                 deviceHardware = (d as? DeviceDescriptor.HealthKit)?.hardwareVersion,
                 deviceSoftware = (d as? DeviceDescriptor.HealthKit)?.softwareVersion,
                 deviceBundle = (d as? DeviceDescriptor.SourceApp)?.bundleIdentifier ?: (d as? DeviceDescriptor.OriginApp)?.packageName,
+                route = item.route.key,
             )
         }
     }

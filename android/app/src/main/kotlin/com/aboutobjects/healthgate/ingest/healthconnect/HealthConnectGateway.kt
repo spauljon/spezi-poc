@@ -39,4 +39,7 @@ interface HealthConnectGateway {
 interface CollectorStateStore {
     /** The token to continue from, or null on the first run. Reading and writing are synchronous (a write is durable when it returns). */
     var token: String?
+
+    /** Which routing rules the queue was last filled under (M30). When it is behind, the collector reads the window again once, so every record is filed under the right patient. */
+    var routingEpoch: Int
 }

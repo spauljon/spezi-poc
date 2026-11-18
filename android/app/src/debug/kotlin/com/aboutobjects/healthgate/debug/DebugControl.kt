@@ -78,7 +78,7 @@ class DebugControlReceiver : BroadcastReceiver() {
                         // a sampler every 20 ms around the run: the peak is what matters on a 4 GB phone, and dumpsys is too slow to see it
                         var peakPssKb = 0
                         var peakHeapKb = 0L
-                        var samples = 0
+                        var readings = 0
                         val begun = System.nanoTime()
                         val sampler = launch {
                             val info = android.os.Debug.MemoryInfo()
@@ -87,13 +87,13 @@ class DebugControlReceiver : BroadcastReceiver() {
                                 android.os.Debug.getMemoryInfo(info)
                                 peakPssKb = maxOf(peakPssKb, info.totalPss)
                                 peakHeapKb = maxOf(peakHeapKb, (rt.totalMemory() - rt.freeMemory()) / 1024)
-                                samples++
+                                readings++
                                 kotlinx.coroutines.delay(20)
                             }
                         }
                         val r = app.container.runner.run("Debug")
                         sampler.cancel()
-                        Log.i(TAG, "memory: peak total PSS ${peakPssKb / 1024} MB, peak Java heap in use ${peakHeapKb / 1024} MB, ${samples} samples in ${(System.nanoTime() - begun) / 1_000_000} ms")
+                        Log.i(TAG, "memory: peak total PSS ${peakPssKb / 1024} MB, peak Java heap in use ${peakHeapKb / 1024} MB, ${readings} memory readings in ${(System.nanoTime() - begun) / 1_000_000} ms")
                         val q = app.container.queue.counts()
                         Log.i(TAG, "run done: paused ${r.paused} busy ${r.busy} records ${r.collected?.recordsUpserted} deleted ${r.collected?.recordsDeleted} " +
                             "queued ${r.collected?.samplesQueued} failure ${r.collected?.failure} phase ${r.upload?.phase?.javaClass?.simpleName}; " +

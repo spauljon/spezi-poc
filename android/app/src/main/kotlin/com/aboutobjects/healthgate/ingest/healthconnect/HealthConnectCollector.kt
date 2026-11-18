@@ -24,6 +24,8 @@ data class CollectOutcome(
     /** Records the contract refuses as a whole (an empty id, an impossible value): left out, never a reason to stop. */
     val recordsRefused: Int = 0,
     val samplesQueued: Int = 0,
+    /** Samples that are on the server under the wrong patient: their delete is queued, and the next read creates them again (M30). */
+    val samplesRefiled: Int = 0,
     /** The failure's class name when the run stopped early; the token did not advance past what was committed. */
     val failure: String? = null,
 ) {
@@ -52,6 +54,7 @@ class HealthConnectCollector(
     private val settings: Settings = Settings(),
     private val now: () -> Instant = { Instant.now() },
     private val phoneZone: () -> ZoneId = { ZoneId.systemDefault() },
+    testOrigins: Set<String> = com.aboutobjects.healthgate.ingest.TestOrigins.all,
 ) {
     data class Settings(
         val windowDays: Long = 30,
@@ -61,11 +64,11 @@ class HealthConnectCollector(
         val nutritionDeleteGrace: Duration = Duration.ofMinutes(5),
     )
 
-    private val mapper = HealthConnectMapper(registry)
+    private val mapper = HealthConnectMapper(registry, testOrigins)
     private val flagger = QualityFlagger(registry)
     private val gate = Mutex()
 
-    private class Tally { var upserted = 0; var deleted = 0; var refused = 0; var queued = 0 }
+    private class Tally { var upserted = 0; var deleted = 0; var refused = 0; var queued = 0; var refiled = 0 }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
@@ -75,6 +78,8 @@ class HealthConnectCollector(
         val tally = Tally()
         var mode = CollectOutcome.Mode.CHANGES
         try {
+            // the routing rules changed since the queue was filled (M30): read the window once more, so every record is filed under its patient
+            if (state.routingEpoch < ROUTING_EPOCH) state.token = null
             var token = state.token
             if (token != null) {
                 val ok = followChanges(token, tally)
@@ -83,6 +88,9 @@ class HealthConnectCollector(
                 mode = CollectOutcome.Mode.WINDOW
                 readWindow(tally)
             }
+            if (mode == CollectOutcome.Mode.WINDOW) state.routingEpoch = ROUTING_EPOCH
+            // something must move: the next read takes the window again, after the deletes have gone out
+            if (tally.refiled > 0) state.token = null
             return outcome(mode, tally, null)
         } catch (e: CancellationException) {
             throw e
@@ -94,7 +102,7 @@ class HealthConnectCollector(
     }
 
     private fun outcome(mode: CollectOutcome.Mode, t: Tally, failure: String?) =
-        CollectOutcome(mode, t.upserted, t.deleted, t.refused, t.queued, failure)
+        CollectOutcome(mode, t.upserted, t.deleted, t.refused, t.queued, t.refiled, failure)
 
     /** Applies pages of changes until there are no more; false when the token is too old to use. */
     private suspend fun followChanges(start: String, t: Tally): Boolean {
@@ -181,12 +189,13 @@ class HealthConnectCollector(
         val entry = LedgerEntry(record.id, group, contentKey, startOf(record).toEpochMilli())
         val chunks = flagged.chunked(settings.chunk)
         for (chunk in chunks.dropLast(1)) {
-            queue.apply(ChangeSet(upserts = chunk))
+            t.refiled += queue.apply(ChangeSet(upserts = chunk)).refiled
             Failpoints.hit("collector.afterCommit")
         }
         // the last chunk carries the deletions and the ledger: the record is "seen" only when all its samples are queued
         val last = chunks.lastOrNull() ?: emptyList()
-        queue.apply(ChangeSet(upserts = last, deleteKeys = stale, ledgerPut = listOf(entry)))
+        val result = queue.apply(ChangeSet(upserts = last, deleteKeys = stale, ledgerPut = listOf(entry)))
+        t.refiled += result.refiled
         Failpoints.hit("collector.afterCommit")
         t.upserted++
         t.queued += flagged.size
@@ -204,5 +213,10 @@ class HealthConnectCollector(
         is HcRecord.Sleep -> r.startTime
         is HcRecord.Hydration -> r.startTime
         is HcRecord.Nutrition -> r.startTime
+    }
+
+    companion object {
+        /** Raise this when the rules that decide a sample's patient change: every phone then reads its window once more and refiles what is under the wrong patient. */
+        const val ROUTING_EPOCH = 1
     }
 }

@@ -149,7 +149,12 @@ class PrefsCollectorState(context: Context) : CollectorStateStore {
         get() = prefs.getString(KEY, null)
         set(value) { prefs.edit().apply { if (value == null) remove(KEY) else putString(KEY, value) }.commit() }
 
+    override var routingEpoch: Int
+        get() = prefs.getInt(EPOCH, 0)
+        set(value) { prefs.edit().putInt(EPOCH, value).commit() }
+
     private companion object {
         const val KEY = "changes_token"
+        const val EPOCH = "routing_epoch"
     }
 }

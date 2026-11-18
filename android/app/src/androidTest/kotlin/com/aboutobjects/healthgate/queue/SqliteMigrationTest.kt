@@ -61,4 +61,32 @@ class SqliteMigrationTest {
             queue.close()
         }
     }
+
+    @Test fun aVersionTwoDatabaseGainsTheRouteColumnAndItsRowsAreTestRows() {
+        val path = context.getDatabasePath(name)
+        path.parentFile?.mkdirs()
+        SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
+            db.execSQL(
+                "CREATE TABLE samples (seq INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE, item TEXT NOT NULL, " +
+                    "state INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, note TEXT, " +
+                    "op INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL DEFAULT '', sent_content TEXT, grp TEXT)",
+            )
+            db.execSQL("CREATE TABLE hc_ledger (record_id TEXT PRIMARY KEY, grp TEXT NOT NULL, content_key TEXT, start_ms INTEGER NOT NULL, ord INTEGER NOT NULL)")
+            val i = item("old")
+            db.insert("samples", null, ContentValues().apply { put("key", i.key); put("item", StoredItem.of(i).encode()); put("state", 1) })
+            db.version = 2
+        }
+        val queue = SqliteSampleQueue(context, name)
+        try {
+            assertEquals(QueueCounts(sent = 1), queue.counts())
+            assertEquals("an older row is a test row until it is delivered again", 0, queue.pendingCount("real"))
+            val real = item("new").copy(route = com.aboutobjects.healthgate.ingest.PatientRoute.REAL)
+            queue.enqueue(listOf(real))
+            assertEquals(1, queue.pendingCount("real"))
+            assertEquals(emptyList<String>(), queue.nextBatch(10, t0, setOf("real")).map { it.item.sample.id })
+            assertEquals(listOf("new"), queue.nextBatch(10, t0).map { it.item.sample.id })
+        } finally {
+            queue.close()
+        }
+    }
 }

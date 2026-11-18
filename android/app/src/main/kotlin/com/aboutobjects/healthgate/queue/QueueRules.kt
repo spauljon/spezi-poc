@@ -24,7 +24,7 @@ object RowState {
 }
 
 /** What a queue remembers about one key, enough to decide what a new delivery or a deletion means. */
-data class RowSnapshot(val state: Int, val op: QueueOp, val content: String, val sentContent: String?)
+data class RowSnapshot(val state: Int, val op: QueueOp, val content: String, val sentContent: String?, val route: String = "test")
 
 /** What to do with one row. [Set] replaces the row's state (and, for an upsert, its item and content); attempts and back-off are reset. */
 sealed interface RowAction {
@@ -32,6 +32,9 @@ sealed interface RowAction {
     data object Known : RowAction
     data object FlagDuplicate : RowAction
     data object Remove : RowAction
+
+    /** The server holds this sample under the wrong patient (its route changed): delete it now, create it again under the right one when it is delivered again. */
+    data object Refile : RowAction
     data class Set(val state: Int, val op: QueueOp, val replaceItem: Boolean) : RowAction
 }
 
@@ -49,11 +52,16 @@ object QueueRules {
         return MessageDigest.getInstance("SHA-256").digest(stored.encode().toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     }
 
-    fun onUpsert(existing: RowSnapshot?, content: String, updatable: Boolean): RowAction {
+    fun onUpsert(existing: RowSnapshot?, content: String, updatable: Boolean, route: String = "test"): RowAction {
         if (existing == null) return RowAction.Insert
         if (!updatable) return if (existing.state == RowState.WAITING) RowAction.FlagDuplicate else RowAction.Known
+        // the server holds it (sent, or sent once and now changing) under another patient than the route says: it must move
+        val onServer = existing.sentContent != null && (existing.state == RowState.SENT || existing.state == RowState.WAITING && existing.op != QueueOp.DELETE)
+        if (onServer && existing.route != route) return RowAction.Refile
         return when (existing.state) {
             RowState.WAITING -> when {
+                // a delete that is waiting because the sample must move to another patient stays until it is sent; the next delivery then creates it
+                existing.op == QueueOp.DELETE && existing.route != route -> RowAction.Known
                 existing.op == QueueOp.DELETE ->
                     // delivered again before the delete went out: the Observation was never gone, if it is what the server holds
                     if (content == existing.sentContent) RowAction.Set(RowState.SENT, QueueOp.CREATE, replaceItem = true) else RowAction.Set(RowState.WAITING, QueueOp.UPDATE, replaceItem = true)
@@ -82,7 +90,7 @@ object QueueRules {
     }
 
     /** What a row becomes under a [RowAction.Set]; [newContent] is the incoming delivery's content (an upsert) and unused for a delete. */
-    fun next(existing: RowSnapshot, action: RowAction.Set, newContent: String?): RowSnapshot {
+    fun next(existing: RowSnapshot, action: RowAction.Set, newContent: String?, newRoute: String? = null): RowSnapshot {
         if (!action.replaceItem) return existing.copy(state = action.state, op = action.op)
         val content = newContent!!
         val sent = when {
@@ -90,13 +98,17 @@ object QueueRules {
             existing.state == RowState.DELETED || existing.state == RowState.REJECTED || existing.state == RowState.SKIPPED -> null // the server holds nothing
             else -> existing.sentContent
         }
-        return RowSnapshot(action.state, action.op, content, sent)
+        return RowSnapshot(action.state, action.op, content, sent, newRoute ?: existing.route)
     }
 
-    /** How an action is reported: one of added, known, updated, deleted, cancelled. */
+    /** What a row becomes when it is refiled: a delete waits, content and item unchanged (the new delivery recreates it once the delete is sent). */
+    fun refiled(existing: RowSnapshot): RowSnapshot = existing.copy(state = RowState.WAITING, op = QueueOp.DELETE)
+
+    /** How an action is reported: one of added, known, updated, deleted, cancelled, refiled. */
     fun tally(action: RowAction): String = when (action) {
         RowAction.Insert -> "added"
         RowAction.Known, RowAction.FlagDuplicate -> "known"
+        RowAction.Refile -> "refiled"
         RowAction.Remove -> "cancelled"
         is RowAction.Set -> when {
             !action.replaceItem -> "deleted"

@@ -4,6 +4,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.health.connect.client.PermissionController
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,7 +62,7 @@ fun HomeScreen(model: HomeViewModel) {
         Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("HealthGate", style = MaterialTheme.typography.headlineMedium)
+        Text("HealthGate", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
         Text("Synthetic data to ${model.serverHost}", style = MaterialTheme.typography.bodyMedium)
 
         Section("Sign-in") {
@@ -69,10 +75,9 @@ fun HomeScreen(model: HomeViewModel) {
                 },
             )
             if (auth is AuthState.SignedIn) {
-                OutlinedButton(onClick = model::signOut) { Text("Sign out") }
+                OutlinedButton(modifier = Modifier.heightIn(min = 48.dp), onClick = model::signOut) { Text("Sign out") }
             } else {
-                Button(
-                    enabled = auth != AuthState.SigningIn,
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = auth != AuthState.SigningIn,
                     onClick = { scope.launch { model.signInIntent()?.let { launcher.launch(it) } } },
                 ) { Text("Sign in") }
             }
@@ -80,7 +85,7 @@ fun HomeScreen(model: HomeViewModel) {
 
         Section("Capture") {
             Text("Source: Synthetic (the same source the emulator and the tests use).")
-            Button(onClick = model::generate) { Text("Generate the last 24 hours") }
+            Button(modifier = Modifier.heightIn(min = 48.dp), onClick = model::generate) { Text("Generate the last 24 hours") }
             captureMessage?.let { Text(it) }
         }
 
@@ -104,11 +109,12 @@ fun HomeScreen(model: HomeViewModel) {
                 if (bgSupported && !bgAllowed) Button(onClick = { permissions.launch(model.healthConnectPermissions) }) { Text("Allow reading while closed") }
             }
             if (hc == HomeViewModel.HealthConnectState.NeedsPermission) {
-                Button(onClick = { permissions.launch(model.healthConnectPermissions) }) { Text("Allow Health Connect access") }
+                Button(modifier = Modifier.heightIn(min = 48.dp), onClick = { permissions.launch(model.healthConnectPermissions) }) { Text("Allow Health Connect access") }
             }
             if (hc == HomeViewModel.HealthConnectState.Ready) {
-                Button(enabled = !reading, onClick = model::readHealthConnect) { Text(if (reading) "Reading…" else "Read Health Connect now") }
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !reading, onClick = model::readHealthConnect) { Text(if (reading) "Reading…" else "Read Health Connect now") }
             }
+            Text("Records written by other apps on this phone are your own data and go to the real patient; the test tool's records go to the test patient. They are never mixed.")
             lastRead?.let { r -> Text(readSummary(r)) }
         }
 
@@ -127,12 +133,22 @@ fun HomeScreen(model: HomeViewModel) {
                     }
                 },
             )
+            if (sync.held > 0) {
+                Text("${sync.held} samples from your own apps are held: no real patient is configured, so they are not sent anywhere.")
+            }
             sync.lastError?.let { Text("Last problem: $it") }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(enabled = !paused && sync.phase != SyncPhase.Syncing, onClick = model::syncNow) { Text("Sync now") }
-                Text("Pause")
-                Switch(checked = paused, onCheckedChange = { model.setPaused(it, context) })
-                Text(if (paused) "Paused" else "Running")
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !paused && sync.phase != SyncPhase.Syncing, onClick = model::syncNow) { Text("Sync now") }
+                // one control for a screen reader: "Pause syncing, switch, on/off" (a bare Switch next to a Text reads as an unlabelled switch)
+                Row(
+                    Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Pause syncing" }
+                        .toggleable(value = paused, role = Role.Switch, onValueChange = { model.setPaused(it, context) }),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("Pause syncing")
+                    Switch(checked = paused, onCheckedChange = null)
+                    Text(if (paused) "Paused" else "Running")
+                }
             }
             Text("Server count: created ${sync.created}, already there ${sync.alreadyPresent}, updated ${sync.updated}, deleted ${sync.deleted}.")
         }
@@ -143,10 +159,10 @@ fun HomeScreen(model: HomeViewModel) {
                 if (battery) "Battery: unrestricted for this app."
                 else "Battery: optimised. Some phones (Samsung) may stop the sync when the app is closed; set this app to Unrestricted in the phone's battery settings.",
             )
-            if (!battery) OutlinedButton(onClick = {
+            if (!battery) OutlinedButton(modifier = Modifier.heightIn(min = 48.dp), onClick = {
                 context.startActivity(android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
             }) { Text("Open battery settings") }
-            OutlinedButton(onClick = model::refreshHealthConnect) { Text("Refresh these statuses") }
+            OutlinedButton(modifier = Modifier.heightIn(min = 48.dp), onClick = model::refreshHealthConnect) { Text("Refresh these statuses") }
         }
 
         Section("Attempts") {
@@ -169,7 +185,7 @@ private fun readSummary(r: CollectOutcome): String = when {
 private fun Section(title: String, content: @Composable () -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             content()
         }
     }

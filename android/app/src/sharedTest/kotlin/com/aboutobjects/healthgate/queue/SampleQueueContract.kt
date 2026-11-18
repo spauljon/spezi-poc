@@ -271,4 +271,68 @@ abstract class SampleQueueContract {
         assertEquals(2, queue.counts().pending)
         assertEquals("rec-1", queue.ledgerEntry("rec-1")?.group)
     }
+
+    // ---- patient routes (M30): real data and test data are never filed under the same patient ----
+
+    private fun routed(id: String, route: com.aboutobjects.healthgate.ingest.PatientRoute, value: Double = 72.0) = hc(id, value).copy(route = route)
+
+    @Test fun aSampleFiledUnderOneRouteAndDeliveredUnderAnotherIsRefiledByADeleteThenACreate() {
+        val test = com.aboutobjects.healthgate.ingest.PatientRoute.TEST
+        val real = com.aboutobjects.healthgate.ingest.PatientRoute.REAL
+        queue.enqueue(listOf(routed("a", test)))
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(0, 0, refiled = 1), queue.enqueue(listOf(routed("a", real))))
+        val due = queue.nextBatch(10, t0).single()
+        assertEquals("the server's copy under the old patient goes first", QueueOp.DELETE, due.op)
+        queue.markSent(listOf(k + "a"))
+        assertEquals(QueueCounts(deleted = 1), queue.counts())
+        // the next delivery creates it, now with the real route
+        assertEquals(Enqueued(1, 0), queue.enqueue(listOf(routed("a", real))))
+        val again = queue.nextBatch(10, t0).single()
+        assertEquals(QueueOp.CREATE, again.op)
+        assertEquals(real, again.item.route)
+        // the control: the same route again is just known
+        queue.markSent(listOf(k + "a"))
+        assertEquals(Enqueued(0, 1), queue.enqueue(listOf(routed("a", real))))
+    }
+
+    @Test fun aRefileDeleteThatIsWaitingIsNotUndoneByTheNextDelivery() {
+        val test = com.aboutobjects.healthgate.ingest.PatientRoute.TEST
+        val real = com.aboutobjects.healthgate.ingest.PatientRoute.REAL
+        queue.enqueue(listOf(routed("a", test)))
+        queue.markSent(listOf(k + "a"))
+        queue.enqueue(listOf(routed("a", real)))                        // refile: the delete waits
+        assertEquals(Enqueued(0, 1), queue.enqueue(listOf(routed("a", real)))) // delivered again before it went out: nothing changes
+        assertEquals(QueueOp.DELETE, queue.nextBatch(10, t0).single().op)
+        assertEquals("not reverted to 'sent under the old patient'", 0, queue.counts().sent)
+    }
+
+    @Test fun aSampleNeverSentSimplyTakesItsNewRouteWithNoDelete() {
+        val test = com.aboutobjects.healthgate.ingest.PatientRoute.TEST
+        val real = com.aboutobjects.healthgate.ingest.PatientRoute.REAL
+        queue.enqueue(listOf(routed("a", test)))
+        val result = queue.enqueue(listOf(routed("a", real)))
+        assertEquals(0, result.refiled)
+        val due = queue.nextBatch(10, t0).single()
+        assertEquals(QueueOp.CREATE, due.op)
+        assertEquals(real, due.item.route)
+    }
+
+    @Test fun aHeldRouteIsLeftOutOfTheBatchAndCountedAndTheOtherRoutesStillGo() {
+        val test = com.aboutobjects.healthgate.ingest.PatientRoute.TEST
+        val real = com.aboutobjects.healthgate.ingest.PatientRoute.REAL
+        queue.enqueue(listOf(routed("r1", real), routed("t1", test), routed("r2", real)))
+        assertEquals(listOf("t1"), queue.nextBatch(10, t0, setOf(real.key)).map { it.item.sample.id })
+        assertEquals(listOf("r1", "t1", "r2"), queue.nextBatch(10, t0).map { it.item.sample.id }) // the control: nothing is held by default
+        assertEquals(2, queue.pendingCount(real.key))
+        assertEquals(1, queue.pendingCount(test.key))
+        queue.markSent(listOf(k + "t1"))
+        assertEquals(0, queue.pendingCount(test.key))
+    }
+
+    @Test fun aStoredRouteComesBackExactlyAndAnOlderRowIsATestRow() {
+        val real = routed("a", com.aboutobjects.healthgate.ingest.PatientRoute.REAL)
+        queue.enqueue(listOf(real, item("s")))
+        assertEquals(listOf(com.aboutobjects.healthgate.ingest.PatientRoute.REAL, com.aboutobjects.healthgate.ingest.PatientRoute.TEST), queue.nextBatch(10, t0).map { it.item.route })
+    }
 }

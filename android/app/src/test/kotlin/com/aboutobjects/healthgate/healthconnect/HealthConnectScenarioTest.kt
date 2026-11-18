@@ -39,7 +39,7 @@ class HealthConnectScenarioTest {
         val collector = HealthConnectCollector(hc, queue, state, registry, settings, { clock }, { utc })
         val engine = SyncEngine(
             queue, hapi, TokenProvider { "tok" }, registry,
-            SyncEngine.Settings(patientIdentifier = "poc-android-01", patientSystem = registry.systems.identifier.getValue("patient"), batchSize = 100),
+            SyncEngine.Settings(patientIdentifier = "poc-android-01", patientSystem = registry.systems.identifier.getValue("patient"), realPatientIdentifier = "poc-real-android", batchSize = 100),
             now = { clock }, random = { 0.5 },
         )
 

@@ -3,6 +3,8 @@ package com.aboutobjects.healthgate.ingest.healthconnect
 import com.aboutobjects.healthgate.contract.Meal
 import com.aboutobjects.healthgate.contract.MetricRegistry
 import com.aboutobjects.healthgate.ingest.IngestItem
+import com.aboutobjects.healthgate.ingest.PatientRoute
+import com.aboutobjects.healthgate.ingest.TestOrigins
 import com.aboutobjects.healthgate.mapping.DeviceDescriptor
 import com.aboutobjects.healthgate.mapping.Measurement
 import com.aboutobjects.healthgate.mapping.MappingError
@@ -23,7 +25,7 @@ import java.time.ZoneOffset
  * - Group: the record id; for a nutrition item `<content key>#<n>`, the ordinal supplied by the caller (it depends on the other live records).
  * - A record that cannot be identified or holds an impossible value is refused as a whole with the contract's error code.
  */
-class HealthConnectMapper(private val registry: MetricRegistry) {
+class HealthConnectMapper(private val registry: MetricRegistry, private val testOrigins: Set<String> = TestOrigins.all) {
 
     private val sep = "\u001f"
     private val sleep = registry.sleep?.healthConnect ?: throw MappingException(MappingError.CONTRACT_MISSING, "sleepStage.healthConnect")
@@ -72,6 +74,8 @@ class HealthConnectMapper(private val registry: MetricRegistry) {
         if (record.id.isBlank()) throw MappingException(MappingError.EMPTY_RECORD_ID)
         val device = descriptor(record)
         val userEntered = record.recordingMethod == MANUAL_ENTRY
+        // records written by the test tool are test records; everything else on the phone is the developer's own data (M30)
+        val route = if (record.origin.trim() in testOrigins) PatientRoute.TEST else PatientRoute.REAL
         fun zone(o: ZoneOffset?): ZoneId = o ?: phoneZone
 
         fun sample(m: Measurement, start: Instant, end: Instant, startZone: ZoneId, endZone: ZoneId, id: String, group: String, meal: Meal? = null) =
@@ -80,7 +84,7 @@ class HealthConnectMapper(private val registry: MetricRegistry) {
                     measurement = m, start = start, end = end, issued = issued, timeZone = startZone, endTimeZone = endZone.takeIf { it != startZone },
                     source = SampleSource.HEALTH_CONNECT, id = id, userEntered = userEntered, meal = meal, group = group,
                 ),
-                device,
+                device, route,
             )
 
         return when (record) {

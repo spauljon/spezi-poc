@@ -2,6 +2,7 @@ package com.aboutobjects.healthgate.sync
 
 import com.aboutobjects.healthgate.contract.MetricRegistry
 import com.aboutobjects.healthgate.debug.Failpoints
+import com.aboutobjects.healthgate.ingest.PatientRoute
 import com.aboutobjects.healthgate.queue.QueueCounts
 import com.aboutobjects.healthgate.queue.QueueOp
 import com.aboutobjects.healthgate.queue.QueuedItem
@@ -60,6 +61,8 @@ data class SyncStatus(
     val deleted: Int = 0,
     /** The last attempts, newest first (shown on the home screen; never contains a sample's content or a token). */
     val history: List<Attempt> = emptyList(),
+    /** Samples held because their route has no patient configured (real data with no real patient): never sent anywhere. */
+    val held: Int = 0,
 )
 
 /** Signing in is needed ([SIGNED_OUT]) or the token could not be had right now ([UNAVAILABLE]). */
@@ -87,8 +90,14 @@ class SyncEngine(
     private val attempts: AttemptStore = AttemptStore.None,
 ) {
     data class Settings(
+        /** The test patient (synthetic records and the test tool's records). */
         val patientIdentifier: String,
         val patientSystem: String,
+        /**
+         * The patient for the developer's own Health Connect data (M30). When null, those samples are NOT uploaded: they wait in the
+         * queue and are never filed under [patientIdentifier], so real and test data can never blend.
+         */
+        val realPatientIdentifier: String? = null,
         val batchSize: Int = 100,
         val backoff: BackoffPolicy = BackoffPolicy(),
     )
@@ -96,7 +105,16 @@ class SyncEngine(
     private val builder = BundleBuilder(registry)
     private val json = Json { ignoreUnknownKeys = true }
     private val gate = Mutex()
-    private var patientId: String? = null
+    /** Patient ids found or created, by business identifier. */
+    private val patientIds = HashMap<String, String>()
+
+    private fun identifierOf(route: PatientRoute): String? = when (route) {
+        PatientRoute.TEST -> settings.patientIdentifier
+        PatientRoute.REAL -> settings.realPatientIdentifier?.takeIf { it.isNotBlank() }
+    }
+
+    /** The routes with no patient configured: their samples are held, never sent. */
+    private fun heldRoutes(): Set<String> = PatientRoute.entries.filter { identifierOf(it) == null }.map { it.key }.toSet()
     private var state = SyncStatus(history = attempts.load())
     private val _status = MutableStateFlow(state)
     val status: StateFlow<SyncStatus> get() = _status
@@ -109,7 +127,7 @@ class SyncEngine(
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
     suspend fun refresh(): SyncStatus {
-        runCatching { io { queue.counts() } }.onSuccess { c -> publish { it.copy(counts = c) } }
+        runCatching { io { queue.counts() to heldRoutes().sumOf { queue.pendingCount(it) } } }.onSuccess { (c, held) -> publish { it.copy(counts = c, held = held) } }
         return state
     }
 
@@ -131,22 +149,25 @@ class SyncEngine(
             publish { it.copy(phase = SyncPhase.Syncing, lastError = null) }
             try {
                 while (true) {
-                    val due = io { queue.nextBatch(settings.batchSize, now()) }
+                    val due = io { queue.nextBatch(settings.batchSize, now(), heldRoutes()) }
                     if (due.isEmpty()) break
-                    val attempts = due.maxOf { it.attempts }
-                    val pid = when (val r = resolvePatient()) {
-                        is Resolved.Id -> r.id
-                        is Resolved.Failed -> {
-                            finish(r.stop, due.map { it.key }, attempts)
-                            return finishAttempt(before)
+                    // one transaction per patient: a batch never mixes routes
+                    for ((route, group) in due.groupBy { it.item.route }) {
+                        val attempts = group.maxOf { it.attempts }
+                        val pid = when (val r = resolvePatient(identifierOf(route)!!)) {
+                            is Resolved.Id -> r.id
+                            is Resolved.Failed -> {
+                                finish(r.stop, group.map { it.key }, attempts)
+                                return finishAttempt(before)
+                            }
                         }
-                    }
-                    when (val step = upload(due, attempts, pid)) {
-                        Step.Done -> continue
-                        is Step.Stop -> {
-                            publish { it.copy(phase = step.phase) }
-                            refresh()
-                            return finishAttempt(before)
+                        when (val step = upload(group, attempts, pid)) {
+                            Step.Done -> Unit
+                            is Step.Stop -> {
+                                publish { it.copy(phase = step.phase) }
+                                refresh()
+                                return finishAttempt(before)
+                            }
                         }
                     }
                 }
@@ -294,20 +315,20 @@ class SyncEngine(
     }
 
     /** Finds the capture Patient by its identifier, or creates it (a conditional create: safe to repeat). */
-    private suspend fun resolvePatient(): Resolved {
-        patientId?.let { return Resolved.Id(it) }
+    private suspend fun resolvePatient(identifier: String): Resolved {
+        patientIds[identifier]?.let { return Resolved.Id(it) }
         val bearer = try {
             tokens.accessToken()
         } catch (e: AuthException) {
             return Resolved.Failed(if (e.kind == AuthException.Kind.SIGNED_OUT) Stop.Blocked(SyncBlocker.SignInRequired, "Sign in to upload.") else Stop.Transient("Could not get an access token."))
         }
-        val query = FhirSearch.identifierQuery(settings.patientSystem, settings.patientIdentifier)
+        val query = FhirSearch.identifierQuery(settings.patientSystem, identifier)
         try {
             val found = transport.send(FhirRequest("GET", "Patient?$query&_elements=id"), bearer)
             when (found.status) {
                 200 -> {
                     val ids = patientIds(found.body)
-                    if (ids.size == 1) { patientId = ids[0]; return Resolved.Id(ids[0]) }
+                    if (ids.size == 1) { patientIds[identifier] = ids[0]; return Resolved.Id(ids[0]) }
                     if (ids.size > 1) return Resolved.Failed(Stop.Blocked(SyncBlocker.Configuration("More than one Patient has this identifier."), "More than one Patient has this identifier."))
                 }
                 401 -> return Resolved.Failed(Stop.Blocked(SyncBlocker.SignInRequired, "The server did not accept the sign-in. Sign in again."))
@@ -316,13 +337,13 @@ class SyncEngine(
             }
             val patient: JsonObject = buildJsonObject {
                 put("resourceType", "Patient")
-                put("identifier", buildJsonArray { add(buildJsonObject { put("system", settings.patientSystem); put("value", settings.patientIdentifier) }) })
+                put("identifier", buildJsonArray { add(buildJsonObject { put("system", settings.patientSystem); put("value", identifier) }) })
             }
             val created = transport.send(
                 FhirRequest("POST", "Patient", mapOf("If-None-Exist" to query, "Prefer" to "return=representation"), patient.toString()), bearer,
             )
             return when (created.status) {
-                200, 201 -> resourceId(created.body)?.let { patientId = it; Resolved.Id(it) } ?: Resolved.Failed(Stop.Transient("The server did not return the Patient id."))
+                200, 201 -> resourceId(created.body)?.let { patientIds[identifier] = it; Resolved.Id(it) } ?: Resolved.Failed(Stop.Transient("The server did not return the Patient id."))
                 403 -> Resolved.Failed(Stop.Blocked(SyncBlocker.Forbidden("Forbidden"), "The server refused this user."))
                 else -> Resolved.Failed(Stop.Transient("Patient create returned HTTP ${created.status}."))
             }

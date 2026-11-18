@@ -7,9 +7,9 @@ import java.time.Instant
 class InMemorySampleQueue : SampleQueue {
     private class Row(
         var item: IngestItem, var state: Int = RowState.WAITING, var op: QueueOp = QueueOp.CREATE, var content: String, var sentContent: String? = null,
-        var attempts: Int = 0, var nextAttempt: Instant = Instant.EPOCH, var note: String? = null,
+        var attempts: Int = 0, var nextAttempt: Instant = Instant.EPOCH, var note: String? = null, var route: String = item.route.key,
     ) {
-        fun snapshot() = RowSnapshot(state, op, content, sentContent)
+        fun snapshot() = RowSnapshot(state, op, content, sentContent, route)
     }
 
     private val rows = LinkedHashMap<String, Row>()
@@ -23,12 +23,17 @@ class InMemorySampleQueue : SampleQueue {
             RowAction.Known -> Unit
             RowAction.FlagDuplicate -> if (!row!!.item.sample.duplicateResolved) row.item = row.item.copy(sample = row.item.sample.copy(duplicateResolved = true))
             RowAction.Remove -> rows.remove(key)
+            RowAction.Refile -> {
+                val r = row!!
+                val next = QueueRules.refiled(r.snapshot())
+                r.state = next.state; r.op = next.op; r.attempts = 0; r.note = null; r.nextAttempt = Instant.EPOCH
+            }
             is RowAction.Set -> {
                 val r = row!!
                 val newContent = item?.let { QueueRules.contentOf(it) }
-                val next = QueueRules.next(r.snapshot(), action, newContent)
+                val next = QueueRules.next(r.snapshot(), action, newContent, item?.route?.key)
                 if (action.replaceItem) r.item = item!!
-                r.state = next.state; r.op = next.op; r.content = next.content; r.sentContent = next.sentContent
+                r.state = next.state; r.op = next.op; r.content = next.content; r.sentContent = next.sentContent; r.route = next.route
                 r.attempts = 0; r.note = null
                 r.nextAttempt = QueueRules.due(next.op, hold)
             }
@@ -44,19 +49,22 @@ class InMemorySampleQueue : SampleQueue {
         }
         for (item in change.upserts) {
             val row = rows[item.key]
-            act(item.key, row, QueueRules.onUpsert(row?.snapshot(), QueueRules.contentOf(item), item.updatable), item, null, tally)
+            act(item.key, row, QueueRules.onUpsert(row?.snapshot(), QueueRules.contentOf(item), item.updatable, item.route.key), item, null, tally)
         }
         for (e in change.ledgerPut) {
             val old = ledger[e.recordId]
             ledger[e.recordId] = e.copy(order = old?.order ?: nextOrder++)
         }
         change.ledgerRemove.forEach { ledger.remove(it) }
-        return Enqueued(tally["added"] ?: 0, tally["known"] ?: 0, tally["updated"] ?: 0, tally["deleted"] ?: 0, tally["cancelled"] ?: 0)
+        return Enqueued(tally["added"] ?: 0, tally["known"] ?: 0, tally["updated"] ?: 0, tally["deleted"] ?: 0, tally["cancelled"] ?: 0, tally["refiled"] ?: 0)
     }
 
     @Synchronized
-    override fun nextBatch(limit: Int, now: Instant): List<QueuedItem> =
-        rows.values.filter { it.state == RowState.WAITING && it.nextAttempt <= now }.take(limit).map { QueuedItem(it.item, it.attempts, it.op) }
+    override fun nextBatch(limit: Int, now: Instant, excludeRoutes: Set<String>): List<QueuedItem> =
+        rows.values.filter { it.state == RowState.WAITING && it.nextAttempt <= now && it.route !in excludeRoutes }.take(limit).map { QueuedItem(it.item, it.attempts, it.op) }
+
+    @Synchronized
+    override fun pendingCount(route: String): Int = rows.values.count { it.state == RowState.WAITING && it.route == route }
 
     @Synchronized
     override fun markSent(keys: List<String>) {

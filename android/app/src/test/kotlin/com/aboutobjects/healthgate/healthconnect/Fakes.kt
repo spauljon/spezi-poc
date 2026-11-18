@@ -21,7 +21,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class InMemoryCollectorState(override var token: String? = null) : CollectorStateStore
+class InMemoryCollectorState(override var token: String? = null, override var routingEpoch: Int = com.aboutobjects.healthgate.ingest.healthconnect.HealthConnectCollector.ROUTING_EPOCH) : CollectorStateStore
 
 /**
  * A Health Connect that behaves as the real one is documented to: live records, a change log that a token points into (so a record can be
@@ -85,6 +85,7 @@ class FakeHapi : FhirTransport {
     private class Obs(val id: Int, var resource: JsonObject, var version: Int = 1, var deleted: Boolean = false)
 
     private val json = Json
+    private val patients = LinkedHashMap<String, String>()
     private val byIdentifier = LinkedHashMap<String, MutableList<Obs>>()
     private var nextId = 1
     val ops = ArrayList<ServerOp>()
@@ -103,13 +104,21 @@ class FakeHapi : FhirTransport {
 
     fun liveIdentifiers(): Set<String> = liveValues().keys
 
+    /** Sample identity -> the patient reference its live Observation is filed under. */
+    fun liveSubjects(): Map<String, String> = byIdentifier.mapNotNull { (k, v) -> v.lastOrNull { !it.deleted }?.let { k to it.resource.getValue("subject").jsonObject.getValue("reference").jsonPrimitive.content } }.toMap()
+
     fun resourceId(identifier: String): Int? = byIdentifier[identifier]?.lastOrNull { !it.deleted }?.id
 
     fun count(kind: String) = ops.count { it.kind == kind }
 
     override suspend fun send(request: FhirRequest, token: String): FhirResponse {
         if (offline) throw com.aboutobjects.healthgate.sync.TransportFailure("Network: UnknownHostException")
-        if (request.method == "GET" && request.path.startsWith("Patient?")) return FhirResponse(200, """{"resourceType":"Bundle","entry":[{"resource":{"resourceType":"Patient","id":"p1"}}]}""")
+        if (request.method == "GET" && request.path.startsWith("Patient?")) {
+            // a patient exists for any identifier asked for (created on first use), each with its own id
+            val value = URLDecoder.decode(request.path.substringAfter("identifier=").substringBefore("&"), "UTF-8").substringAfter('|')
+            val id = patients.getOrPut(value) { "p-$value" }
+            return FhirResponse(200, """{"resourceType":"Bundle","entry":[{"resource":{"resourceType":"Patient","id":"$id"}}]}""")
+        }
         if (request.method == "POST" && request.path.isEmpty()) {
             failNextBundle?.let { failNextBundle = null; return it }
             bundles++

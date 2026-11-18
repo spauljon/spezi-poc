@@ -38,6 +38,8 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "com.aboutobjects.healthgate.android"
         // The developer's Mac: its mDNS name by default; override with -Phealthgate.host=... or in ~/.gradle/gradle.properties (never a secret).
         buildConfigField("String", "SERVER_HOST", "\"${providers.gradleProperty("healthgate.host").orNull ?: "macpro16.local"}\"")
+        // the patient for the developer's own Health Connect data; an empty value means NOT configured (real samples are then held, never sent)
+        buildConfigField("String", "REAL_PATIENT", "\"${providers.gradleProperty("healthgate.realPatient").orNull ?: "poc-real-android"}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

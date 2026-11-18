@@ -34,19 +34,33 @@ class SyncRunner(
         if (pause.paused) return RunResult(reason, paused = true)
         if (!gate.tryLock()) return RunResult(reason, busy = true)
         try {
-            val outcome = collect?.invoke()
+            var outcome = collect?.invoke()
             if (outcome != null && outcome.mode != CollectOutcome.Mode.BUSY) engine.record(describe(reason, outcome))
             engine.refresh()
-            return RunResult(reason, collected = outcome, upload = engine.drain())
+            var upload = engine.drain()
+            // samples on the server under the wrong patient: their deletes have just gone out; read the window again so they are created under the right one
+            var passes = 0
+            while (collect != null && outcome != null && outcome.samplesRefiled > 0 && passes++ < MAX_REFILE_PASSES) {
+                val again = collect.invoke()
+                engine.record(describe(reason, again))
+                outcome = again.copy(samplesQueued = again.samplesQueued + outcome.samplesQueued, samplesRefiled = again.samplesRefiled)
+                engine.refresh()
+                upload = engine.drain()
+            }
+            return RunResult(reason, collected = outcome, upload = upload)
         } finally {
             gate.unlock()
         }
+    }
+
+    private companion object {
+        const val MAX_REFILE_PASSES = 2
     }
 
     private fun describe(reason: String, o: CollectOutcome): String {
         val head = "$reason: " + if (o.mode == CollectOutcome.Mode.WINDOW) "read the last 30 days" else "read the changes"
         return if (o.failure == "SecurityException") "$head, stopped: Health Connect did not allow the read (allow reading in the background, or open the app)"
         else if (o.failure != null) "$head, stopped (${o.failure})"
-        else "$head: ${o.recordsUpserted} records, ${o.samplesQueued} samples queued, ${o.recordsDeleted} deleted" + if (o.recordsRefused > 0) ", ${o.recordsRefused} refused" else ""
+        else "$head: ${o.recordsUpserted} records, ${o.samplesQueued} samples queued, ${o.recordsDeleted} deleted" + (if (o.recordsRefused > 0) ", ${o.recordsRefused} refused" else "") + (if (o.samplesRefiled > 0) ", ${o.samplesRefiled} moved to the right patient" else "")
     }
 }

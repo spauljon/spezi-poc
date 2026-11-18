@@ -21,7 +21,7 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
                 "CREATE TABLE samples (" +
                     "seq INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE, item TEXT NOT NULL, " +
                     "state INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, note TEXT, " +
-                    "op INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL DEFAULT '', sent_content TEXT, grp TEXT)",
+                    "op INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL DEFAULT '', sent_content TEXT, grp TEXT, route TEXT NOT NULL DEFAULT 'test')",
             )
             db.execSQL("CREATE INDEX samples_due ON samples (state, next_attempt, seq)")
             db.execSQL("CREATE INDEX samples_group ON samples (grp)")
@@ -38,6 +38,10 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
                 db.execSQL("CREATE INDEX samples_group ON samples (grp)")
                 createLedger(db)
             }
+            if (oldVersion < 3) {
+                // version 3 (M30): the patient route of each sample; every older row is a test row until it is delivered again
+                db.execSQL("ALTER TABLE samples ADD COLUMN route TEXT NOT NULL DEFAULT 'test'")
+            }
         }
 
         private fun createLedger(db: SQLiteDatabase) {
@@ -53,11 +57,11 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
     private class Stored(val seq: Long, val item: IngestItem, val snapshot: RowSnapshot)
 
     private fun find(key: String): Stored? =
-        db.rawQuery("SELECT seq, item, state, op, content, sent_content FROM samples WHERE key = ?", arrayOf(key)).use { c ->
+        db.rawQuery("SELECT seq, item, state, op, content, sent_content, route FROM samples WHERE key = ?", arrayOf(key)).use { c ->
             if (!c.moveToFirst()) null
             else Stored(
                 c.getLong(0), StoredItem.decode(c.getString(1)).toItem(),
-                RowSnapshot(c.getInt(2), QueueOp.of(c.getInt(3)), c.getString(4), if (c.isNull(5)) null else c.getString(5)),
+                RowSnapshot(c.getInt(2), QueueOp.of(c.getInt(3)), c.getString(4), if (c.isNull(5)) null else c.getString(5), c.getString(6)),
             )
         }
 
@@ -70,6 +74,7 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
                     put("item", StoredItem.of(item!!).encode())
                     put("content", QueueRules.contentOf(item))
                     put("grp", item.sample.group)
+                    put("route", item.route.key)
                 }
                 db.insertOrThrow("samples", null, values)
             }
@@ -82,12 +87,19 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
                 }
             }
             RowAction.Remove -> db.delete("samples", "key = ?", arrayOf(key))
+            RowAction.Refile -> {
+                val next = QueueRules.refiled(row!!.snapshot)
+                db.update("samples", ContentValues().apply {
+                    put("state", next.state); put("op", next.op.code); put("attempts", 0); put("note", null as String?); put("next_attempt", 0L)
+                }, "key = ?", arrayOf(key))
+            }
             is RowAction.Set -> {
-                val next = QueueRules.next(row!!.snapshot, action, item?.let { QueueRules.contentOf(it) })
+                val next = QueueRules.next(row!!.snapshot, action, item?.let { QueueRules.contentOf(it) }, item?.route?.key)
                 val values = ContentValues().apply {
                     if (action.replaceItem) {
                         put("item", StoredItem.of(item!!).encode())
                         put("grp", item.sample.group)
+                        put("route", item.route.key)
                     }
                     put("state", next.state)
                     put("op", next.op.code)
@@ -113,7 +125,7 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
             }
             for (item in change.upserts) {
                 val row = find(item.key)
-                act(item.key, row, QueueRules.onUpsert(row?.snapshot, QueueRules.contentOf(item), item.updatable), item, null, tally)
+                act(item.key, row, QueueRules.onUpsert(row?.snapshot, QueueRules.contentOf(item), item.updatable, item.route.key), item, null, tally)
             }
             for (e in change.ledgerPut) putLedger(e)
             for (id in change.ledgerRemove) db.delete("hc_ledger", "record_id = ?", arrayOf(id))
@@ -121,7 +133,7 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
         } finally {
             db.endTransaction()
         }
-        return Enqueued(tally["added"] ?: 0, tally["known"] ?: 0, tally["updated"] ?: 0, tally["deleted"] ?: 0, tally["cancelled"] ?: 0)
+        return Enqueued(tally["added"] ?: 0, tally["known"] ?: 0, tally["updated"] ?: 0, tally["deleted"] ?: 0, tally["cancelled"] ?: 0, tally["refiled"] ?: 0)
     }
 
     private fun putLedger(e: LedgerEntry) {
@@ -136,11 +148,13 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
     }
 
     @Synchronized
-    override fun nextBatch(limit: Int, now: Instant): List<QueuedItem> {
+    override fun nextBatch(limit: Int, now: Instant, excludeRoutes: Set<String>): List<QueuedItem> {
         val out = ArrayList<QueuedItem>()
+        val excluded = excludeRoutes.toList()
+        val notIn = if (excluded.isEmpty()) "" else " AND route NOT IN (" + excluded.joinToString(",") { "?" } + ")"
         db.rawQuery(
-            "SELECT item, attempts, op FROM samples WHERE state = 0 AND next_attempt <= ? ORDER BY seq LIMIT ?",
-            arrayOf(now.toEpochMilli().toString(), limit.toString()),
+            "SELECT item, attempts, op FROM samples WHERE state = 0 AND next_attempt <= ?$notIn ORDER BY seq LIMIT ?",
+            arrayOf(now.toEpochMilli().toString()) + excluded.toTypedArray() + limit.toString(),
         ).use { c ->
             while (c.moveToNext()) out.add(QueuedItem(StoredItem.decode(c.getString(0)).toItem(), c.getInt(1), QueueOp.of(c.getInt(2))))
         }
@@ -175,6 +189,10 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
             db.endTransaction()
         }
     }
+
+    @Synchronized
+    override fun pendingCount(route: String): Int =
+        db.rawQuery("SELECT COUNT(*) FROM samples WHERE state = 0 AND route = ?", arrayOf(route)).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
 
     @Synchronized override fun markSkipped(keys: List<String>) = setState(keys, RowState.SKIPPED)
 
@@ -247,6 +265,6 @@ class SqliteSampleQueue(context: Context, name: String? = "samples.db") : Sample
     fun close() = helper.close()
 
     private companion object {
-        const val VERSION = 2
+        const val VERSION = 3
     }
 }

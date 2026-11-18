@@ -14,9 +14,10 @@ data class QueueCounts(val pending: Int = 0, val sent: Int = 0, val rejected: In
 
 /**
  * [added] keys were new; [known] needed nothing. For a Health Connect sample: [updated] was changed since it was uploaded (an update is
- * now waiting), [deleted] has a delete waiting, [cancelled] was never uploaded and is simply gone.
+ * now waiting), [deleted] has a delete waiting, [cancelled] was never uploaded and is simply gone, [refiled] is on the server under the
+ * wrong patient (its route changed): a delete waits, and the next delivery creates it under the right one.
  */
-data class Enqueued(val added: Int, val known: Int, val updated: Int = 0, val deleted: Int = 0, val cancelled: Int = 0)
+data class Enqueued(val added: Int, val known: Int, val updated: Int = 0, val deleted: Int = 0, val cancelled: Int = 0, val refiled: Int = 0)
 
 /**
  * What the collector knows about one Health Connect record it has seen: the group its Observations carry (the record id, or a nutrition
@@ -51,8 +52,11 @@ interface SampleQueue {
     /** Adds the items (an [apply] of upserts only). */
     fun enqueue(items: List<IngestItem>): Enqueued = apply(ChangeSet(upserts = items))
 
-    /** Waiting samples whose retry time has come, oldest first. */
-    fun nextBatch(limit: Int, now: Instant): List<QueuedItem>
+    /** Waiting samples whose retry time has come, oldest first, leaving out the routes in [excludeRoutes] (a route with no patient configured is held, never sent). */
+    fun nextBatch(limit: Int, now: Instant, excludeRoutes: Set<String> = emptySet()): List<QueuedItem>
+
+    /** How many samples of this route wait to be sent (a route held for want of a patient shows here). */
+    fun pendingCount(route: String): Int
 
     /** The server accepted these: an upload or update is done; a delete is done and the sample is gone. */
     fun markSent(keys: List<String>)

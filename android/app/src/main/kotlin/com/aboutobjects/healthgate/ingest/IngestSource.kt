@@ -5,7 +5,7 @@ import com.aboutobjects.healthgate.mapping.MetricSample
 import java.time.Instant
 
 /** One sample and the device that produced it, as a source hands them to the app. */
-data class IngestItem(val sample: MetricSample, val device: DeviceDescriptor) {
+data class IngestItem(val sample: MetricSample, val device: DeviceDescriptor, val route: PatientRoute = PatientRoute.TEST) {
     /** Only a Health Connect sample can change or go away on the server (decision A11); every other source's samples are create-only. */
     val updatable: Boolean get() = sample.source == com.aboutobjects.healthgate.mapping.SampleSource.HEALTH_CONNECT
 
