@@ -14,6 +14,7 @@ export const config: WebConfig = {
   analyticsBase: "/analytics",
   patientIdentifier: "poc-0001",
   healthKitPatientIdentifier: "poc-real",
+  androidPatientIdentifier: "poc-android-01",
   staleAfterMinutes: 30,
   redirectUri: "https://web.test:3000/callback",
 };
@@ -46,7 +47,7 @@ export function obs(
     resourceType: "Observation",
     id: `${metricId}-${effective}`,
     meta: { lastUpdated, source: sourceUrl },
-    code: { coding: [{ system: contract.loincSystem, code: m.loincCode }] },
+    code: { coding: [{ system: m.codeSystem, code: m.code }] },
     effectiveDateTime: effective,
     valueQuantity: { value, unit: m.unit, system: "http://unitsofmeasure.org", code: m.unit },
   };

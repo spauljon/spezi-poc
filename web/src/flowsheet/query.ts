@@ -4,6 +4,8 @@ import type { WebContract } from "../contract.ts";
 export interface FlowMetric {
   readonly key: string;
   readonly display: string;
+  /** The code's system (LOINC, or the contract's own for RMSSD) and the code in it. */
+  readonly system: string;
   readonly code: string;
   readonly unit: string;
   readonly kind: "quantity" | "sleep";
@@ -11,8 +13,8 @@ export interface FlowMetric {
 
 export function flowMetrics(contract: WebContract): FlowMetric[] {
   return [
-    ...contract.quantityMetrics.map((m): FlowMetric => ({ key: m.id, display: m.display, code: m.loincCode, unit: m.unit, kind: "quantity" })),
-    ...contract.sleepStages.map((s): FlowMetric => ({ key: s.id, display: s.display, code: s.loincCode, unit: contract.sleepUnit, kind: "sleep" })),
+    ...contract.quantityMetrics.map((m): FlowMetric => ({ key: m.id, display: m.display, system: m.codeSystem, code: m.code, unit: m.unit, kind: "quantity" })),
+    ...contract.sleepStages.map((s): FlowMetric => ({ key: s.id, display: s.display, system: contract.loincSystem, code: s.loincCode, unit: contract.sleepUnit, kind: "sleep" })),
   ];
 }
 
@@ -27,7 +29,7 @@ const SORT_PARAM: Record<SortColumn, string> = {
 };
 export const SORT_COLUMNS = Object.keys(SORT_PARAM) as SortColumn[];
 
-export type SourceFilter = "any" | "synthetic" | "healthKit";
+export type SourceFilter = "any" | "synthetic" | "healthKit" | "healthConnect";
 
 /** FHIR `Observation.status` (R4 value set); the flowsheet shows every status, flagged, never hidden. */
 export const OBSERVATION_STATUSES = [
@@ -83,7 +85,7 @@ export function buildSearch(q: FlowQuery, patientId: string, contract: WebContra
   const all = flowMetrics(contract);
   const chosen = q.metrics.length === 0 ? all : all.filter((m) => q.metrics.includes(m.key));
   const subject = encodeURIComponent(`Patient/${patientId}`);
-  const tokens = chosen.map((m) => `${contract.loincSystem}|${m.code}`).join(",");
+  const tokens = chosen.map((m) => `${m.system}|${m.code}`).join(",");
   const parts = [
     `patient=${subject}`,
     `code=${encodeURIComponent(tokens)}`,

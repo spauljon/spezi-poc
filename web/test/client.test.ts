@@ -53,7 +53,7 @@ describe("loadBanner", () => {
     const hapi = fakeHapi([obs("heartRate", 72, "2026-10-12T11:50:00+00:00", "2026-10-12T11:50:05.000+00:00")]);
     const model = await loadBanner(client(hapi as unknown as typeof fetch), config, contract, NOW, pat);
     for (const m of contract.quantityMetrics) {
-      const asked = hapi.urls.filter((u) => u.includes(`code=${contract.loincSystem}|${m.loincCode}`));
+      const asked = hapi.urls.filter((u) => u.includes(`code=${m.codeSystem}|${m.code}`));
       expect(asked).toHaveLength(1);
       expect(asked[0]).toContain("patient=Patient/42");
       expect(asked[0]).toContain("_sort=-date");

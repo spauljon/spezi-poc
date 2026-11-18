@@ -87,8 +87,8 @@ describe("flowsheet", () => {
     const hrv = contract.quantityMetrics.find((m) => m.id === "hrvSdnn")!;
     fireEvent.click(screen.getByLabelText(contract.quantityMetrics.find((m) => m.id === "heartRate")!.display));
     await screen.findByText(/of 12$/);
-    expect(decodeURIComponent(lastUrl(fake))).not.toContain("|" + contract.quantityMetrics.find((m) => m.id === "heartRate")!.loincCode);
-    expect(decodeURIComponent(lastUrl(fake))).toContain(`|${hrv.loincCode}`);
+    expect(decodeURIComponent(lastUrl(fake))).not.toContain("|" + contract.quantityMetrics.find((m) => m.id === "heartRate")!.code);
+    expect(decodeURIComponent(lastUrl(fake))).toContain(`|${hrv.code}`);
   });
 
   it("date range, source and status filters reach the server and narrow the result", async () => {

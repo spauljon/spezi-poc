@@ -4,6 +4,7 @@ import type { BannerModel, SourceKind } from "./model.ts";
 const SOURCE_LABEL: Record<SourceKind, string> = {
   synthetic: "Synthetic simulator",
   healthKit: "HealthKit",
+  healthConnect: "Health Connect",
   unknown: "Unknown source",
 };
 

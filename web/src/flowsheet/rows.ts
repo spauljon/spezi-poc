@@ -27,8 +27,10 @@ export interface FlowRow {
 
 /** One table row per Observation, with provenance and anything unexpected kept visible. */
 export function toRow(o: Observation, contract: WebContract): FlowRow {
-  const coding = o.code?.coding?.find((c) => c.system === contract.loincSystem);
-  const metric = flowMetrics(contract).find((m) => m.code === coding?.code);
+  const metrics = flowMetrics(contract);
+  // the metric whose code AND system the Observation carries (an RMSSD is not an SDNN, nor a LOINC code of the same text)
+  const metric = metrics.find((m) => o.code?.coding?.some((c) => c.system === m.system && c.code === m.code));
+  const coding = o.code?.coding?.find((c) => c.system === metric?.system && c.code === metric?.code) ?? o.code?.coding?.[0];
   const q = o.valueQuantity;
   const ownUnit = q?.code ?? q?.unit ?? "";
   return {

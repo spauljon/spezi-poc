@@ -31,7 +31,7 @@ export async function loadBanner(
   const subject = `patient=${reference}`;
   const perMetric = contract.quantityMetrics.map((m) =>
     fhir.resources<Observation>(
-      `Observation?${subject}&${codeParam(contract.loincSystem, m.loincCode)}&_sort=-date&_count=1`));
+      `Observation?${subject}&${codeParam(m.codeSystem, m.code)}&_sort=-date&_count=1`));
   const newestReceived = fhir.resources<Observation>(
     `Observation?${subject}&_sort=-_lastUpdated&_count=1&_elements=meta`);
   const results = await Promise.all([...perMetric, newestReceived]);

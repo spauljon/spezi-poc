@@ -14,7 +14,7 @@ describe("buildBanner", () => {
       obs("hrvSdnn", 42, ago(60), ago(59)),
     ], contract, NOW, 30);
     expect(model.values.map((v) => [v.metricId, v.value])).toEqual([["heartRate", 88], ["hrvSdnn", 42]]);
-    expect(model.missing.map((m) => m.metricId)).toEqual(["restingHeartRate"]);
+    expect(model.missing.map((m) => m.metricId)).toEqual(["restingHeartRate", "hrvRmssd"]);
   });
 
   it("units and display text come from the contract, not from the resource", () => {
@@ -112,5 +112,27 @@ describe("format", () => {
   });
   it("formats values without trailing noise", () => {
     expect([72, 72.5, 41.237, 0.1 + 0.2].map(formatValue)).toEqual(["72", "72.5", "41.24", "0.3"]);
+  });
+
+  it("an RMSSD value is its own metric: found by its own code system, never confused with an SDNN value (M29)", () => {
+    const model = buildBanner(patient, [
+      obs("hrvRmssd", 48.3, ago(30), ago(29)),
+      obs("hrvSdnn", 41, ago(30), ago(29)),
+    ], contract, NOW, 30);
+    expect(model.values.map((v) => [v.metricId, v.value])).toEqual([["hrvSdnn", 41], ["hrvRmssd", 48.3]]);
+    expect(model.values.find((v) => v.metricId === "hrvRmssd")!.display).not.toBe(model.values.find((v) => v.metricId === "hrvSdnn")!.display);
+    // the control: an Observation with RMSSD's code text under the LOINC system is not an RMSSD value
+    const wrongSystem = obs("hrvRmssd", 99, ago(20), ago(19));
+    wrongSystem.code = { coding: [{ system: contract.loincSystem, code: contract.quantityMetrics.find((m) => m.id === "hrvRmssd")!.code }] };
+    const m2 = buildBanner(patient, [wrongSystem], contract, NOW, 30);
+    expect(m2.values.find((v) => v.metricId === "hrvRmssd")).toBeUndefined();
+    expect(m2.missing.map((x) => x.metricId)).toContain("hrvRmssd");
+  });
+
+  it("a Health Connect Observation is recognised by its source and named as such", () => {
+    const hc = obs("heartRate", 70, ago(5), ago(4), contract.metaSource.healthConnect);
+    const model = buildBanner(patient, [hc, obs("hrvSdnn", 40, ago(5), ago(4), "synthetic")], contract, NOW, 30);
+    expect(model.sources).toEqual(["synthetic", "healthConnect"]);
+    expect(buildBanner(patient, [obs("heartRate", 70, ago(5), ago(4), "https://example.org/other")], contract, NOW, 30).sources).toEqual(["unknown"]);
   });
 });

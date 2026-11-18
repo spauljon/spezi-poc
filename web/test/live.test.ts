@@ -77,7 +77,7 @@ async function ensureStatusFixtures(patientId: string): Promise<void> {
         identifier: [{ system, value: f.id }],
         status: f.status,
         category: [{ coding: [{ system: "http://terminology.hl7.org/CodeSystem/observation-category", code: "vital-signs" }] }],
-        code: { coding: [{ system: contract.loincSystem, code: heartRate.loincCode }] },
+        code: { coding: [{ system: heartRate.codeSystem, code: heartRate.code }] },
         subject: { reference: `Patient/${patientId}` },
         effectiveDateTime: f.at,
         valueQuantity: { value: 70, unit: heartRate.unit, system: "http://unitsofmeasure.org", code: heartRate.unit },
@@ -117,7 +117,7 @@ describe.skipIf(!live)("banner against the live HAPI", () => {
     };
     for (const v of model.values) {
       const metric = contract.quantityMetrics.find((m) => m.id === v.metricId)!;
-      const code = encodeURIComponent(`${contract.loincSystem}|${metric.loincCode}`);
+      const code = encodeURIComponent(`${metric.codeSystem}|${metric.code}`);
       const all = await readAll(
         `${fhirBase}/Observation?patient=Patient/${patientId}&code=${code}&_count=200&_elements=effectiveDateTime,effectivePeriod,valueQuantity`);
       // the banner's rule (M12): an instant is when it was measured; a period (resting heart rate: one per local day)
@@ -163,11 +163,14 @@ describe.skipIf(!live)("banner against the live HAPI", () => {
 
     const metrics = flowMetrics(contract);
     const instant = (o: Observation) => Date.parse(o.effectiveDateTime ?? o.effectivePeriod?.start ?? "");
-    const codeOf = (o: Observation) => o.code?.coding?.find((c) => c.system === contract.loincSystem)?.code ?? "";
+    // a metric is its system AND its code (RMSSD is coded in the contract's own system, not LOINC): the independent model matches both
+    const metricTokens = new Set(metrics.map((m) => `${m.system}|${m.code}`));
+    const tokenOf = (o: Observation) => (o.code?.coding ?? []).map((c) => `${c.system}|${c.code}`).find((t) => metricTokens.has(t)) ?? "";
+    const codeOf = (o: Observation) => tokenOf(o).split("|").slice(1).join("|");
     const keyOf = (o: Observation, column: SortColumn): number | string => {
       switch (column) {
         case "measured": return instant(o);
-        case "metric": return codeOf(o);
+        case "metric": return tokenOf(o); // HAPI orders a token by its system, then its code
         case "value": return o.valueQuantity?.value ?? Number.NEGATIVE_INFINITY;
         case "status": return o.status ?? "";
         case "received": return Date.parse(o.meta?.lastUpdated ?? "");
@@ -177,11 +180,11 @@ describe.skipIf(!live)("banner against the live HAPI", () => {
     // just a period of no length. So a resting-heart-rate day that straddles a UTC midnight is in both days' results.
     const endOf = (o: Observation) => Date.parse(o.effectiveDateTime ?? o.effectivePeriod?.end ?? o.effectivePeriod?.start ?? "");
     const expected = (q: FlowQuery): Observation[] => {
-      const chosen = new Set((q.metrics.length === 0 ? metrics : metrics.filter((m) => q.metrics.includes(m.key))).map((m) => m.code));
+      const chosen = new Set((q.metrics.length === 0 ? metrics : metrics.filter((m) => q.metrics.includes(m.key))).map((m) => `${m.system}|${m.code}`));
       const from = q.from === null ? -Infinity : Date.parse(`${q.from}T00:00:00Z`);
       const to = q.to === null ? Infinity : Date.parse(`${q.to}T00:00:00Z`) + 86_400_000;
       return all.filter((o) =>
-        chosen.has(codeOf(o)) && endOf(o) >= from && instant(o) < to &&
+        chosen.has(tokenOf(o)) && endOf(o) >= from && instant(o) < to &&
         (q.source === "any" || sourceUri(o.meta?.source) === contract.metaSource[q.source]) &&
         (q.status === "any" || o.status === q.status));
     };
@@ -269,12 +272,16 @@ describe.skipIf(!live)("trends against the live analytic API", () => {
     expect(compareMetrics(offered.metrics, contract.quantityMetrics)).toEqual([]);
 
     const { from, to } = presetRange(90, todayUtc(new Date()));
+    // A metric this patient's source never emits (RMSSD comes only from Health Connect, M29) or has not emitted lately has no days: the
+    // loop below still proves the API and the raw Observations agree that every day is a gap. That the comparison is not vacuous is
+    // asserted once, over the heart rate, which the synthetic source always emits.
+    const comparedByMetric = new Map<string, number>();
     for (const m of contract.quantityMetrics) {
       const response = await api.bands(patient.id, m.id, from, to);
       expect(response.metric.unit).toBe(m.unit);
 
       // independent model: every Observation of this metric, read unsorted from HAPI and bucketed here by UTC day
-      const code = encodeURIComponent(`${contract.loincSystem}|${m.loincCode}`);
+      const code = encodeURIComponent(`${m.codeSystem}|${m.code}`);
       const values = new Map<string, number[]>();
       let url: string | null = `${fhirBase}/Observation?patient=Patient/${patient.id}&code=${code}&_count=200&_elements=effectiveDateTime,effectivePeriod,valueQuantity`;
       for (let page = 0; url && page < 500; page++) {
@@ -306,10 +313,11 @@ describe.skipIf(!live)("trends against the live analytic API", () => {
         expect(data.max[i], `${m.id} ${day} max`).toBe(Math.max(...v));
         expect(data.median[i], `${m.id} ${day} median`).toBeCloseTo(median(v), 9);
       });
-      expect(compared, `${m.id}: the live stack should hold synthetic data in the last 90 days`).toBeGreaterThan(0);
+      comparedByMetric.set(m.id, compared);
       // the API's own completeness block lists exactly the gaps the chart draws
       expect([...response.completeness.missingDays]).toEqual([...data.missing]);
     }
+    expect(comparedByMetric.get("heartRate"), "the live stack should hold synthetic heart-rate data in the last 90 days").toBeGreaterThan(0);
   }, 180_000);
 
   it("refuses a request without a token (positive control: the same request with one is served)", async () => {
@@ -347,7 +355,7 @@ describe.skipIf(!live)("intraday against the live HAPI (the dense synthetic day)
     expect(loadMs).toBeLessThan(30_000);
 
     // independent model: every heart-rate Observation of the day, read unsorted in big pages and bucketed here
-    const code = encodeURIComponent(`${contract.loincSystem}|${heart.loincCode}`);
+    const code = encodeURIComponent(`${heart.codeSystem}|${heart.code}`);
     const patientRef = encodeURIComponent(`Patient/${patient.id}`);
     const day0 = dayStart(PLAN.day);
     const raw: Array<{ t: number; v: number; flagged: boolean }> = [];

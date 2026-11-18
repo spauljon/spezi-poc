@@ -6,7 +6,9 @@ import raw from "../../contract/metrics.json";
  */
 export interface QuantityMetric {
   readonly id: string;
-  readonly loincCode: string;
+  /** The code's system: LOINC for most metrics, the contract's own `metric` system for one with no LOINC code (hrvRmssd, contract 1.6.0). */
+  readonly codeSystem: string;
+  readonly code: string;
   readonly display: string;
   readonly unit: string;
 }
@@ -31,7 +33,7 @@ export interface WebContract {
   readonly version: string;
   readonly loincSystem: string;
   readonly patientIdentifierSystem: string;
-  readonly metaSource: { readonly synthetic: string; readonly healthKit: string };
+  readonly metaSource: { readonly synthetic: string; readonly healthKit: string; readonly healthConnect: string };
   /** The project's data-quality flag system (an Observation.meta.tag coding system) and its codes. */
   readonly dataQualityFlag: { readonly system: string; readonly artifactSuspected: string; readonly duplicateResolved: string; readonly lateArrival: string; readonly userEntered: string };
   readonly quantityMetrics: readonly QuantityMetric[];
@@ -56,7 +58,7 @@ interface RawMetric {
   id: string;
   kind: string;
   loinc?: { code: string; display: string };
-  customCode?: { code: string; display: string };
+  customCode?: { system?: string; code: string; display: string };
   unit: { ucum: string; display: string };
   stages?: Record<string, { code: string; display?: string }>;
 }
@@ -69,9 +71,9 @@ export function parseContract(file: unknown): WebContract {
     systems: {
       loinc: string;
       identifier: { patient: string };
-      metaSource: { synthetic: string; healthKit: string };
+      metaSource: { synthetic: string; healthKit: string; healthConnect: string };
       dataQualityFlag?: string;
-    };
+    } & Record<string, unknown>;
     dataQualityFlags?: { artifactSuspected?: string; duplicateResolved?: string; lateArrival?: string; userEntered?: string };
     mealTypes?: Record<string, { code?: string; display?: string }>;
     metrics: RawMetric[];
@@ -84,8 +86,15 @@ export function parseContract(file: unknown): WebContract {
     throw new Error("the contract has no data-quality flag system and codes (contract 1.3.0 or later is required)");
   }
   const quantityMetrics = c.metrics
-    .filter((m) => m.kind === "quantity" && m.loinc)
-    .map((m) => ({ id: m.id, loincCode: m.loinc!.code, display: m.loinc!.display, unit: m.unit.ucum }));
+    .filter((m) => m.kind === "quantity")
+    .map((m): QuantityMetric => {
+      // a LOINC code, or a code in one of the contract's own systems (hrvRmssd): the system travels with the code
+      const own = m.customCode as { system?: string; code: string; display: string } | undefined;
+      const system = own ? c.systems[own.system ?? ""] : c.systems.loinc;
+      const named = own ?? m.loinc;
+      if (typeof system !== "string" || !system || !named) throw new Error(`contract quantity metric ${m.id} has no code or code system`);
+      return { id: m.id, codeSystem: system, code: named.code, display: named.display, unit: m.unit.ucum };
+    });
   const intakeMetrics: IntakeMetric[] = c.metrics
     .filter((m) => m.kind === "intake")
     .map((m) => {

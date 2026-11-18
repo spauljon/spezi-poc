@@ -13,7 +13,7 @@ import {
 } from "./query.ts";
 import { toRow, type FlowRow } from "./rows.ts";
 
-const SOURCE_LABEL = { synthetic: "Synthetic simulator", healthKit: "HealthKit", unknown: "Unknown source" } as const;
+const SOURCE_LABEL = { synthetic: "Synthetic simulator", healthKit: "HealthKit", healthConnect: "Health Connect", unknown: "Unknown source" } as const;
 const HEADERS: Record<SortColumn, string> = {
   measured: "Measured (UTC)", metric: "Metric", value: "Value", status: "Status", received: "Received by server (UTC)",
 };
@@ -116,6 +116,7 @@ export function Flowsheet({ config, contract, patientId }: { config: WebConfig; 
             <option value="any">Any source</option>
             <option value="synthetic">Synthetic simulator</option>
             <option value="healthKit">HealthKit</option>
+            <option value="healthConnect">Health Connect</option>
           </select>
           <label htmlFor={ids.status}>Status</label>
           <select id={ids.status} value={query.status} onChange={(e) => change({ status: e.target.value })}>

@@ -1,7 +1,7 @@
 import type { WebContract } from "../contract.ts";
 import type { Observation, Patient } from "../fhir/types.ts";
 
-export type SourceKind = "synthetic" | "healthKit" | "unknown";
+export type SourceKind = "synthetic" | "healthKit" | "healthConnect" | "unknown";
 
 export interface LatestValue {
   readonly metricId: string;
@@ -52,6 +52,9 @@ export function sourceKind(meta: Observation["meta"], contract: WebContract): So
   if (uri === contract.metaSource.healthKit) {
     return "healthKit";
   }
+  if (uri === contract.metaSource.healthConnect) {
+    return "healthConnect";
+  }
   return "unknown";
 }
 
@@ -84,7 +87,7 @@ export function buildBanner(
   const missing: { metricId: string; display: string }[] = [];
   for (const metric of contract.quantityMetrics) {
     const candidates = observations.filter(
-      (o) => o.code?.coding?.some((c) => c.system === contract.loincSystem && c.code === metric.loincCode) &&
+      (o) => o.code?.coding?.some((c) => c.system === metric.codeSystem && c.code === metric.code) &&
         typeof o.valueQuantity?.value === "number" && Number.isFinite(ms(instant(o))),
     );
     candidates.sort((a, b) => ms(instant(b)) - ms(instant(a)) || ms(b.meta?.lastUpdated) - ms(a.meta?.lastUpdated));
@@ -120,7 +123,7 @@ export function buildBanner(
   }
 
   const kinds = new Set<SourceKind>(observations.map((o) => sourceKind(o.meta, contract)));
-  const sources = (["synthetic", "healthKit", "unknown"] as const).filter((k) => kinds.has(k));
+  const sources = (["synthetic", "healthKit", "healthConnect", "unknown"] as const).filter((k) => kinds.has(k));
   return {
     patientName: patientName(patient),
     patientIdentifier: patient.identifier?.find((i) => i.system === contract.patientIdentifierSystem)?.value ?? null,

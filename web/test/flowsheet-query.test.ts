@@ -11,7 +11,7 @@ describe("buildSearch", () => {
     const s = decoded(buildSearch(q(), "42", contract));
     expect(s.startsWith("Observation?patient=Patient/42&code=")).toBe(true);
     for (const m of flowMetrics(contract)) {
-      expect(s).toContain(`${contract.loincSystem}|${m.code}`);
+      expect(s).toContain(`${m.system}|${m.code}`);
     }
     expect(s).toContain("_sort=-date,_id");
     expect(s).toContain("_count=25");
@@ -27,7 +27,7 @@ describe("buildSearch", () => {
     const codes = /code=([^&]*)/.exec(s)![1]!.split(",");
     const hr = contract.quantityMetrics.find((m) => m.id === "heartRate")!;
     const deep = contract.sleepStages.find((x) => x.id === "asleepDeep")!;
-    expect(codes).toEqual([`${contract.loincSystem}|${hr.loincCode}`, `${contract.loincSystem}|${deep.loincCode}`]);
+    expect(codes).toEqual([`${hr.codeSystem}|${hr.code}`, `${contract.loincSystem}|${deep.loincCode}`]);
   });
 
   it("the date range is UTC, inclusive of the end day (the next midnight is the exclusive bound)", () => {
@@ -122,5 +122,27 @@ describe("toRow", () => {
     delete o.status;
     const r = toRow(o, contract);
     expect(r).toMatchObject({ value: null, status: "unknown", source: "unknown" });
+  });
+
+  it("RMSSD is searched by its own system and code, and a row says which metric it is (M29)", () => {
+    const own = flowMetrics(contract).find((m) => m.key === "hrvRmssd")!;
+    expect(own.system).not.toBe(contract.loincSystem);
+    const s = decoded(buildSearch(q({ metrics: ["hrvRmssd", "hrvSdnn"] }), "42", contract));
+    const codes = /code=([^&]*)/.exec(s)![1]!.split(",");
+    // in the contract's order (SDNN, then RMSSD), each under its own system
+    expect(codes).toEqual([`${contract.loincSystem}|${contract.quantityMetrics.find((m) => m.id === "hrvSdnn")!.code}`, `${own.system}|${own.code}`]);
+    const row = toRow(obs("hrvRmssd", 48.3, "2026-10-12T10:00:00+00:00", "2026-10-12T10:00:03.000+00:00"), contract);
+    expect(row.known).toBe(true);
+    expect(row.metric).toBe(own.display);
+    // the control: the same code text under another system is an unknown code, not RMSSD
+    const wrong = obs("hrvRmssd", 48.3, "2026-10-12T10:00:00+00:00", "2026-10-12T10:00:03.000+00:00");
+    wrong.code = { coding: [{ system: contract.loincSystem, code: own.code }] };
+    expect(toRow(wrong, contract).known).toBe(false);
+  });
+
+  it("the source filter can ask for Health Connect Observations", () => {
+    const s = decoded(buildSearch(q({ source: "healthConnect" }), "42", contract));
+    expect(s).toContain(`_source=${contract.metaSource.healthConnect}`);
+    expect(decoded(buildSearch(q({ source: "any" }), "42", contract))).not.toContain("_source=");
   });
 });

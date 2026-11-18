@@ -77,7 +77,7 @@ describe("trends", () => {
 
   it("hands the chart null for a missing day, and the table says 'No data' for it", async () => {
     mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     const hr = contract.quantityMetrics.findIndex((m) => m.id === "heartRate");
     const plot = FakeUPlot.instances[hr]!;
     const medians = plot.data[2] as Array<number | null>;
@@ -99,7 +99,7 @@ describe("trends", () => {
 
   it("describes the gaps in words, and the days are UTC", async () => {
     mount();
-    await waitFor(() => expect(charts()).toHaveLength(3));
+    await waitFor(() => expect(charts()).toHaveLength(contract.quantityMetrics.length));
     const card = chartFor("Heart rate");
     await waitFor(() => expect(within(card).getByText(/2026-10-08 to 2026-10-09/)).toBeTruthy());
     expect(card.textContent).toMatch(/gaps, not estimated/);
@@ -108,7 +108,7 @@ describe("trends", () => {
 
   it("draws a daily value (resting heart rate) as points only", async () => {
     mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     const i = contract.quantityMetrics.findIndex((m) => m.id === "restingHeartRate");
     const plot = FakeUPlot.instances[i]!;
     expect(plot.opts.series[2]!.width).toBe(0);
@@ -121,7 +121,7 @@ describe("trends", () => {
 
   it("links each day with data to the intraday route, and not the gaps", async () => {
     mount();
-    await waitFor(() => expect(charts()).toHaveLength(3));
+    await waitFor(() => expect(charts()).toHaveLength(contract.quantityMetrics.length));
     const card = chartFor("Heart rate");
     await waitFor(() => expect(within(card).getAllByRole("link", { hidden: true }).length).toBeGreaterThan(0));
     const links = within(card).getAllByRole("link", { hidden: true }) as HTMLAnchorElement[];
@@ -133,10 +133,10 @@ describe("trends", () => {
 describe("range controls", () => {
   it("a preset asks for that many days and re-renders every chart from the answer", async () => {
     const { fake } = mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     fireEvent.click(screen.getByRole("button", { name: "7 days" }));
     await waitFor(() => expect(bandsUrls(fake).some((u) => u.includes("from=2026-10-06"))).toBe(true));
-    expect(bandsUrls(fake).filter((u) => u.includes("from=2026-10-06"))).toHaveLength(3);
+    expect(bandsUrls(fake).filter((u) => u.includes("from=2026-10-06"))).toHaveLength(contract.quantityMetrics.length);
     expect((screen.getByRole("button", { name: "7 days" }) as HTMLButtonElement).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "30 days" }).getAttribute("aria-pressed")).toBe("false");
     await waitFor(() => expect((FakeUPlot.instances.at(-1)!.data[0] as ArrayLike<number>).length).toBe(7));
@@ -144,20 +144,20 @@ describe("range controls", () => {
 
   it("an invalid custom range explains itself and asks for nothing; a valid one does", async () => {
     const { fake } = mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     const before = bandsUrls(fake).length;
     fireEvent.click(screen.getByRole("button", { name: "Custom" }));
     fireEvent.change(screen.getByLabelText(/From/), { target: { value: "2026-10-12" } });
     fireEvent.change(screen.getByLabelText(/From/), { target: { value: "2026-10-12" } });
-    await waitFor(() => expect(bandsUrls(fake)).toHaveLength(before + 3)); // from = to is one valid day: it asked
+    await waitFor(() => expect(bandsUrls(fake)).toHaveLength(before + contract.quantityMetrics.length)); // from = to is one valid day: it asked
     fireEvent.change(screen.getByLabelText(/To/), { target: { value: "2026-10-01" } });
     expect(screen.getByText(/start date is after the end date/)).toBeTruthy();
     await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-    expect(bandsUrls(fake)).toHaveLength(before + 3); // the inverted range asked for nothing more
+    expect(bandsUrls(fake)).toHaveLength(before + contract.quantityMetrics.length); // the inverted range asked for nothing more
 
     // positive control: a valid range does send requests
     fireEvent.change(screen.getByLabelText(/To/), { target: { value: "2026-10-12" } });
-    await waitFor(() => expect(bandsUrls(fake).length).toBe(before + 6));
+    await waitFor(() => expect(bandsUrls(fake).length).toBe(before + 2 * contract.quantityMetrics.length));
     expect(bandsUrls(fake).at(-1)).toContain("from=2026-10-12");
   });
 
@@ -167,10 +167,10 @@ describe("range controls", () => {
     const { fake } = mount({
       delay: async (url) => { if (url.includes("from=2026-10-06")) await gate; },
     });
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     fireEvent.click(screen.getByRole("button", { name: "7 days" })); // answer held back
     await waitFor(() => expect(charts()[0]!.getAttribute("aria-busy")).toBe("true"));
-    expect(charts()).toHaveLength(3); // the previous render is still there
+    expect(charts()).toHaveLength(contract.quantityMetrics.length); // the previous render is still there
 
     fireEvent.click(screen.getByRole("button", { name: "14 days" })); // supersedes the 7-day request
     await waitFor(() => expect(bandsUrls(fake).some((u) => u.includes("from=2026-09-29"))).toBe(true));
@@ -201,7 +201,7 @@ describe("states", () => {
     expect(alert.textContent).toMatch(/could not be reached/);
     down = false;
     fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
   });
 
   it("an answer that is not the documented shape is an error, not a chart", async () => {
@@ -243,7 +243,7 @@ describe("states", () => {
 describe("reading a day without a pointer", () => {
   it("arrow keys move the readout one day at a time, and a gap says it is a gap", async () => {
     mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     const card = chartFor("Heart rate");
     const plot = within(card).getByRole("group", { name: /Heart rate chart/ });
     fireEvent.keyDown(plot, { key: "End" });
@@ -259,7 +259,7 @@ describe("reading a day without a pointer", () => {
 
   it("hovering reports the same readout as the keyboard", async () => {
     mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     const hr = FakeUPlot.instances[contract.quantityMetrics.findIndex((m) => m.id === "heartRate")]!;
     act(() => hr.hover(29));
     expect(within(chartFor("Heart rate")).getByText(/^2026-10-12: median 66,/)).toBeTruthy();
@@ -267,7 +267,7 @@ describe("reading a day without a pointer", () => {
 
   it("destroys the chart when the view goes away", async () => {
     const { unmount } = mount();
-    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(3));
+    await waitFor(() => expect(FakeUPlot.instances).toHaveLength(contract.quantityMetrics.length));
     unmount();
     expect(FakeUPlot.instances.every((p) => p.destroyed)).toBe(true);
   });

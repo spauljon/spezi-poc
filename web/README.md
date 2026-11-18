@@ -305,9 +305,10 @@ A **Nutrition** tab (`#/nutrition`, optionally `?nutrient=<contract id>`) shows 
 
 ## Data set switch (M17)
 
-The page header offers **Synthetic data** (default) and **Real data (Apple Health)**. Each loads its own Patient by
+The page header offers **Synthetic data** (default), **Real data (Apple Health)** and, since M29, **Android (Health Connect)**. Each loads its own Patient by
 business identifier (`VITE_POC_PATIENT_IDENTIFIER`, default `poc-0001`; `VITE_POC_HEALTHKIT_PATIENT_IDENTIFIER`,
-default `poc-real`); the two are never combined. The real set shows a "Real data" note, and a missing real patient is
+default `poc-real`; `VITE_POC_ANDROID_PATIENT_IDENTIFIER`, default `poc-android-01`); the sets are never combined. The Android set carries its own note: it is
+**neither purely synthetic nor purely real**: it holds test records from the synthetic writer tool and whatever real apps on that phone wrote (decided 2026-11-18), and the source column says which. Quantity metrics are searched by their own code system (RMSSD is not in LOINC), and a Health Connect source appears in the banner and the flowsheet filter. The real set shows a "Real data" note, and a missing real patient is
 explained in words. The choice is held in memory only: a reload returns to synthetic. A hand-entered sample appears
 among the flagged samples as "entered by hand, not measured by a device".
 

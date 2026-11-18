@@ -30,13 +30,14 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
   }, []);
   const [state, setState] = useState<State>({ kind: "loading" });
   // In memory only: reloading the page always returns to the synthetic data set.
-  const [dataSet, setDataSet] = useState<"synthetic" | "real">("synthetic");
+  const [dataSet, setDataSet] = useState<"synthetic" | "real" | "android">("synthetic");
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
       const client = new FhirClient(config.fhirBase, () => auth.accessToken());
-      const identifier = dataSet === "real" ? config.healthKitPatientIdentifier : config.patientIdentifier;
+      const identifier = dataSet === "real" ? config.healthKitPatientIdentifier
+        : dataSet === "android" ? config.androidPatientIdentifier : config.patientIdentifier;
       setState({ kind: "ready", patient: await loadPatient(client, { ...config, patientIdentifier: identifier }, contract) });
     } catch (error) {
       setState({ kind: "error", error: explainError(error) });
@@ -51,6 +52,7 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
     <div className="dataset" role="group" aria-label="Data set">
       <button type="button" aria-pressed={dataSet === "synthetic"} onClick={() => setDataSet("synthetic")}>Synthetic data</button>
       <button type="button" aria-pressed={dataSet === "real"} onClick={() => setDataSet("real")}>Real data (Apple Health)</button>
+      <button type="button" aria-pressed={dataSet === "android"} onClick={() => setDataSet("android")}>Android (Health Connect)</button>
     </div>
   );
   if (state.kind === "loading") {
@@ -65,6 +67,7 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
           <p>
             {state.error.detail}
             {dataSet === "real" && " This is the separate patient for real Apple Health data; it exists only after the phone has uploaded."}
+            {dataSet === "android" && " This is the Android phone's patient; it exists only after that phone has uploaded."}
           </p>
           {state.error.retry && <button type="button" onClick={() => void load()}>Try again</button>}
         </div>
@@ -76,6 +79,13 @@ export function PatientPage({ config, contract }: { config: WebConfig; contract:
       {switcher}
       {dataSet === "real" && (
         <p className="real-data" role="note"><strong>Real data.</strong> This is a person&apos;s own Apple Health data, not synthetic.</p>
+      )}
+      {dataSet === "android" && (
+        <p className="real-data" role="note">
+          <strong>Android (Health Connect).</strong> From one Android phone&apos;s Health Connect: test records written by a synthetic
+          test tool, and whatever real apps on that phone (such as a food diary) have written. It is neither purely synthetic
+          nor purely real: the source column says where each value came from.
+        </p>
       )}
       <BannerPage config={config} contract={contract} patient={state.patient} />
       <nav aria-label="Views" className="views">
