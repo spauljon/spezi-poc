@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """What HAPI holds for the Android persona's Health Connect Observations: COUNTS ONLY (never a value), read as the clinician role.
 
-  python3 scripts/android-hc-counts.py            all Health Connect Observations of poc-android-01, by metric, and the writer's share
+  python3 scripts/android-hc-counts.py            all Health Connect Observations of poc-android-01 (the test patient), by metric, and the writer's share
+  python3 scripts/android-hc-counts.py --patient poc-real-android   the same for another patient (M30: the real one)
   python3 scripts/android-hc-counts.py --history 2026-11-17T00:00:00Z   also the history entries since then, by method (POST create, PUT update, DELETE delete)
 
 The "writer" share is the Observations whose Device was written by the synthetic test tool (:writer: manufacturer Synthetic, model Writer),
@@ -15,6 +16,7 @@ spec = importlib.util.spec_from_file_location("hapi_auth", os.path.join(HERE, ".
 auth = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(auth)
 
+PATIENT = sys.argv[sys.argv.index("--patient") + 1] if "--patient" in sys.argv else auth.ANDROID_PATIENT_VALUE
 CONTRACT = json.load(open(os.path.join(HERE, "..", "contract", "metrics.json")))
 SYS = CONTRACT["systems"]["identifier"]
 META_SOURCE = CONTRACT["systems"]["metaSource"]["healthConnect"]
@@ -38,10 +40,10 @@ def get(path, tok):
 def observations(tok, extra=""):
     """Every Observation of the persona from the Health Connect source, paged (counts need the codes only)."""
     pid = None
-    b = get("/Patient?" + urllib.parse.urlencode({"identifier": "%s|%s" % (auth.PATIENT_SYSTEM, auth.ANDROID_PATIENT_VALUE), "_elements": "id"}), tok)
+    b = get("/Patient?" + urllib.parse.urlencode({"identifier": "%s|%s" % (auth.PATIENT_SYSTEM, PATIENT), "_elements": "id"}), tok)
     ids = [e["resource"]["id"] for e in b.get("entry", [])]
     if len(ids) != 1:
-        sys.exit("the persona's Patient was not found exactly once")
+        sys.exit("the Patient %s was not found exactly once (%d found)" % (PATIENT, len(ids)))
     pid = ids[0]
     url = "/Observation?" + urllib.parse.urlencode({"subject": "Patient/" + pid, "_source": META_SOURCE, "_count": "200", "_elements": "code,status,device,meta"}) + extra
     out = []
@@ -70,7 +72,7 @@ def main():
             key = (metric_of(o), o.get("status"))
             t[key] = t.get(key, 0) + 1
         return t
-    for title, items in (("Health Connect Observations of poc-android-01", allobs), ("of which written by the synthetic test tool", writer)):
+    for title, items in (("Health Connect Observations of " + PATIENT, allobs), ("of which written by the synthetic test tool", writer)):
         print("%s: %d" % (title, len(items)))
         for (metric, status), n in sorted(tally(items).items()):
             print("   %-22s %-17s %d" % (metric, status, n))
