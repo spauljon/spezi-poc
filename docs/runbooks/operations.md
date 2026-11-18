@@ -68,6 +68,7 @@ make analytics-migrate
 | Web trends: "The analytic service's answer was not understood" | an API older or newer than the web build (for example after updating only one) | update both, as above |
 | Worker log shows `fetch failed` | HAPI is down; the worker backs off (30 s then 60 s) and resumes by itself | start HAPI; no action on the worker |
 | A nutrient's totals are missing for data that is in HAPI | the worker's watermark is past that data: it was written before the contract gave the worker the metric's code | `make analytics-rescan`; the running worker re-reads everything within one cycle (about 30 s). Check with `python3 analytics/verify-intake.py [poc-real]` |
+| A day still shows samples that were deleted (Android deletions, M29) | the worker was not watching when they were deleted (its deletion scan starts from the moment it first runs), or the history entry could not be read | `make analytics-rescan`: it also marks every stored window, so a window with nothing left is dropped |
 | A new field is missing in the API | the container still runs the old image | the image-id check above |
 | Port 3000 busy for `make web-dev` | the deployed `web` service owns it | `make stack-down` or use the deployed app |
 
