@@ -15,6 +15,7 @@ export const config: WebConfig = {
   patientIdentifier: "poc-0001",
   healthKitPatientIdentifier: "poc-real",
   androidPatientIdentifier: "poc-android-01",
+  androidRealPatientIdentifier: "poc-real-android",
   staleAfterMinutes: 30,
   redirectUri: "https://web.test:3000/callback",
 };

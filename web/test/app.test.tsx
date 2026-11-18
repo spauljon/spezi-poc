@@ -150,22 +150,30 @@ describe("banner states", () => {
     await waitFor(() => expect(screen.queryByText("Real data.")).toBeNull());
   });
 
-  it("the Android data set loads its own patient, says what it is, and never claims to be synthetic or purely real (M29)", async () => {
+  it("the two Android data sets are separate patients: the real one says it is real, the test one says it is synthetic (M30)", async () => {
     const fake = fakeHapi([obs("heartRate", 72, ago(5), ago(4))]);
     vi.stubGlobal("fetch", fake);
     renderApp(signedIn());
     await screen.findByText(/Current: last data received/);
-    expect(screen.queryByText("Android (Health Connect).")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Android (Health Connect)" }));
-    expect(await screen.findByText("Android (Health Connect).")).toBeTruthy();
-    expect(fake.urls.some((u) => u.includes("identifier=" + contract.patientIdentifierSystem + "|poc-android-01"))).toBe(true);
-    const note = screen.getByRole("note");
-    expect(note.textContent).toMatch(/neither purely synthetic\s+nor purely real/);
-    expect(note.textContent).not.toMatch(/^Real data\./);
+    const asked = (id: string) => fake.urls.some((u) => u.includes("identifier=" + contract.patientIdentifierSystem + "|" + id));
+    expect(asked("poc-real-android")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Real data (Health Connect)" }));
+    expect(await screen.findByText(/own Health Connect data from an Android phone, not synthetic/)).toBeTruthy();
+    expect(asked("poc-real-android")).toBe(true);
+    expect(asked("poc-android-01")).toBe(false);
+    expect(screen.queryByText("Android test records.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Android test records (synthetic writer)" }));
+    expect(await screen.findByText("Android test records.")).toBeTruthy();
+    expect(asked("poc-android-01")).toBe(true);
+    expect(screen.getByRole("note").textContent).toMatch(/none of it is a person.s own data/);
+    expect(screen.queryByText(/own Health Connect data from an Android phone/)).toBeNull();
+
     // the other sets are unchanged, and going back clears the note (the controls for the assertions above)
     expect(screen.queryByText("Real data.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Synthetic data" }));
-    await waitFor(() => expect(screen.queryByText("Android (Health Connect).")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Android test records.")).toBeNull());
   });
 
   it("an unreachable server offers a retry, and retry loads", async () => {

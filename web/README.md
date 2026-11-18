@@ -305,10 +305,9 @@ A **Nutrition** tab (`#/nutrition`, optionally `?nutrient=<contract id>`) shows 
 
 ## Data set switch (M17)
 
-The page header offers **Synthetic data** (default), **Real data (Apple Health)** and, since M29, **Android (Health Connect)**. Each loads its own Patient by
+The page header offers **Synthetic data** (default), **Real data (Apple Health)**, **Real data (Health Connect)** and **Android test records (synthetic writer)** (the last two since M29/M30). Each loads its own Patient by
 business identifier (`VITE_POC_PATIENT_IDENTIFIER`, default `poc-0001`; `VITE_POC_HEALTHKIT_PATIENT_IDENTIFIER`,
-default `poc-real`; `VITE_POC_ANDROID_PATIENT_IDENTIFIER`, default `poc-android-01`); the sets are never combined. The Android set carries its own note: it is
-**neither purely synthetic nor purely real**: it holds test records from the synthetic writer tool and whatever real apps on that phone wrote (decided 2026-11-18), and the source column says which. Quantity metrics are searched by their own code system (RMSSD is not in LOINC), and a Health Connect source appears in the banner and the flowsheet filter. The real set shows a "Real data" note, and a missing real patient is
+default `poc-real`; `VITE_POC_ANDROID_PATIENT_IDENTIFIER`, default `poc-android-01`; `VITE_POC_ANDROID_REAL_PATIENT_IDENTIFIER`, default `poc-real-android`); the sets are never combined. Since M30 the Android phone's own data and its test records are separate patients: the real set carries the real-data note, the test set says it is synthetic (replacing M29's "neither purely synthetic nor purely real" wording, which stopped being true when the real foods were moved). Quantity metrics are searched by their own code system (RMSSD is not in LOINC), and a Health Connect source appears in the banner and the flowsheet filter. The real set shows a "Real data" note, and a missing real patient is
 explained in words. The choice is held in memory only: a reload returns to synthetic. A hand-entered sample appears
 among the flagged samples as "entered by hand, not measured by a device".
 

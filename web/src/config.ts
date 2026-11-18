@@ -9,8 +9,10 @@ export interface WebConfig {
   readonly patientIdentifier: string;
   /** Business identifier of the separate patient that holds the developer's own HealthKit data (never mixed with the synthetic one). */
   readonly healthKitPatientIdentifier: string;
-  /** Business identifier of the Android phone's patient (Health Connect): test records from the synthetic writer mixed with whatever real apps wrote. */
+  /** Business identifier of the Android phone's TEST patient: records from the synthetic writer tool and the synthetic generator only (since M30). */
   readonly androidPatientIdentifier: string;
+  /** Business identifier of the separate patient that holds the developer's own Health Connect data (never mixed with the test patient). */
+  readonly androidRealPatientIdentifier: string;
   /** Data older than this (by when the server received it) is shown as stale. */
   readonly staleAfterMinutes: number;
   readonly redirectUri: string;
@@ -39,6 +41,7 @@ export function loadConfig(env: Env, location: Pick<Location, "origin" | "hostna
     patientIdentifier: env["VITE_POC_PATIENT_IDENTIFIER"] ?? "poc-0001",
     healthKitPatientIdentifier: env["VITE_POC_HEALTHKIT_PATIENT_IDENTIFIER"] ?? "poc-real",
     androidPatientIdentifier: env["VITE_POC_ANDROID_PATIENT_IDENTIFIER"] ?? "poc-android-01",
+    androidRealPatientIdentifier: env["VITE_POC_ANDROID_REAL_PATIENT_IDENTIFIER"] ?? "poc-real-android",
     staleAfterMinutes: stale,
     redirectUri: `${location.origin}/callback`,
   };
