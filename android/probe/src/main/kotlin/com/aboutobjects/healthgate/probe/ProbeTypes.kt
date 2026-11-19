@@ -10,6 +10,7 @@ import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -114,6 +115,10 @@ object ProbeTypes {
         },
         ProbeType("Steps", StepsRecord::class) { r ->
             base(r.metadata, r.startTime, r.endTime, r.startZoneOffset, r.endZoneOffset, 1, emptySet())
+        },
+        // Added on request after M30 to see whether Samsung Health writes weight. Structure only: r.weight (the value) is never touched.
+        ProbeType("Weight", WeightRecord::class) { r ->
+            base(r.metadata, r.time, r.time, r.zoneOffset, r.zoneOffset, 1, emptySet())
         },
     )
 
